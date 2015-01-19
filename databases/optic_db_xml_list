@@ -9,3 +9,4 @@ Optic_31      : Triple glaze (3 mm), inside pane low-E 0.04, two gaps
 Optic_32      : Triple glaze (3 mm), inside pane low-E 0.10, two gaps
 Optic_33      : Triple glaze (3 mm), inside pane low-E 0.20, two gaps
 Optic_34      : Triple glaze (3 mm), inside pane low-E 0.40 (use for 0.35), two gaps
+Optic_PV      : Special construction for PV (3 mm), low iron panes, one gap
