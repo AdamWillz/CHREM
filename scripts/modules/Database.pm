@@ -38,7 +38,8 @@ sub database_XML {
 	my $mat_data;	# declare repository for mat_db.xml readin
 	my $con_data;	# declare repository for con_db.xml readin
 	my $optic_data;	# declare a hash ref to store the optical data from optic_db.xml
-
+	my $cfc_data;	# declare a hash ref to store the CFC optical data from cfc_db.xml
+	my  $pln_data; # declare a hash ref to store the plant component data from plant_db.xml
 
 	MATERIALS: {
 		$mat_data = XMLin("../databases/mat_db.xml");	# readin the XML data, note that any hash with properties will recieve an array index even if there is only one of that hash
@@ -290,7 +291,7 @@ sub database_XML {
 		printf CON_DB ("%u %s\n", $con_count,"# total number of constructions\n#");	# print the number of constructions
 
 		printf CON_DB ("%s\n%s\n%s\n",	# format instructions for the construction database
-			"# for each construction list the: # of layers, construction name, type (OPAQ or TRAN), Optics name (or OPAQUE), symmetry.",
+			"# for each construction list the: # of layers, construction name, type (OPAQ or TRAN or CFC), Optics name (or OPAQUE), symmetry.",
 			"#\t followed by for each material of the construction:",
 			"#\t\t material number, thickness (m), material name, and if 'Gap' then RSI at vert horiz and sloped"
 		);
@@ -308,6 +309,7 @@ sub database_XML {
 			);
 
 			if ($con->{'type'} eq 'OPAQ') {printf CON_DB ("%-14s", 'OPAQUE');}	# opaque so no line to optics database
+			elsif ($con->{'type'} eq 'CFC') {printf CON_DB ("%-14s", 'USE GSLedit');}      # CFC so should use cfc properties
 			elsif ($con->{'type'} eq 'TRAN') {printf CON_DB ("%-14s", $con->{'optic_name'});};	# transluscent construction so link to the optics database
 
 
@@ -342,8 +344,20 @@ sub database_XML {
 		close CON_DB;
 		close CON_LIST;
 	};
+	CFC:{
+	    $cfc_data = XMLin("../databases/cfc_db.xml", ForceArray => ['layers_solar_normal', 'layers_visible_normal', 'layers_longwave_normal', 'gas_layers']);	# readin the XML data, note that any hash with properties will recieve an array index even if there is only one of that hash
+# 	    $cfc_data = \%{$cfc_data->{'CFC_optics'}};
+# 	    print Dumper $cfc_data;
+	};
+	
+	PLN:{
+	    $pln_data = XMLin("../databases/plant_db.xml", ForceArray => ['comp_data']); # Readin the XML data, note that any hash with properties will recieve an array index even if there is only one of that hash
+	    $pln_data = \%{$pln_data->{'component'}};
+# 	    
+# 	    print Dumper $pln_data;
+	};
 
-	return ($mat_data, $con_data, $optic_data);
+	return ($mat_data, $con_data, $optic_data, $cfc_data, $pln_data);
 };
 
 

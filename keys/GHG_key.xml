@@ -166,18 +166,18 @@ generation in Canada-->
 
 		<province name="ALBERTA" trans_dist_loss="0.04">
 			<period name="P00_Period" GHGIFavg="921" />
-			<period name="P01_Jan" GHGIFmarginal="591" />
-			<period name="P02_Feb" GHGIFmarginal="591" />
-			<period name="P03_Mar" GHGIFmarginal="785" />
-			<period name="P04_Apr" GHGIFmarginal="785" />
-			<period name="P05_May" GHGIFmarginal="785" />
-			<period name="P06_Jun" GHGIFmarginal="769" />
-			<period name="P07_Jul" GHGIFmarginal="769" />
-			<period name="P08_Aug" GHGIFmarginal="769" />
-			<period name="P09_Sep" GHGIFmarginal="769" />
-			<period name="P10_Oct" GHGIFmarginal="785" />
-			<period name="P11_Nov" GHGIFmarginal="591" />
-			<period name="P12_Dec" GHGIFmarginal="591" />
+			<period name="P01_Jan" GHGIFmarginal="825" />
+			<period name="P02_Feb" GHGIFmarginal="825" />
+			<period name="P03_Mar" GHGIFmarginal="795" />
+			<period name="P04_Apr" GHGIFmarginal="795" />
+			<period name="P05_May" GHGIFmarginal="795" />
+			<period name="P06_Jun" GHGIFmarginal="780" />
+			<period name="P07_Jul" GHGIFmarginal="780" />
+			<period name="P08_Aug" GHGIFmarginal="780" />
+			<period name="P09_Sep" GHGIFmarginal="780" />
+			<period name="P10_Oct" GHGIFmarginal="795" />
+			<period name="P11_Nov" GHGIFmarginal="825" />
+			<period name="P12_Dec" GHGIFmarginal="825" />
 		</province>
 
 		<province name="BRITISH COLUMBIA" trans_dist_loss="0.03">

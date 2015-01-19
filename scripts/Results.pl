@@ -204,7 +204,7 @@ sub collect_results_data {
 	# Cycle over each folder
 	FOLDER: foreach my $folder (@folders) {
 		# Determine the house type, region, and hse_name
-		my ($hse_type, $region, $hse_name) = ($folder =~ /^\.\.\/(\d-\w{2}).+\/(\d-\w{2})\/(\w+)$/);
+		my ($hse_type, $region, $hse_name) = ($folder =~ /^\.\.\/(\d-\w{2}).+\/(\d-\w{2})\/(.+)$/);
 
 		# Store the coordinate information for error reporting
 		my $coordinates = {'hse_type' => $hse_type, 'region' => $region, 'file_name' => $hse_name};
@@ -233,7 +233,7 @@ sub collect_results_data {
 		close $FILE;
 
 		# examine the cfg file and create a key of zone numbers to zone names
-		my @zones = grep(s/^\*geo \.\/\w+\.(\w+)\.geo$/$1/, @cfg); # find all *.geo files and filter the zone name from it
+		my @zones = grep(s/^\*geo \.\/.+\.(\w+)\.geo$/$1/, @cfg); # find all *.geo files and filter the zone name from it
 		my $zone_name_num; # intialize a storage of zone name value at zone number key
 		my $main_bsmt_zone_nums = ''; # Create a string to hold the zone numbers that are the basement or main levels. This will later be used to key to only zones of interest
 		foreach my $element (0..$#zones) { # cycle over the array of zones by element number so it can be used
@@ -269,7 +269,7 @@ sub collect_results_data {
 			my $param;
 			if ($key =~ /^CHREM\/SCD\/(.+)$/) {$param = $1}
 			elsif ($key =~ /^CHREM\/(zone_\d\d)\/Power\/(\w+)$/) {$param = $1 . '/' . $2 . '/energy'};
-			
+# 			print "$param $key \n";
 			# If the parameter is in units for energy (as opposed to GHG or quantity) then we can store the min/max/avg information of watts demand)
 # 			if ($param =~ /energy$/) {
 # 				# Cycle over the different min/max/avg types
