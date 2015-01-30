@@ -676,7 +676,7 @@ sub AFN_control {
 		'#NUM_DAY_PERIODS',
 		'1',
 		'#CTL_TYPE ctl type, (dry bulb > flow), law (AIM-2 Window Control Port), starting @',
-		'1 6 0',
+		'1 7 0',
 		'#NUM_DATA_ITEMS Number of data items',
 		'5.',
 		'#AFN_CTL_INPUTS, cooling_sensor_zone (zone for central cooling check) hot_setpoint (above this zone temp windows can operate) cold_setpoint(below this zone temp the windows are closed) DeltaT (if zone - ambient > deltaT windows can operate) minimum_ambient_temp (the minimum ambient temp which allows windows to open so as to prevent very cold air)',
