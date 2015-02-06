@@ -69,3 +69,10 @@ perl Makefile.PL
 make
 make install
 cd ..
+
+tar -xf Math-Random-Secure-0.06.tar.gz
+cd Math-Random-Secure-0.06
+perl Makefile.PL
+make
+make install
+cd ..
