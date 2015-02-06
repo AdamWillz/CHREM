@@ -25,6 +25,7 @@ use Data::Dumper;
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
 use Storable  qw(dclone);
+use Math::Random::Secure qw(irand);
 
 # use lib qw(./modules);
 use General;
@@ -36,7 +37,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(upgrade_name input_upgrade eligible_houses_pent data_read_up data_read_one_up cross_ref_ups up_house_side Economic_analysis print_results_out_difference_ECO random_house_dist houses_selected_random print_results_out_up zone_surface_num rand_sample);
+our @EXPORT = qw(upgrade_name input_upgrade eligible_houses_pent data_read_up data_read_one_up cross_ref_ups up_house_side Economic_analysis print_results_out_difference_ECO random_house_dist houses_selected_random print_results_out_up zone_surface_num rand_sample random_hse_shuffle);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -1668,6 +1669,57 @@ sub rand_sample {
 		$seen{$pop[rand @pop]}=1;
 	 }    
 	 return(keys %seen);
+};
+
+# ====================================================================
+# random_hse_shuffle
+# This subroutine receives an array of house names and randomly selects 
+# houses from that list to populate a list of a user specified length of
+# random houses
+# ====================================================================
+sub random_hse_shuffle {
+
+    my $hse_ref = shift;
+    my $num_hses = shift;
+    my @new_list = ();
+    my @dupl = ();
+    
+    # Determine size of source list
+    my $size = scalar @{$hse_ref};
+    
+    # Begin generating random list
+	my $k;
+	for ($k = 0; $k < $num_hses; $k++) {
+		my $random = irand($size);
+		$new_list[$k] = ${$hse_ref}[$random];
+	}
+    
+    # Check for duplicates and store record name
+    my $counter = 1; # Used to index one record ahead
+    foreach my $ReName (@new_list) {
+        JUMP: {
+            if (@dupl) { # array is not empty
+                for (my $k = 0; $k < $#dupl; $k=$k+2) {
+                    if ($ReName eq $dupl[$k]) {
+                        # Already identified duplicate, skip to next record
+                        $counter ++;
+                        last JUMP;
+                    }
+                }
+            }
+            my $DupCount=0;
+            for (my $num = $counter; $num <= $#new_list; $num ++) {
+                if ($ReName eq $new_list[$num]) {
+                    $DupCount ++;
+                }
+            }
+            if ($DupCount > 0) {push(@dupl,($ReName,$DupCount))};
+            $counter ++;
+        }
+	}
+    #print Dumper @new_list;
+    #print Dumper @dupl;
+    return (\@new_list,\@dupl);
 };
 # Final return value of one to indicate that the perl module is successful
 1;

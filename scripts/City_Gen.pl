@@ -112,6 +112,8 @@ my $num_hses; #number of houses less than total that we want to medel for mode 3
 my $hse_dist; # define a hash to hold the distribution of houses that is going to be selected for each region and house type in mode 3
 my $hse_exist;
 my $flag_SDHW = 0;
+my $bRand;
+my @dupl;
 # --------------------------------------------------------------------
 # Read the command line input arguments
 # --------------------------------------------------------------------
@@ -154,7 +156,11 @@ COMMAND_LINE: {
     elsif ($upgrade_mode == 4) {
         # Building house database from list in file
         $HseList = shift (@ARGV);
-        print "$HseList\n";
+        print "Create random set from source file? \n";
+        $bRand = <STDIN>;
+        chomp ($bRand);
+        $bRand =~ tr/a-z/A-Z/;
+        
         # Open file for editing
         open( my $fh, '<', $HseList) or die "Can't read file '$HseList' [$!]\n";
         while (my $line = <$fh>) {
@@ -164,6 +170,18 @@ COMMAND_LINE: {
             push(@houses_desired, $line);
         }
         close $fh;
+        
+        if ($bRand =~ /Y|YES/) {
+			# Random selection of houses, update @houses_desired
+               print "Please provide how many houses to be modeled \n";
+               $num_hses = <STDIN>;
+               chomp ($num_hses);
+               my ($houses_refer, $dupl_ref) = &random_hse_shuffle(\@houses_desired,$num_hses);
+               # Use array references to update arrays here
+               @houses_desired = @$houses_refer;
+               @dupl = @$dupl_ref;
+        }
+        
     }
         else {
 		print "Please specify which upgrade you need from the following list:  \n";
@@ -486,17 +504,18 @@ MAIN: {
 		my $models_attempted;	# incrementer of each encountered CSDDRD record
 		my $models_OK;	# incrementer of records that are OK
 
-		# -----------------------------------------------
-		# Open the CSDDRD source
-		# -----------------------------------------------
-		# Open the data source files from the CSDDRD - path to the correct CSDDRD type and region file
-		my $file = '../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
-
-		my $ext = '.csv';
-		my $CSDDRD_FILE;
-		open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
-
-		my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
+		# # -----------------------------------------------
+		# # Set paths to the CSDDRD source
+		# # -----------------------------------------------
+        # MOVED INTO RECORD LOOP
+		# # Open the data source files from the CSDDRD - path to the correct CSDDRD type and region file
+		# my $file = '../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
+        # 
+		# my $ext = '.csv';
+		# my $CSDDRD_FILE;
+		# open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
+        # 
+		# my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
 		
 		# storage for the houses characteristics for looking up BCD information
 		my $BCD_characteristics;
@@ -558,19 +577,35 @@ MAIN: {
 		# -----------------------------------------------
 		# GO THROUGH EACH LINE OF THE CSDDRD SOURCE DATAFILE AND BUILD THE HOUSE MODELS
 		# -----------------------------------------------
+        # while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD))
 		
-		RECORD: while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD)) {	# go through each line (house) of the file
+		RECORD: foreach my $house_name (@houses_desired) {	# go through each line (house) of the list
 			
 			# flag to indicate to proceed with house build
-			my $desired_house = 0;
-			# cycle through the desired house names to see if this house matches. If so continue the house build
-			foreach my $house_name (@houses_desired) {
-				# it matches, so set the flag
-				if ($CSDDRD->{'file_name'} =~ /^$house_name/) {$desired_house = 1};
-			};
+			# my $desired_house = 0;
+
+            # Open the appropriate CSDDRD file
+            my $file = '../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
+            my $ext = '.csv';
+            my $CSDDRD_FILE;
+
+            open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
+
+			# cycle through the CSDDRD records to match house record
+            my $CSDDRD;
+            while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD)) {
+                if ($CSDDRD->{'file_name'} =~ /^$house_name/) {
+                    # Found corresponding record, stop reading records and jump out of loop
+                    last;
+                }
+            }
+			#foreach my $house_name (@houses_desired) {
+			#	# it matches, so set the flag
+			#	if ($CSDDRD->{'file_name'} =~ /^$house_name/) {$desired_house = 1};
+			#};
 		  
 			# if the flag was not set, go to the next house record
-			if ($desired_house == 0) {next RECORD};
+			#if ($desired_house == 0) {next RECORD};
 			
 # 			print "$CSDDRD->{'file_name'}\n";
 			$models_attempted++;	# count the models attempted
@@ -5084,7 +5119,20 @@ MAIN: {
 			FILE_PRINTOUT: {
 				# Develop a path and make the directory tree to get to that path
 				$CSDDRD->{'file_name'} = $CSDDRD->{'file_name'};
-				my $folder = "../$hse_type$set_name/$region/$CSDDRD->{'file_name'}";	# path to the folder for writing the house folder
+                # Variable to hold new pathname
+                my $NewFolder = $CSDDRD->{'file_name'};
+                # Check if upgrade mode 4 (city gen) and if there are duplicates
+                if ($upgrade_mode == 4) {
+                    # Lets look for duplicates
+                    for (my $k = 0; $k < $#dupl; $k=$k+2) {
+                        if (($NewFolder eq $dupl[$k]) && $dupl[$k+1] != 0) {
+                            # This is a duplicate append folder name
+                            $NewFolder = $NewFolder . "_$dupl[$k+1]";
+                            $dupl[$k+1] = $dupl[$k+1] -1;
+                        }
+                    }            
+                }
+				my $folder = "../$hse_type$set_name/$region/$NewFolder";	# path to the folder for writing the house folder
 				mkpath ($folder);	# make the output path directory tree to store the house files
 				
 				foreach my $ext (keys %{$hse_file}) {	# go through each extention inclusive of the zones for this particular record
@@ -5100,9 +5148,10 @@ MAIN: {
 # 			print Dumper $record_indc;
 			
 			$models_OK++;
+            close $CSDDRD_FILE;
 		};	# end of the while loop through the CSDDRD-> (end of RECORD)
 		
-	close $CSDDRD_FILE;
+	# close $CSDDRD_FILE;
 	
 	print "Thread for Model Generation of $hse_type $region - Complete\n";
 # 	print Dumper $issues;
