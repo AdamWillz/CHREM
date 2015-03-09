@@ -25,7 +25,6 @@ use Data::Dumper;
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
 use Storable  qw(dclone);
-use Math::Random::Secure qw(irand);
 
 # use lib qw(./modules);
 use General;
@@ -1690,7 +1689,7 @@ sub random_hse_shuffle {
     # Begin generating random list
 	my $k;
 	for ($k = 0; $k < $num_hses; $k++) {
-		my $random = irand($size);
+		my $random = int(rand($size));
 		$new_list[$k] = ${$hse_ref}[$random];
 	}
     

@@ -27,733 +27,513 @@ package PV;
 use strict;
 use CSV;	# CSV-2 (for CSV split and join, this works best)
 use Data::Dumper;
+use Math::Trig;
+use Math::Polygon::Calc;
 
 # Set the package up to export the subroutines for local use within the calling perl script
 require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(order array_order rm_EOL_and_trim hse_types_and_regions_and_set_name header_line one_data_line one_data_line_keyed largest smallest check_range set_issue print_issues distribution_array die_msg replace insert capitalize_first_letter capitalize_first_letter_each_word);
+our @EXPORT = qw( surf_slope_azimuth rotate_vector poly_obj R3_cross R_dot tri_trap_rect rect_finite_first_fit trap_finite_first_fit tri_finite_first_fit);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
-
 # ====================================================================
-# order
-# This subroutine orders and returns an array reference based on either
-# an array reference input or a hash reference input
-# It also has the option for a preference array reference input which
-# may be used to provide preferred ordering on the basis of matching
-# the beginning of the string and discard array reference input which
-# will discard any items that meet the criteria. Note that a preference
-# array reference must be provided if a discard array reference is to be 
-# provided. However, the preference array may be empty. Note that the 
-# discard comes after preference so that a blank '' may be used to discard
-# all remaining items.
-
-# For example:
-# order([1 2 20 10]) will return [1 2 10 20] (note: numeric based []<=>)
-# order([test 1 2 20 10]) will return [1 10 2 20 test] (note: alphanumeric based [cmp])
-# order({'one' => 1, 'two' => 2}) will return [one two]
-# order({'one' => 1, 'two' => 2}, [t]) will return [two one]
-#
-# A NOTE: Data::Dumper requires a subroutine reference to this, but that makes it 
-# difficult to provide a preference list.
-# The solutions is as follows:
-#
-# local $Data::Dumper::Sortkeys = sub {&order(shift, $preference_array_reference)};
-# print Dumper $data;
-#
-# If there is no preference for Data:Dumper then it simplifies to:
-# local $Data::Dumper::Sortkeys = \&order;
-# print Dumper $data;
+# surf_slope_azimuth
+# INPUT     RotAng: Angle of rotation (CCW about the z-axis) [deg]
+#           P1: Array holding x,y,z coordinates of point 1 on plane
+#           P2: Array holding x,y,z coordinates of point 2 on plane
+#           P3: Array holding x,y,z coordinates of point 3 on plane
+# OUTPUT    Slope: slope angle of plane [deg]
+#           Azimuth: Measured CW from north (y-axis) [deg]
+#           n: Normalized normal vector, untransformed (x,y,z)
 #
 # ====================================================================
 
-sub order {
-	# The first passed element is a reference of some type (hash or array)
-	my $data = shift;
-	# Declare a preference array ref
-	my $prefer = [];
-	# If there is a another passed element, shift the array reference of preference
-	if (@_) {$prefer = shift};
-	# Declare a discard array ref
-	my $discard = [];
-	# If there is a another passed element, shift the array reference of preference
-	if (@_) {$discard = shift};
-	
-	
-	# Declare an array to store the data list that we want sort
-	my @array;
-	
-	# If the data element is an array or hash, develop array by that type
-	if (ref $data eq 'ARRAY') {@array = @{$data};}
-	elsif (ref $data eq 'HASH') {@array = keys %{$data};}
-	else {
-		print "Bad reference data type passed to order - must be either ARRAY or HASH ref - see below information\n";
-		print "Data is:\n";
-		print Dumper $data;
-		print "Prefer is:\n";
-		print Dumper $prefer;
-		print "Discard is:\n";
-		print Dumper $discard;
-		return(); # Return to the program so that it hopefully flags and error. If we die here instead we don't know what calling feature was the issue.
-	};
-	
-	# Assume the @array is full of numeric values
-	my $data_type = 'NUMERIC';
-	
-	# Check all of the array elements to see if they are numeric.
-	CHECK_TYPE: foreach my $element (@array) {
-		# Check to see if numeric is whole number (XX), whole w/ decimal (XX.), decimal w/o zero (.XX) or floating point (XX.X)
-		unless ($element =~ /^\d+$|^\d+\.|\.\d+$|^\d+\.\d+$/) {
-			# it is not numeric, so set to alpha and jump out
-			$data_type = 'ALPHA';
-			last CHECK_TYPE;
-		};
-	};
-	
-	# Sort the array according to the appropriate type
-	if ($data_type eq 'NUMERIC') {@array = sort {$a <=> $b} @array;}
-	elsif ($data_type eq 'ALPHA') {@array = sort {$a cmp $b} @array;};
+sub surf_slope_azimuth {
+	# Read in inputs
+    my ($RotAng, $P1, $P2, $P3) = @_;
+    
+    # Declare local variables
+    my @P12=();
+    my @P13=();
+    my @n=();   # Untransformed normal vector
+    my @Nn = ();# Transformed normal vector
+    
+    # Generate two vectors on the plane
+    for (my $i=0; $i <=2; $i++) {
+        push(@P12, (${$P2}[$i] - ${$P1}[$i]));
+        push(@P13, (${$P3}[$i] - ${$P1}[$i]));
+    };
+    
+    # Determine the normal vector to the plane
+    my $coord = ($P12[1]*$P13[2])-($P12[2]*$P13[1]);
+    push(@n, $coord );
+    $coord = ($P12[2]*$P13[0])-($P12[0]*$P13[2]);
+    push(@n, $coord );
+    $coord = ($P12[0]*$P13[1])-($P12[1]*$P13[0]);
+    push(@n, $coord );
+    # print Dumper @n;
+    
+    # If the z-coordinate of the array is negative, reverse direction
+    if ($n[2] < 0) {
+        for (my $i=0; $i <=2; $i++) {
+            $n[$i] = $n[$i]*(-1);
+        };
+    };
 
-	# Declare an ordered array;
-	my @ordered;
-	
-	# Cycle over the preferred array and transfer elements of the @array to @ordered if they match. Note that this method makes only allows an element to match once and also protects it from the discard below.
-	foreach my $pref (@{$prefer}) { # Cycle over the preferred items in order
-		my @remaining; # Declare a remaining array
-		while (@array) { # Continue over the array until it is exhausted
-			my $item = shift (@array); # Shift the first item off the array
-			if ($item =~ /^$pref/) {push(@ordered, $item);} # If it matches the preference then store it in the ordered array
-			else {push(@remaining, $item);}; # If it does not match then put it in the remaining array
-		};
-		@array = @remaining; # Set the array equal to remaining so it may be used again, although it has had the preferred matching elements removed
-	};
+    if ($RotAng == 0) { # No need to perform transform
+        @Nn = @n;
+    } else { # Rotate the normal vector CCW about the z-axis
+        my $Nn_ref = rotate_vector(\@n, $RotAng);
+        @Nn = @$Nn_ref;
+    };
 
-	# Cycle over the discard  but only remove elements from @array, protecting the ordered elements
-	foreach my $element (@{$discard}) {
-		@array = grep(!/^$element/, @array); # The exclamation sign says store all elements that do not match (so discards do not get stored).
-	};
-	
-	# Add on the remaining @array to the ordered array for returning
-	push(@ordered, @array);
+    # Determine the azimuth (clockwise from north)
+    my $nMag = sqrt(($Nn[0]**2) + ($Nn[1]**2)); # Magnitude of the normal vector projected to xy plane
+    my $Azimuth = acos($Nn[1]/$nMag);
+    $Azimuth = rad2deg($Azimuth);
+    if ($Nn[0] < 0 ) { # Third or fourth quadrant, adjust angle
+        $Azimuth = 360 - $Azimuth;
+    };
 
-	# Return the ordered array reference
-	return ([@ordered]);
+    
+    # Determine the slope angle
+    $nMag = sqrt(($Nn[0]**2) + ($Nn[2]**2)); # Magnitude of the normal vector projected to xz plane
+    my $Slope = acos(abs($Nn[0])/$nMag);
+    $Slope = 90-rad2deg($Slope);
+    
+    $nMag = sqrt(($n[0]**2) + ($n[1]**2) + ($n[2]**2));
+    for (my $i=0; $i <=2; $i++) {
+        $n[$i] = $n[$i]/$nMag;
+    };
+
+    return ($Slope,$Azimuth,\@n);
+
 };
 
-
-
-
 # ====================================================================
-# rm_EOL_and_trim
-# This subroutine removes all end of line characters (DOS, UNIX, MAC) 
-# and trims leading/trailing whitespace
-# ====================================================================
-
-sub rm_EOL_and_trim {
-
-	foreach my $line (@_) {
-	
-		# chomp the end of line characters off (dos, unix, or mac)
-		$line =~ s/\r\n$|\n$|\r$//g;
-		
-		# remove leading and trailing whitespace
-		$line =~ s/^\s+|\s+$//g;
-		
-		# remove common excess delimiters at the end of the line
-		$line =~ s/,+$|\t+$|;+$//g;
-	
-	};
-	
-	# return the string(s)
-	# Check to see if there is only one element, if so return a scalar
-	if (@_ == 1) {
-		return (shift);
-	}
-	# Otherwise it is a multielement array, so return an array
-	else {
-		return (@_);
-	};
-};
-
-
-# ====================================================================
-# hse_types_and_regions_and_set_name
-# This subroutine recieves the user specified house type and region and set name. It interprets the appropriate House Types
-# (e.g. 1 => 1-SD) and Regions (e.g. 2 => 2-QC) and outputs these back to
-# the calling script. 
-# It will also issue warnings if the input is malformed.
-# ====================================================================
-
-sub hse_types_and_regions_and_set_name {
-	my @variables;
-	my $user_input;
-	if (@_ == 2) {
-		@variables = ('House_Type', 'Region');
-		@{$user_input}{@variables} = @_;
-	}
-	elsif (@_ == 3) {
-		@variables = ('House_Type', 'Region', 'set_name');
-		@{$user_input}{@variables} = @_;
-# 		$user_input->{'set_name'} = '_' . $user_input->{'set_name'};
-	}
-	else {die "ERROR hse_types_and_regions_and_set_name subroutine requires two or three user inputs to be passed\n";};
-
-	# common house type and region names, note that they are specified using the ordered array from above
-	my $define_names->{$variables[0]} = {1 => '1-SD', 2 => '2-DR'};	# house type names
-	$define_names->{$variables[0] . 'other'} = {3 => '3-CB', 4 => '4-EX'};	# other house type names for use with test or calibration
-	$define_names->{$variables[1]} = {1, '1-AT', 2, '2-QC', 3, '3-OT', 4, '4-PR', 5, '5-BC'};	# region names
-	$define_names->{$variables[1] . 'other'} = {6 => '6-CB', 7 => '7-EX'};	# other region names for use with test or calibration
-
-
-	# declare a storage hash ref of the utilized house types and regions based on user input
-	my $utilized;
-
-	# cycle through the two variable types (house types and regions)
-	foreach my $variable (@variables) {
-		if ($variable eq 'set_name') {
-			$utilized->{$variable} = $user_input->{$variable};
-		}
-	
-		# Check to see if the user wants all the names for that variable
-		elsif ($user_input->{$variable} eq '0') {
-			$utilized->{$variable} = $define_names->{$variable};	# set the utilized equal to the entire definition hash for this variable
-		}
-		
-		# the user should have specified the exact types and regions they want, seperated by a forward slash
-		else {
-			my @values = split (/\//, $user_input->{$variable});	# split the input based on a forward slash
-
-			# cycle through the resulting elements
-			foreach my $value (@values) {
-				# verify that the requested house type or region exists and then set it on the utilized array for this variable
-				if (defined ($define_names->{$variable}->{$value})) {	# check that region exists
-					$utilized->{$variable}->{$value} = $define_names->{$variable}->{$value}; # it does so add it to the utilized
-				}
-				
-				# There are other names for test and calibration - check these
-				elsif (defined ($define_names->{$variable . 'other'}->{$value})) {	# check that region exists in the 'other' version
-					$utilized->{$variable}->{$value} = $define_names->{$variable . 'other'}->{$value}; # it does so add it to the utilized
-				}
-				
-				# the user input does not match the definitions, so organize the definitions and return an error message to the user
-				else {
-					my @keys = sort {$a cmp $b} keys (%{$define_names->{$variable}});	# sort for following error printout
-					die "$variable argument must be one or more of the following numeric values seperated by a \"/\": 0 @keys\n";	# error printout
-				};
-			};
-		};
-	};
-	
-	# Return the ordered hash slice so that the house type hash is first, followed by the region hash
-	return (@{$utilized}{@variables});
-};
-
-
-# ====================================================================
-# header_line
-# This subroutine is similar to a one_data_line, but
-# instead only reads in the header.
-
-# The header is stored as an ordered array at the location header (i.e. 
-# $CSDDRD->{'header'}->[header array is here]
-
-# This subroutine returns either header or
-# returns a 0 for False so that the calling while loop terminates.
-# ====================================================================
-
-sub header_line {
-	# shift the passed file path
-	my $FILE = shift;
-
-	my $new_data;	# create an crosslisting hash reference
-
-	# Cycle through the File until suitable data is encountered
-	while (<$FILE>) {
-
-		$_ = rm_EOL_and_trim($_);
-		
-		# Check to see if header has not yet been encountered. This will fill out $new_data once
-		if ($_ =~ s/^\*header,//) {	# header row has *header tag, so remove this portion, leaving ALL remaining CSV information
-			$new_data->{'header'} = [CSVsplit($_)];	# split the header into an array
-			# We have successfully identified the header, so return this to the calling program
-			return ($new_data);
-		}
-	
-	# No header was found on that iteration, so continue to read through the file to find data, until the end of the file is encountered
-	};
-	
-
-	# The end of the file was reached, so return a 0 (false) so that the calling routine moves onward
-	return (0);
-};
-
-
-
-
-# ====================================================================
-# one_data_line
-# This subroutine is similar to a complete tagged file readin, but
-# instead only reads in one data line at a time. This is to be used
-# with very large files that require processing one line at a time.
-# The CSDDRD is such a file.
-
-# Both the filehandle and existing data hash reference are passed to 
-# the subroutine. The existing data hash is examined to see if header 
-# information is present and if so this is used. This is because this
-# subroutine will forget the header information as soon as it returns.
-
-# The file read is similar to an entire read, but stores all items, and
-# does not use the second element as an identifier, because there is only
-# one data hash.
-
-# NOTE:Because this is intended for the CSDDRD and it is nice to keep the
-# name short, all of the data is stored at the base hash reference (i.e.
-# at $CSDDRD->{HERE}, not at $CSDDRD->{'data'}->{HERE}). Therefore, the 
-# header is stored as an ordered array at the location header (i.e. 
-# $CSDDRD->{'header'}->[header array is here]
-
-# This subroutine returns either data (to be used in a while loop) or
-# returns a 0 for False so that the calling while loop terminates.
-# ====================================================================
-
-sub one_data_line {
-	# shift the passed file path
-	my $FILE = shift;
-	# shift the existing data which may include the array of header info at $existing_data->{'header'}
-	my $existing_data = shift;
-
-	my $new_data;	# create an crosslisting hash reference
-
-	if (defined ($existing_data->{'header'})) {
-		$new_data->{'header'} = $existing_data->{'header'};
-	}
-
-	# Cycle through the File until suitable data is encountered
-	while (<$FILE>) {
-
-		$_ = rm_EOL_and_trim($_);
-		
-		# Check to see if header has not yet been encountered. This will fill out $new_data once and in subsequent calls to this subroutine with the same file the header will be set above.
-		if ($_ =~ s/^\*header,//) {	# header row has *header tag, so remove this portion, leaving ALL remaining CSV information
-			$new_data->{'header'} = [CSVsplit($_)];	# split the header into an array
-		}
-		
-		# Check for the existance of the data tag, and if so store the data and return to the calling program.
-		elsif ($_ =~ s/^\*data,//) {	# data lines will begin with the *data tag, so remove this portion, leaving the CSV information
-			
-			# create a hash slice that uses the header and data
-			# although this is a complex structure it simply creates a hash with an array of keys and array of values
-			# @{$hash_ref}{@keys} = @values
-			@{$new_data}{@{$new_data->{'header'}}} = CSVsplit($_);
-
-			# We have successfully identified a line of data, so return this to the calling program, complete with the header information to be passed back to this routine
-			return ($new_data);
-		}
-		
-	
-	# No data was found on that iteration, so continue to read through the file to find data, until the end of the file is encountered
-	};
-	
-	
-	# The end of the file was reached, so return a 0 (false) so that the calling routine moves onward
-	return (0);
-};
-
-
-
-# ====================================================================
-# one_data_line_keyed
+# rotate_vector
+# INPUT     n: Vector to be rotated (x,y,z)
+#           ang: Angle of rotation (CCW about the z-axis) [deg]
+# OUTPUT    Nn: Rotated vector (x,y,z)
 #
+# ====================================================================
 
-sub one_data_line_keyed {
-	# shift the passed file path
-	my $FILE = shift;
-	# shift the existing data which may include the array of header info at $existing_data->{'header'}
-	my $existing_data = shift;
+sub rotate_vector {
 
-	my $new_data;	# create an crosslisting hash reference
-
-	if (defined ($existing_data->{'header'})) {
-		$new_data->{'header'} = $existing_data->{'header'};
-	}
-
-	# Cycle through the File until suitable data is encountered
-	while (<$FILE>) {
-
-		$_ = rm_EOL_and_trim($_);
-		
-		# Check to see if header has not yet been encountered. This will fill out $new_data once and in subsequent calls to this subroutine with the same file the header will be set above.
-		if ($_ =~ s/^\*(header),//) {	# header row has *header tag, so remove this portion, leaving ALL remaining CSV information
-			$new_data->{$1} = [CSVsplit($_)];	# split the header into an array
-			push(@{$new_data->{'order'}},$1);
-		}
-		
-		# Check for the existance of the data tag, and if so store the data and return to the calling program.
-		elsif ($_ =~ s/^\*(\w+),//) {	# data lines will begin with the *data tag, so remove this portion, leaving the CSV information
-			my $tag = $1;
-			if ($tag =~ /unit|min|max|var|data/) {
-				# create a hash slice that uses the header and data
-				# although this is a complex structure it simply creates a hash with an array of keys and array of values
-				# @{$hash_ref}{@keys} = @values
-				@{$new_data->{$tag}}{@{$new_data->{'header'}}} = CSVsplit($_);
-				
-				if ($tag =~ /data/) {
-					# We have successfully identified a line of data, so return this to the calling program, complete with the header information to be passed back to this routine
-					return ($new_data);
-				}
-				else {
-					push(@{$new_data->{'order'}},$tag);
-				};
-			}
-			else {
-				$new_data->{$tag} = [CSVsplit($_)];	# split the into an array
-				push(@{$new_data->{'order'}},$tag);
-			};
-		}
-		
-		else {return (0)};
-		
-# 		print Dumper $new_data;
-	
-	# No data was found on that iteration, so continue to read through the file to find data, until the end of the file is encountered
-	};
-	
-	
-	# The end of the file was reached, so return a 0 (false) so that the calling routine moves onward
-	return (0);
+    my ($n, $ang) = @_;
+    my $SMALL = 1.0e-10;
+    
+    my @Nn = ();# Transformed normal vector
+    my $rad = deg2rad($ang);
+    my $coord = (${$n}[0]*cos($rad))-(${$n}[1]*sin($rad));
+    if (abs($coord) < $SMALL) {$coord=0.0};
+    push(@Nn, $coord );
+    $coord = (${$n}[0]*sin($rad))+(${$n}[1]*cos($rad));
+    if (abs($coord) < $SMALL) {$coord=0.0};
+    push(@Nn, $coord );
+    push(@Nn, ${$n}[2] );
+    
+    return (\@Nn);
 };
 
 # ====================================================================
-# largest and smallest
-# The following two subroutines simply examine the passed list and return
-# either the largest or smallest value in that list
+# poly_obj
+# INPUT     P: Array of ordered coordinates for each vertex of surface, 
+#              [x1, y1, z1, x2, y2, z2, ..., xn, yn, zn]
+#           n: normal vector, [x, y, z]
+#           numVert: number of vertices 
+#
 # ====================================================================
 
-sub largest {	# subroutine to find the largest value of the provided list
-	my $value = shift;	# set equal to the first value
-	foreach my $test_value (@_) {
-		if ($test_value > $value) {
-			$value = $test_value;
-		};
-	};
-	return ($value);
-};
+sub poly_obj {
+    my ($P_ref, $n_ref, $numVert) = @_;
+    my @P = @$P_ref;
+    my @n = @$n_ref;
+    
+    # Normalize the normal vector
+    my $Mag = sqrt(($n[0]**2)+($n[1]**2)+($n[2]**2));
+    my @Nn = (); # Array to hold normalized vector
+    for (my $i=0; $i <= 2; $i++) {
+        push(@Nn, ($n[$i]/$Mag));
+    };
+    
+    # Develop new orthogonal coordinate system to move surface to R2 space
+    my @Xnorm = (1,0,0);
+    my $Y_ref = R3_cross(\@Nn, \@Xnorm);
+    my @Y = @$Y_ref;
+    my $Mag = sqrt(($Y[0]**2)+($Y[1]**2)+($Y[2]**2));
+    for (my $i=0; $i <= 2; $i++) { # Normalize vector
+        $Y[$i] = $Y[$i]/$Mag;
+    };
+    
+    my @Ynorm = (0,1,0);
+    my $X_ref = R3_cross(\@Nn, \@Ynorm);
+    my @X = @$X_ref;
+    my $Mag = sqrt(($X[0]**2)+($X[1]**2)+($X[2]**2));
+    for (my $i=0; $i <= 2; $i++) { # Normalize vector
+        $X[$i] = $X[$i]/$Mag;
+    };
+    
+    # Selecting first vertex of surface as origin, determine new xy coordinates of surface
+    my @Pnew = ([0,0]);
+    my @VertInd = (); # Array to index vertices in array P
+    for (my $i = 1; $i < $numVert; $i++) {
+        push(@VertInd, ($i*3));
+    };
+    foreach my $j (@VertInd) {
+        my @temp = ();
+        push(@temp, ($P[$j] - $P[0]));
+        push(@temp, ($P[$j+1] - $P[1]));
+        push(@temp, ($P[$j+2] - $P[2]));
+        
+        push(@Pnew, [R_dot(\@temp, \@X), R_dot(\@temp, \@Y)]);
+    };
+    push(@Pnew,[0,0]); # Close the polygon
+    
+    my ($type, $L_refs) = tri_trap_rect(\@Pnew);
+    my @lengths = @$L_refs;
+    
+    my $poly = Math::Polygon->new( @Pnew );
 
-sub smallest {	# subroutine to find the smallest value of the provided list
-	my $value = shift;	# set equal to the first value
-	foreach my $test_value (@_) {
-		if ($test_value < $value) {
-			$value = $test_value;
-		};
-	};
-	return ($value);
-};
+    return ($poly,$type,\@lengths);
 
+};
 
 # ====================================================================
-# check_range
-# This subroutine checks a value against a min/max range and sets the
-# value to either if required. It will note this in the $issues hash ref
+# R3_cross
+# INPUT     A: Vector in R3
+#           B: Vector in R3
+# OUTPUT    C: Result of A cross B
+#
 # ====================================================================
 
-sub check_range {
-	my $format = shift;
-	my $value = sprintf($format, shift);	# key to check for values
-	my $min = sprintf($format, shift);
-	my $max = sprintf($format, shift);
-	my $area = shift;
-	my $coordinates = shift;
-	my $issues = shift;
-	
-	# check the minimum and add it to the hash ref if so
-	if ($value < $min) {
-		if ($area =~ /^Door (\w+) (\d)$/) {
-			$issues = set_issue("%s", $issues, 'Door', "$1 less than minimum $min, setting to the minimum value (Door_# house_value house_name)", "$2 $value", $coordinates);
-		}
-		elsif ($area =~ /^CONSTRUCTION layer conductivity$/) {
-			$issues = set_issue("%s", $issues, $area, "Less than maximum value of layer conductivity (specified min_allowable house_name)", "$value $min", $coordinates);
-		}
-		else {
-			$issues = set_issue($format, $issues, $area, "Less than minimum $min, setting to the minimum value", $value, $coordinates);
-		};
-	
-		return ($min, $issues);
-	}
-	# check the max and add it to the hash ref if so
-	elsif ($value > $max) {
-		if ($area =~ /^WINDOWS Available Area/) {
-			$issues = set_issue("%s", $issues, $area, 'Greater than available, setting to the available value (window_area available_area house_name)', "$value $max", $coordinates);
-		}
-		elsif ($area =~ /^Door (\w+) (\d)$/) {
-			$issues = set_issue("%s", $issues, 'Door', "$1 greater than maximum $max, setting to the maximum value (Door_# house_value house_name)", "$2 $value", $coordinates);
-		}
-		elsif ($area =~ /^Foundation floor area size is N\/A to main floor area$/) {
-			$issues = set_issue("%s", $issues, 'Foundation Floor Area', "Foundation Floor Area greater than Main_1 Floor, setting to the Main_1 value (foundation_value main_1_value house_name)", "$value $max", $coordinates);
-		}
-		elsif ($area =~ /^BASESIMP height above grade$/) {
-			$issues = set_issue("%s", $issues, $area, "Greater than maximum value of wall height minus 0.65 m (specified max_allowable house_name)", "$value $max", $coordinates);
-		}
+sub R3_cross {
 
-		else {
-			$issues = set_issue($format, $issues, $area, "Greater than maximum $max, setting to the maximum value", $value, $coordinates);
-		};
-		
-		return ($max, $issues);
-	};
-	return ($value, $issues);
+    my ($A_ref, $B_ref) = @_;
+    my @A = @$A_ref;
+    my @B = @$B_ref;
+    my @C = ();
+    
+    push(@C, ($A[1]*$B[2])-($A[2]*$B[1]));
+    push(@C, ($A[2]*$B[0])-($A[0]*$B[2]));
+    push(@C, ($A[0]*$B[1])-($A[1]*$B[0]));
+    
+    return (\@C);
+
 };
-
 
 # ====================================================================
-# set_issue
-# This subroutine simply puts the issue information into the issues variable
-# It is simply to save a little line space in the script
+# R_dot
+# INPUT     A: Vector in Rn
+#           B: Vector in Rn
+# OUTPUT    C: Result of A dot B
+#
 # ====================================================================
 
-sub set_issue {
-	my $format = shift;
-	my $issues = shift;
-	my $issue = shift;
-	my $problem = shift;
-	my $value = sprintf($format, shift);
-	my $coordinates = shift;
-	
-	#set_issue($issues, $issue_area, $problem, $value, $coordinates);
-	
-	$issues->{$issue}->{$problem}->{$coordinates->{'hse_type'}}->{$coordinates->{'region'}}->{$coordinates->{'file_name'}} = $value;
-	
-	return ($issues);
-};
+sub R_dot {
 
+    my ($A_ref, $B_ref) = @_;
+    my @A = @$A_ref;
+    my @B = @$B_ref;
+    my $Dot=0;
+    
+    for (my $i=0; $i <= $#A; $i++) {
+        $Dot = $Dot+($A[$i]*$B[$i]);
+    };
+    
+    return ($Dot);
+
+};
 
 # ====================================================================
-# print_issues
-# This subroutine prints out the issues encountered by the script during
-# execution. The format is set below which is easy to look at in a text
-# editor. In the future additional output files may be set to output in 
-# different formats (e.g. csv, xml)
+# tri_trap_rect
+# INPUT     poly: polygon object
+#
+# OUTPUT    type: String; 'rect', 'tri', 'trap', or 'unknown'
+#
 # ====================================================================
 
-sub print_issues {
+sub tri_trap_rect {
 
-	my $file = shift;
-	my $issues = shift;
-	
-	print "Printing the ISSUES to $file";
-	
-	open (my $FILE, '>', $file) or die ("can't open datafile: $file");
-	print $FILE "THIS FILE HOLDS THE HSE_GEN ISSUES - the total number of instances is at the bottom of this file"; 
+    my @points = @{$_[0]};
+    my $type;
+    my @Lengths = ();
+    my $size = $#points; # Number of points that define the surface
+    
+    if ($size == 3) {
+        $type = 'tri';
+        for (my $i=0; $i <3; $i++) {
+            push(@Lengths, sprintf("%.3f", polygon_perimeter ($points[$i],$points[$i+1])));
+        };
+    } elsif ($size == 4) { # rectangle or trapezoid
+        for (my $i=0; $i <4; $i++) {
+            push(@Lengths, sprintf("%.3f", polygon_perimeter ($points[$i],$points[$i+1])));
+        };
 
-	# The following $instances will count the number of times an error is encountered for reporting purposes.
-	my $instances->{'total'} = 0;
+        if ($Lengths[0] == $Lengths[2] && $Lengths[1] == $Lengths[3]) {
+            $type = 'rect';
+        } else {
+            $type = 'trap';
+        };
+    } elsif ($size < 3) {
+        die "The number of points defining this surface is less than 3, not possible! \n";
+    } else {
+        $type = 'unknown';
+    };
 
-	foreach my $issue (sort keys (%{$issues})) {	# cycle through the issues
-		$instances->{'issue'} = 0; # this sums up the number of instances of the issue (all problems) for each type and region
-		# The ISSUE refers to a field: e.g. HDD or PostalCode
-		print $FILE "\n\nISSUE - $issue\n";
-		
-		foreach my $problem (sort keys (%{$issues->{$issue}})) {	# cycle thorugh problems
-			$instances->{'problem'} = 0;	# this sums up the number of instances of the problem for each type and region
-			# The PROBLEM is where the problem lies for the ISSUE: e.g. min or max or malformed PostalCode
-			print $FILE "\n\tPROBLEM - $problem\n";
-			
-			# go through the house types and region
-			foreach my $hse_type (sort keys (%{$issues->{$issue}->{$problem}})) {
-				foreach my $region (sort keys (%{$issues->{$issue}->{$problem}->{$hse_type}})) {
-					
-					# count the instances for this type/region
-					my $type_region_instances = keys (%{$issues->{$issue}->{$problem}->{$hse_type}->{$region}});
-					# keep track of the total
-					foreach my $type ('total', 'issue', 'problem') {
-						$instances->{$type} = $instances->{$type} + $type_region_instances;
-					};
+    return ($type,\@Lengths);
 
-					print $FILE "\t\tHouse Type: $hse_type; Region $region; instances $type_region_instances\n";
-					
-					print $FILE "\t\t";
-					my $counter = 1;	# set the counter, we will use this so we can put multiple houses on a line withour running over
-					# print $FILE each instance with information to a new line so it may be examined
-					foreach my $instance (sort keys (%{$issues->{$issue}->{$problem}->{$hse_type}->{$region}})) {	# cycle through each house with this problem
-					
-						$instances->{'unique'}->{$instance} = 1;
-
-						# if enough have been printed, then simply go to next line and reset counter
-						if ($counter >= 4) {
-							print $FILE "\n\t\t\t$issues->{$issue}->{$problem}->{$hse_type}->{$region}->{$instance} $instance";
-							$counter = 1;
-						}
-						# there is still room to print so add a tab and then the value/house
-						else {
-							print $FILE "    $issues->{$issue}->{$problem}->{$hse_type}->{$region}->{$instance} $instance";
-						};
-						$counter++;	# increment counter
-
-					};
-					print $FILE "\n";
-					
-				};
-			};
-			# final count for that problem
-			print $FILE "\tInstances of Problem $problem: $instances->{'problem'}\n";
-		};
-		print $FILE "\nInstances of Issue $issue: $instances->{'issue'}\n";
-	};
-	print $FILE "\nTotal instances ALL: $instances->{'total'}\n";
-	
-	my $unique_keys = keys (%{$instances->{'unique'}});
-	print $FILE "Total instances UNIQUE HOUSES: $unique_keys\n";
-	
-	print " - Complete\n";
-	return (1);
 };
-
 
 # ====================================================================
-# distribution_array
-# This subroutine develops a shuffled array of values based on a distribution
-# defined at $hash = {value1 => distribution_ratio2, value1 => distribution_ratio2...}
-# where the number of array elements desired is provided.
-# The array is returned from the subroutine.
-# For example: 
-# Passed: $hash = {'RED' => 0.25, 'BLUE' => 0.75}; $count = 4
-# Return: ['BLUE', 'BLUE', 'RED', 'BLUE']
+# rect_finite_first_fit
+# INPUT     DIM: array; element 1 is length and element 2 width of bin
+#           PL: length of piece to be packed in the bin
+#           PW: width of piece to be packed in the bin
+#
+# OUTPUT    Num_P: Number of pieces that fit in the bin
+#
 # ====================================================================
 
-sub distribution_array {
+sub rect_finite_first_fit {
+    my ($DIM_ref, $PL, $PW) = @_;
+    my @DIM = @$DIM_ref;
+    my @PR = ($PL, $PW); # Array to hold length and width of pieces
+    my $BL = $DIM[0]; # Bin length
+    my $BH = $DIM[1]; # Bin height
 
-	my $distribution = shift(); # hash reference containing {header1 => dist_data1, header2 => dist_data2...}
-	my $count = shift(); # the number of elements desired (typically number of houses)
+    my $Num_P = 0; # Integer to hold the number of pieces that can fit in the bin
+    
 
-	my @data; # the array to store the values that will be returned
-	
-	# go through each element of the header, remember this is the value to be provided to the house file
-# 	foreach my $element (0..$#{$NN_xml->{'combined'}->{$key}->{'header'}}) {
-	foreach my $key (keys (%{$distribution})) {
-		
-		# determine the size that the array should be with the particular header value (multiply the distribution by the house count)
-		# NOTE I am using sprintf to cast the resultant float as an integer. Float is still used as this will perform rounding (0.5 = 1 and 0.49 = 0). If I had cast as an integer it simply truncates the decimal places (i.e. always rounding down)
-		my $index_size = sprintf ("%.f", $distribution->{$key} * $count);
-		
-		# only fill out the array if the size is greater than zero (this eliminates pushing the value 1 time when no instances are present)
-		if ($index_size > 0) {
-			# use the index size to fill out the array with the appropriate header value. Note that we start with 1 because 0 to value is actually value + 1 instances
-			# go through the array spacing and set the each spaced array element equal to the header value. This will generate a large array with ordered values corresponding to the distribution and the header. NOTE each element value will be used to represent the data for one house of the variable
-				
-			
-			foreach my $index (1..$index_size) {
-				# push the header value onto the data array. NOTE: we will check for rounding errors (length) and shuffle the array later
-				push (@data, $key);
-			};
-			
-			
-		};
-	};
-
-	
-	# SHUFFLE the array to get randomness b/c we do not know this information for a particular house.
-	@data = shuffle (@data);
-	
-	# CHECK for rounding errors that will cause the array to be 1 or more elements shorter or longer than the number of houses.
-	# e.g. three equal distributions results in 10 houses * [0.33 0.33 0.33] results in [3 3 3] which is only 9 elements!
-	# if this is true: the push or pop on the array. NOTE: I am using the first array element and this is legitimate because we previously shuffled, so it is random.
-	while (@data < $count) {	# to few elements
-		push (@data, $data[0]);
-		# in case we do this more than once, I am shuffling it again so that the first element is again random.
-		@data = shuffle (@data);
-	};
-	while (@data > $count) {	# to many elements
-		shift (@data);
-	};
-	
-	return (@data);
+    my @iA = (1,0); # Indexers to randomly set orientation of the panels
+    my @iB = (0,1);
+    
+    
+    for (my $i=0; $i <= 1; $i++) { # Try 2 different orientations of pieces
+        # Determine orientation of piece
+        my $L = $PR[$iA[$i]];
+        my $H = $PR[$iB[$i]];
+        # Initialize values
+        my $TopH = $H;      # Height of the top of the current level
+        my $LL = $BL;       # Available space on current level
+        my $BaseH = 0;      # Height of the base of the current level
+        my $count = 0;      # Generic counter
+        my $BinFull = 0;    # Flag to indicate bin is full
+        
+        while ($BinFull != 1) { # While the bin isn't full, place a piece
+            # Update space left on level
+            $LL = $LL - $L;
+            if ($LL < 0) {  # Level full, move up to next level
+                $BaseH = $TopH;
+                $TopH = $BaseH+$H;
+                $LL=$BL-$L;
+                if ($LL < 0) {$BinFull = 1};  # This piece has a lenght bigger than bin, close
+            };
+            
+            # Check there is available height for piece
+            if (($BaseH+$H) > $BH) {# Piece goes through top of rectangle, close
+                $BinFull = 1
+            } elsif (($BaseH+$H) > $TopH) {
+                $TopH = $BaseH+$H;
+            };
+            
+            if ($BinFull != 1) { # Piece fits, place it
+                $count = $count+1;
+            };
+        };
+        # UPDATE VARIABLES AFTER BIN PACKED
+        if ($count > $Num_P) {
+            $Num_P = $count;
+        };
+    };
+    return ($Num_P);
 };
 
+# ====================================================================
+# trap_finite_first_fit
+# INPUT     DIM: array; element 1 is length and element 2 width of bin
+#           PL: length of piece to be packed in the bin
+#           PW: width of piece to be packed in the bin
+#
+# OUTPUT    Num_P: Number of pieces that fit in the bin
+#
+# ====================================================================
 
+sub trap_finite_first_fit {
+    my ($DIM_ref, $PL, $PW) = @_;
+    my @DIM = @$DIM_ref;
+    my @PR = ($PL, $PW); # Array to hold length and width of pieces
+    
+    # Determine trapezoid dimension
+    my $sides;
+    my $base;
+    my $top;
+    my @BT=();
+    SIDES: {
+    foreach my $x (@DIM) {
+        foreach my $y (@DIM) {
+            if ($x == $y) {
+                $sides = $x;
+                foreach my $z (@DIM) {
+                    if ($z != $sides) {push(@BT,$z)};
+                };
+                if ($#BT < 1) { # Only one element in array, 3 sides are equal
+                    $base = $side;
+                    $top = $BT[0];
+                } elsif ($BT[0] > $BT[1]) {
+                    $base = $BT[0];
+                    $top = $BT[1];
+                else {
+                    $base = $BT[1];
+                    $top = $BT[0];
+                };
+                last SIDES;
+            };
+        };
+    };
+    };
+    my $BH = sqrt(($sides**2)-((($base-$top)/2)**2)); # Bin height
+    my $theta = asin($BH/$sides);
 
-sub die_msg {	# subroutine to die and give a message
-	my $msg = shift;	# the error message to print
-	my $value = shift; # the error value
-	my $coordinates = shift; # the CSDDRD to report the house type, region, house name
+    my $Num_P = 0; # Integer to hold the number of pieces that can fit in the bin
+   
+    my @iA = (1,0); # Indexers to randomly set orientation of the panels
+    my @iB = (0,1);
+    
+    
+    for (my $i=0; $i <= 1; $i++) { # Try 2 different orientations of pieces
+        # Determine orientation of piece
+        my $L = $PR[$iA[$i]];
+        my $H = $PR[$iB[$i]];
+        my $trim = 2*($H/tan($theta));
+        
+        # Initialize variables
+        my $BL = $base - $trim; # Initialize available level space
+        my $LL = $BL;       # Initialize remaining space on level
+        my $TopH = $H;      # Height of the top of the current level
+        my $BaseH = 0;      # Height of the base of the current level
+        my $BinFull = 0;    # Flag to indicate bin is full
+        my $count = 0;      # Generic counter
 
-	my $message = "MODEL ERROR - $msg; Value = $value;";
-	foreach my $key ('hse_type', 'region', 'file_name') {
-		$message = $message . " $key $coordinates->{$key}"
-	};
-	die "$message\n";
-	
+        while ($BinFull != 1) { # While the bin isn't full, place a piece
+            # Update space left on level
+            $LL = $LL - $L;
+            if ($LL < 0) {  # Level full, move up to next level
+                $BaseH = $TopH;
+                $TopH = $BaseH+$H;
+                $BL = $BL - $trim;
+                $LL=$BL-$L;
+                if ($LL < 0 || $BL < 0) {$BinFull = 1};  # This piece has a length bigger than bin, close
+            };
+            
+            # Check there is available height for piece
+            if (($BaseH+$H) > $BH) {# Piece goes through top of rectangle, close
+                $BinFull = 1;
+            };
+            
+            if ($BinFull != 1) { # Piece fits, place it
+                $count = $count+1;
+            };
+        };
+        # UPDATE VARIABLES AFTER BIN PACKED
+        if ($count > $Num_P) {
+            $Num_P = $count;
+        };
+    };
+    return ($Num_P);
 };
 
+# ====================================================================
+# tri_finite_first_fit
+# INPUT     DIM: array; element 1 is length and element 2 width of bin
+#           PL: length of piece to be packed in the bin
+#           PW: width of piece to be packed in the bin
+#
+# OUTPUT    Num_P: Number of pieces that fit in the bin
+#
+# ====================================================================
 
-sub replace {	# subroutine to perform a simple element replace (house file to read/write, keyword to identify row, rows below keyword to replace, replacement text)
-	my $hse_file = shift (@_);	# the house file to read/write
-	my $find = shift (@_);	# the word to identify
-	my $location = shift (@_);	# where to identify the word: 1=start of line, 2=anywhere within the line, 3=end of line
-	my $beyond = shift (@_);	# rows below the identified word to operate on
-	my $format = shift (@_);	# format of the replacement text for the operated element
-	CHECK_LINES: foreach my $line (0..$#{$hse_file}) {	# pass through the array holding each line of the house file
-		if ((($location == 1) && ($hse_file->[$line] =~ /^$find/)) || (($location == 2) && ($hse_file->[$line] =~ /$find/)) || (($location == 3) && ($hse_file->[$line] =~ /$find$/))) {	# search for the identification word at the appropriate position in the line
-			$hse_file->[$line+$beyond] = sprintf ($format, @_);	# replace the element that is $beyond that where the identification word was found
-			last CHECK_LINES;	# If matched, then jump out to save time and additional matching
-		};
-	};
-	
-	return;
-};
+sub tri_finite_first_fit {
+    my ($DIM_ref, $PL, $PW) = @_;
+    my @DIM = @$DIM_ref;
+    my @PR = ($PL, $PW); # Array to hold length and width of pieces
+    
+    # Determine trapezoid dimension
+    my $sides;
+    my $base;
+    my @BT=();
+    SIDES: {
+    foreach my $x (@DIM) {
+        foreach my $y (@DIM) {
+            if ($x == $y) {
+                $sides = $x;
+                foreach my $z (@DIM) {
+                    if ($z != $sides) {
+                        $base=$z
+                    };
+                };
+                if  (! defined $base) { # All side are equal
+                    $base = $sides;
+                };
+                last SIDES;
+            };
+        };
+    };
+    };
+    my $BH = sqrt(($sides**2)-(($base/2)**2)); # Bin height
+    my $theta = asin($BH/$sides);
+    
+   
+    my $Num_P = 0; # Integer to hold the number of pieces that can fit in the bin
+   
 
-sub insert {	# subroutine to perform a simple element insert after (specified) the identified element (house file to read/write, keyword to identify row, number of elements after to do insert, replacement text)
-	my $hse_file = shift (@_);	# the house file to read/write
-	my $find = shift (@_);	# the word to identify
-	my $location = shift (@_);	# 1=start of line, 2=anywhere within the line, 3=end of line
-	my $beyond = shift (@_);	# rows below the identified word to remove from and insert too
-	my $remove = shift (@_);	# rows to remove
-	my $format = shift (@_);	# format of the replacement text for the operated element
-	CHECK_LINES: foreach my $line (0..$#{$hse_file}) {	# pass through the array holding each line of the house file
-		if ((($location == 1) && ($hse_file->[$line] =~ /^$find/)) || (($location == 2) && ($hse_file->[$line] =~ /$find/)) || (($location == 3) && ($hse_file->[$line] =~ /$find$/))) {	# search for the identification word at the appropriate position in the line
+    my @iA = (1,0); # Indexers to randomly set orientation of the panels
+    my @iB = (0,1);
+    
+    
+    for (my $i=0; $i <= 1; $i++) { # Try 2 different orientations of pieces
+        # Determine orientation of piece
+        my $L = $PR[$iA[$i]];
+        my $H = $PR[$iB[$i]];
+        my $trim = 2*($H/tan($theta));
+        
+        # Initialize variables
+        my $BL = $base - $trim; # Initialize available level space
+        my $LL = $BL;       # Initialize remaining space on level
+        my $TopH = $H;      # Height of the top of the current level
+        my $BaseH = 0;      # Height of the base of the current level
+        my $BinFull = 0;    # Flag to indicate bin is full
+        my $count = 0;      # Generic counter
 
-# 				print "$find\n";
-			splice (@{$hse_file}, $line + $beyond, $remove, sprintf ($format, @_));	# replace the element that is $beyond that where the identification word was found
-			last CHECK_LINES;	# If matched, then jump out to save time and additional matching
-		};
-	};
-	return;
-};
-
-#--------------------------------------------------------------------
-# A simple subroutine to captitalize the first letter of a string
-#--------------------------------------------------------------------
-sub capitalize_first_letter {
-	my $string = shift; # The string
-
-	$string =~ /^(.)/; # Determine the first letter
-
-	my $character = uc($1); # Captilize this letter
-
-	$string =~ s/^(.)/$character/; # Replace the letter with the capitalized one
-
-	return ($string); # Return the string
-};
-
-#--------------------------------------------------------------------
-# A simple subroutine to captitalize the first letter of a string
-#--------------------------------------------------------------------
-sub capitalize_first_letter_each_word {
-	my $string = shift; # The string
-	my @words = split(/ */, $string); # The words
-
-	foreach my $word (@words) {
-		$word =~ /^(.)/; # Determine the first letter
-
-		my $character = uc($1); # Captilize this letter
-
-		$word =~ s/^(.)/$character/; # Replace the letter with the capitalized one
-	}
-	
-	$string = join(' ', @words);
-
-	return ($string); # Return the string
+        while ($BinFull != 1) { # While the bin isn't full, place a piece
+            # Update space left on level
+            $LL = $LL - $L;
+            if ($LL < 0) {  # Level full, move up to next level
+                $BaseH = $TopH;
+                $TopH = $BaseH+$H;
+                $BL = $BL - $trim;
+                $LL=$BL-$L;
+                if ($LL < 0 || $BL < 0) {$BinFull = 1};  # This piece has a length bigger than bin, close
+            };
+            
+            # Check there is available height for piece
+            if (($BaseH+$H) > $BH) {# Piece goes through top of rectangle, close
+                $BinFull = 1;
+            };
+            
+            if ($BinFull != 1) { # Piece fits, place it
+                $count = $count+1;
+            };
+        };
+        # UPDATE VARIABLES AFTER BIN PACKED
+        if ($count > $Num_P) {
+            $Num_P = $count;
+        };
+    };
+    return ($Num_P);
 };
 
 # Final return value of one to indicate that the perl module is successful

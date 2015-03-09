@@ -38,12 +38,16 @@
 use warnings;
 use strict;
 
+use CSV;	# CSV-2 (for CSV split and join, this works best)
 use Data::Dumper;	# to dump info to the terminal for debugging purposes
 use threads;	# threads-1.71 (to multithread the program)
 use File::Copy;
+use Math::Polygon;
 
 use lib qw(./modules);
 use General;
+use PV;
+use Upgrade;
 
 # --------------------------------------------------------------------
 # Declare the global variables
@@ -76,6 +80,68 @@ else { # An inappropriate set_name was provided so die and leave a message
 	die "Set_name \"$set_name\" was not found\nPossible set_names are: @possible_set_names_print\n";
 };
 
+# --------------------------------------------------------------------
+# Read the PV parameters
+# --------------------------------------------------------------------
+
+my $PVkey = '../Input_upgrade/Input_PV.csv';
+system ("printf \"Reading $PVkey\"");
+# Open and read the crosslisting, note that the file handle below is a variable so that it simply goes out of scope
+open (my $PVFILE, '<', $PVkey) or die ("can't open datafile: $PVkey");
+my $PVdata;	# create an crosslisting hash reference
+while (<$PVFILE>) {
+	$_ = rm_EOL_and_trim($_);
+	
+	if ($_ =~ s/^\*header,//) {	# header row has *header tag, so remove this portion, and the key (first header value) leaving the CSV information
+		$PVdata->{'header'} = [CSVsplit($_)];	# split the header into an array
+	}
+		
+	elsif ($_ =~ s/^\*data,//) {	# data lines will begin with the *data tag, so remove this portion, leaving the CSV information
+		@_ = CSVsplit($_);	# split the data onto the @_ array
+		
+		# create a hash slice that uses the header and data array
+		# although this is a complex structure it simply creates a hash with an array of keys and array of values
+		# @{$hash_ref}{@keys} = @values
+		@{$PVdata}{@{$PVdata->{'header'}}} = @_;
+	};
+};
+delete $PVdata->{'header'};
+# notify the user we are complete and start a new line
+print " - Complete\n";
+close($PVFILE);
+# Compute the area
+$PVdata->{'Area'} = ($PVdata->{'Length'})*($PVdata->{'Width'});
+#print Dumper $PVdata;
+
+# Check data
+unless (defined ($PVdata->{'Vmpp'})) {
+	die "The voltage at maximum power point is not defined! \n";
+}
+elsif ($PVdata->{'Vmpp'} <= 0) {
+	die "The value of voltage at maximum power point is not correct! \n";
+}
+unless (defined ($PVdata->{'Isc'})) {
+	die "The short-circuit current is not defined! \n";
+}
+elsif ($PVdata->{'Isc'} <= 0) {
+	die "The short-circuit current value is not correct! \n";
+}
+if ($PVdata->{'Voc/Vmpp'} < 1 ||  $PVdata->{'Voc/Vmpp'} > 2) {
+	die "The Voc/Vmpp ratio is out of range!\n";
+}
+if ($PVdata->{'Isc/Impp'} < 1 ||  $PVdata->{'Voc/Vmpp'} > 2) {
+	die "The Isc/Impp ratio is out of range!\n";
+}
+if ($PVdata->{'efficiency'} < 0 || $PVdata->{'efficiency'} > 100) {
+	die "The efficiency shall be between 0 and 100! \n";
+}
+if ($PVdata->{'mis_factor'} < 0 || $PVdata->{'mis_factor'} > 1) {
+	die "The efficiency shall be between 0 and 1! \n";
+}
+
+# --------------------------------------------------------------------
+# Begin multi-threading for regions and house types
+# --------------------------------------------------------------------
 MULTI_THREAD: {
 	print "Multi-threading for each House Type and Region : please be patient\n";
 	
@@ -116,17 +182,18 @@ MAIN: {
         # --------------------------------------------------------------------
         # Begin processing each house model
         # --------------------------------------------------------------------
-        foreach my $dir (@dirs) {
         
+        foreach my $dir (@dirs) {
+        EACHHSE: {
             my $Roof_type;
             
             # Determine the house name
             my $hse_name = $dir;
             $hse_name =~ s{.*/}{};
             $hse_name =~ s/_[0-9]+//; 	 # Clean up house name if duplicate	
+            print "Record is $hse_name\n";
+            # TODO: If a .spm file exists, die
             
-            print "House Name is $hse_name\n";
-        
             # Find all the geometry files for the model
             my @files = glob "$dir/*.geo";
             for (0..$#files){
@@ -141,6 +208,15 @@ MAIN: {
             if( length $Roof_type ) {
                 # TODO: Error Handling, no roof type
             };
+
+            # If $zone='roof', skip this house as it has a flat roof
+            if($Roof_type =~ m/(roof)/i) {
+                print "$hse_name has a flat roof, skipping to next house\n";
+                # RECORD AREA OF FLAT ROOF
+                last EACHHSE;
+            };
+            
+            
             
             # --------------------------------------------------------------------
             # Interrogate the geometry file
@@ -240,17 +316,72 @@ MAIN: {
                 $sNum++;
             };
             
-            
             close $OldGeo;
             
             # --------------------------------------------------------------------
             # Determine eligible surfaces for PV
             # --------------------------------------------------------------------
-            # If Roof_type is 'roof', the ceiling is flat and only the 'ceiling' surface is
-            # may be considered for PV mounting.
+            # Only surfaces with construction type 'slop'
+            foreach my $index (keys (%{$surf})) {
+                if ($surf->{$index}->{'name'} !~ m/^(floor|ceiling)/i && $surf->{$index}->{'con'} =~ m/(slop)$/i) { # surface is not a floor or ceiling, and is sloped
+                    
+                    my @P = (); # Array to hold coordinates of vertices 
+                    # Determine Cartesian coordinates of all points that define the surface
+                    for (my $i = 1; $i <= $surf->{$index}->{'num_vert'}; $i++) {
+                        my $VertNumber = $surf->{$index}->{'vert_lst'}->{$i};
+                        foreach my $point (@coord) {
+                            push(@P, $vertex->{$VertNumber}->{$point});
+                        };
+                    };
+
+                    # Determine surface orientation # CHECK SURFACE 0 < SLOPE < 90 AND 90 < AZIMUTH < 270
+                    # Isolate first 3 points
+                    my @p1=();
+                    my @p2=();
+                    my @p3=();
+                    my $j=0;
+                    while ($j < 3) {
+                        push(@p1,$P[$j]);
+                        $j++;
+                    };
+                    while ($j < 6) {
+                        push(@p2,$P[$j]);
+                        $j++;
+                    };
+                    while ($j < 9) {
+                        push(@p3,$P[$j]);
+                        $j++;
+                    };
+                    
+                    my ($Slope,$Azimuth, $n_ref) = &surf_slope_azimuth($AngRot,\@p1,\@p2,\@p3);
+                    my @n = @$n_ref; # Normal vector of surface, magnitude 1, unrotated
+                    my ($poly, $shape,$length_r) = &poly_obj(\@P,\@n,$surf->{$index}->{'num_vert'});
+                    my @lengths = @$length_r;
+                    my $area = $poly->area;
+                    my $NumColl=0; # Number of collectors that can fit onto the surface
+                    
+                    # Determine if the surface is eligible for PV
+                    if ($area > $PVdata->{'Area'} && $Azimuth >= 90 && $Azimuth <= 270 && $Slope < 90) {
+                        if ($shape =~ m/^(rect)/i) { # surface geometry is rectangular
+                            # Call bin packing algorithm
+                            $NumColl=&rect_finite_first_fit(\@lengths,$PVdata->{'Length'},$PVdata->{'Width'});
+                            #print "Number of collectors is $NumColl\n";
+                            #sleep;
+                        } elsif ($shape =~ m/^(trap)/i) { # surface geometry is rectangular
+                            $NumColl=&trap_finite_first_fit(\@lengths,$PVdata->{'Length'},$PVdata->{'Width'});
+                        } elsif ($shape =~ m/^(tri)/i) { # surface geometry is triangular
+                            $NumColl=&tri_finite_first_fit(\@lengths,$PVdata->{'Length'},$PVdata->{'Width'});
+                        } else {
+                            # TODO: ERROR HANDLING
+                        };
+                    };
+                    
+                    if ($NumColl > 0) { # Collectors may be placed on this surface
+                        my $Cover = ($NumColl*($PVdata->{'Area'}))/$area; # Fraction of surface covered in PV
+                    };
+                };
+            };
             
-            # If the Roof_type is 'attic', only surfaces with construction type 'slop', and the
-            # ceiling surface may be considered for PV mounting
        
 
             
@@ -260,5 +391,6 @@ MAIN: {
             
         
         };  # end of house loop
-	};	# end of main code
+    };  # end of EACHHSE
+    };	# end of main code
 };

@@ -70,8 +70,8 @@ make
 make install
 cd ..
 
-tar -xf Math-Random-Secure-0.06.tar.gz
-cd Math-Random-Secure-0.06
+tar -xf Math-Polygon-1.02.tar.gz
+cd Math-Polygon-1.02
 perl Makefile.PL
 make
 make install
