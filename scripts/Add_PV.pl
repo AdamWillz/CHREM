@@ -109,8 +109,6 @@ delete $PVdata->{'header'};
 # notify the user we are complete and start a new line
 print " - Complete\n";
 close($PVFILE);
-# Compute the area
-$PVdata->{'Area'} = ($PVdata->{'Length'})*($PVdata->{'Width'});
 #print Dumper $PVdata;
 
 # Check data
@@ -137,6 +135,30 @@ if ($PVdata->{'efficiency'} < 0 || $PVdata->{'efficiency'} > 100) {
 }
 if ($PVdata->{'mis_factor'} < 0 || $PVdata->{'mis_factor'} > 1) {
 	die "The efficiency shall be between 0 and 1! \n";
+}
+if ($PVdata->{'Area'} < 0 ) {
+	die "The area needs to be greater than 0! \n";
+}
+if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0) {
+	die "PV module dimensions need to be greater than 0! \n";
+}
+
+# -----------------------------------------------
+# Declare important variables for file generation
+# -----------------------------------------------
+$zone_extensions = ['cfc', 'con', 'geo', 'opr', 'tmc'];	# extentions that are used for individual zones
+
+# -----------------------------------------------
+# Read in the templates
+# -----------------------------------------------
+my $template;	# declare a hash reference to hold the original templates for use with the generation house files for each record
+
+# Open and read the template files
+foreach my $ext (@{$zone_extensions}) {	# do for each filename extention
+	my $file = "../templates/template.$ext";
+	# note that the file handle below is a variable so that it simply goes out of scope
+	open (my $TEMPLATE, '<', $file) or die ("can't open template: $file");	# open the template
+	$template->{$ext} = [<$TEMPLATE>];	# Slurp the entire file with one line per array element
 }
 
 # --------------------------------------------------------------------
@@ -216,6 +238,10 @@ MAIN: {
                 last EACHHSE;
             };
             
+            my $hse_file;	# new hash reference to the ESP-r files for this record
+            foreach my $ext (@{$zone_extensions}) {
+                $hse_file->{$ext} = [@{$template->{$ext}}];	# create the template file for the zone
+			};
             
             
             # --------------------------------------------------------------------
@@ -322,6 +348,9 @@ MAIN: {
             # Determine eligible surfaces for PV
             # --------------------------------------------------------------------
             # Only surfaces with construction type 'slop'
+            
+            # Initialize HASH to hold PV geometry and data
+            my $PVSurfaces;
             foreach my $index (keys (%{$surf})) {
                 if ($surf->{$index}->{'name'} !~ m/^(floor|ceiling)/i && $surf->{$index}->{'con'} =~ m/(slop)$/i) { # surface is not a floor or ceiling, and is sloped
                     
@@ -377,11 +406,29 @@ MAIN: {
                     };
                     
                     if ($NumColl > 0) { # Collectors may be placed on this surface
-                        my $Cover = ($NumColl*($PVdata->{'Area'}))/$area; # Fraction of surface covered in PV
+                        $PVSurfaces->{$surf->{$index}->{'name'}}->{'Area'} = $NumColl*($PVdata->{'Area'});
+                        $PVSurfaces->{$surf->{$index}->{'name'}}->{'Slope'} = $Slope;
+                        $PVSurfaces->{$surf->{$index}->{'name'}}->{'Azimuth'} = $Azimuth;
                     };
                 };
             };
             
+            # --------------------------------------------------------------------
+            # Begin making PV zones
+            # --------------------------------------------------------------------
+            my $ZoneCount=1;
+            foreach my $PVName (keys (%{$PVSurfaces})) {
+                my $ZoneName = '$PVName'.'_PV';
+                my $PArea = $PVSurfaces->{$PVName}->{'Area'};
+                my $PSlope = $PVSurfaces->{$PVName}->{'Slope'};
+                my $PAzim = $PVSurfaces->{$PVName}->{'Azimuth'};
+                
+                &replace ($hse_file->{"$ZoneName.geo"}, "#ZONE_NAME", 1, 1, "%s\n", "GEN $ZoneName This file describes the $ZoneName");	# set the name at the top of each zone geo file
+                # SET THE ORIGIN AND MAJOR VERTICES OF THE ZONE (note the formatting)
+                
+                my ($x1,$x2,$y1,$y2,$z1,$z2) = &set_origin($ZoneCount);
+				
+            };
        
 
             

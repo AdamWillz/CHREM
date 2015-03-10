@@ -35,7 +35,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw( surf_slope_azimuth rotate_vector poly_obj R3_cross R_dot tri_trap_rect rect_finite_first_fit trap_finite_first_fit tri_finite_first_fit);
+our @EXPORT = qw( surf_slope_azimuth rotate_vector poly_obj R3_cross R_dot tri_trap_rect rect_finite_first_fit trap_finite_first_fit tri_finite_first_fit set_origin);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -534,6 +534,42 @@ sub tri_finite_first_fit {
         };
     };
     return ($Num_P);
+};
+
+# ====================================================================
+# set_origin
+# INPUT     NumPV: current PV surface being created
+#
+# OUTPUT    
+#
+# ====================================================================
+
+sub set_origin {
+    
+    my $index = @_;
+    my ($x1,$x2,$y1,$y2,$z1,$z2);
+    
+    if ( $index == 1 ) {
+    
+    } elsif ( $index == 2 ) {
+    
+    } elsif ( $index == 3 ) {
+    
+    } elsif ( $index == 4 ) {
+    
+    } else {
+    
+    };
+    
+    my $x1 = sprintf("%6.2f", 0);	# declare and initialize the zone origin
+	my $x2 = $record_indc->{$zone}->{'x'};
+	my $y1 = sprintf("%6.2f", 0);
+	my $y2 = $record_indc->{'y'};
+	my $z1 = $record_indc->{$zone}->{'z1'};
+	my $z2 = $record_indc->{$zone}->{'z2'};
+                
+                
+    return ($x1,$x2,$y1,$y2,$z1,$z2);
 };
 
 # Final return value of one to indicate that the perl module is successful
