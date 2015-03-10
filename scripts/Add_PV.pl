@@ -43,6 +43,7 @@ use Data::Dumper;	# to dump info to the terminal for debugging purposes
 use threads;	# threads-1.71 (to multithread the program)
 use File::Copy;
 use Math::Polygon;
+use Math::Trig;
 
 use lib qw(./modules);
 use General;
@@ -59,6 +60,7 @@ my $set_name;   # Read in city name from command line
 my @folders;	#declare an array to store the path to each hse which will be simulated
 my @houses_desired = '.';
 my @coord = ('x','y','z');
+my @sides = ('base_frm', 'left_frm', 'top_frm', 'right_frm','PV_module','back_frm'); # surfaces of PV module
 
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+Hse_Gen_(.+)_Issues.txt/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -139,7 +141,7 @@ if ($PVdata->{'mis_factor'} < 0 || $PVdata->{'mis_factor'} > 1) {
 if ($PVdata->{'Area'} < 0 ) {
 	die "The area needs to be greater than 0! \n";
 }
-if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0) {
+if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0 || $PVdata->{'Thick'} < 0) {
 	die "PV module dimensions need to be greater than 0! \n";
 }
 
@@ -208,6 +210,7 @@ MAIN: {
         foreach my $dir (@dirs) {
         EACHHSE: {
             my $Roof_type;
+            my $Num_zones = 0;
             
             # Determine the house name
             my $hse_name = $dir;
@@ -225,6 +228,7 @@ MAIN: {
             
             # Determine if an attic or roof
             foreach my $zone (@files) {
+                $Num_zones++;
                 if($zone =~ m/(attic|roof)/i) {$Roof_type = $zone};
             };
             if( length $Roof_type ) {
@@ -417,18 +421,124 @@ MAIN: {
             # Begin making PV zones
             # --------------------------------------------------------------------
             my $ZoneCount=1;
+            my $PV_orientation = {qw(front SLOP back SLOP right VERT left VERT)};
             foreach my $PVName (keys (%{$PVSurfaces})) {
-                my $ZoneName = '$PVName'.'_PV';
+                my $ZoneName = "$hse_name" . '.' . '$PVName' . '_PV';
                 my $PArea = $PVSurfaces->{$PVName}->{'Area'};
                 my $PSlope = $PVSurfaces->{$PVName}->{'Slope'};
                 my $PAzim = $PVSurfaces->{$PVName}->{'Azimuth'};
+                $Pazim = sprintf("%d", $PAzim);
                 
-                &replace ($hse_file->{"$ZoneName.geo"}, "#ZONE_NAME", 1, 1, "%s\n", "GEN $ZoneName This file describes the $ZoneName");	# set the name at the top of each zone geo file
-                # SET THE ORIGIN AND MAJOR VERTICES OF THE ZONE (note the formatting)
+                &replace ($hse_file->{"$ZoneName.geo"}, "#ZONE_NAME", 1, 1, "%s\n", "GEN $ZoneName This file describes the ficticious $ZoneName");	# set the name at the top of each zone geo file
+                &replace ($hse_file->{"$ZoneName.geo"}, "#VER_SUR_ROT", 1, 1, "%u %u %u\n", 8, 6, $Pazim); # Set number of zone vertices and surfaces, and orientation
                 
-                my ($x1,$x2,$y1,$y2,$z1,$z2) = &set_origin($ZoneCount);
+                # SET THE ORIGIN AND MAJOR VERTICES OF THE ZONE (note the formatting), Set PV 20 m north of origin
+                
+                # Store base vertices
+                my $x1 = sqrt($PArea)/2;	
+				my $x2 = -1*$x1;
+				my $y1 = sprintf("%6.2f", 20);
+				my $y2 = 20-cos(deg2rad(90-$PSlope))*$PVdata->{'Thick'};
+				my $z1 = sin(deg2rad(90-$PSlope))*$PVdata->{'Thick'};
+				my $z2 = sprintf("%6.3f", 0);
+                # Formatting
+                $x1 = sprintf("%6.2f", $x1);
+                $z1 = sprintf("%6.3f", $z1); 
+                $x2 = sprintf("%6.2f", $x2);
+
+                push (@{$PVSurfaces->{$PVName}->{'vertices'}->{'base'}},	# base vertices in CCW (looking down)
+				"$x1 $y1 $z1", "$x2 $y1 $z1", "$x2 $y2 $z2", "$x1 $y2 $z2");
+                            
+                # Store top vertices
+				my $y3 = 20-sqrt($PArea)*cos(deg2rad($PSlope));
+                my $y4 = $y3-cos(deg2rad(90-$PSlope))*$PVdata->{'Thick'};
+                my $z3 = (sin(deg2rad($PSlope))*sqrt($PArea))+(sin(deg2rad(90-$PSlope))*$PVdata->{'Thick'});
+                my $z4 = sin(deg2rad($PSlope))*sqrt($PArea);
+                # Formatting
+                $y3 = sprintf("%6.2f", $y3); 
+                $z3 = sprintf("%6.3f", $z3);
+                $z4 = sprintf("%6.3f", $z3);
+                
+                push (@{$PVSurfaces->{$PVName}->{'vertices'}->{'top'}},	# top vertices in CCW (looking down)
+				"$x1 $y3 $z3", "$x2 $y3 $z3", "$x2 $y4 $z4", "$x1 $y4 $z4");
+                
+                # Begin .geo file creation
+                # --------------------------------------------------------------------
+                my $vertex_count = 1;
+                foreach my $wSurf ('base', 'top') {
+					# loop over the vertices in the array
+					foreach my $verte (0..$#{$PVSurfaces->{$PVName}->{'vertices'}->{$wSurf}}) {
+						# increment the counter
+						$vertex_count++;
+						# insert the vertex with some information
+						&insert ($hse_file->{"$ZoneName.geo"}, "#END_VERTICES", 1, 0, 0, "%s # %s%u; %s\n", $record_indc->{$zone}->{'vertices'}->{$wSurf}->[$verte], "$wSurf v", $verte + 1, "total v$vertex_count");
+					};
+				};
+                
+                # @sides = ('base_frm', 'left_frm', 'top_frm', 'right_frm','PV_module','back_frm');
+                
+                # Begin defining PV module surface attributes
+                my $surface_index = 1;
+                foreach my $wSurf (@sides) {
+                    if ($wSurf =~ /frm/i && $wSurf !~ /base/i) { # Side frame of the PV
+                        $PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'OPAQ', 'VERT', 'PV_frame', 'EXTERIOR'];
+                    } elsif ($wSurf =~ /base/i) { # Back of the PV
+                        $PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'OPAQ', 'SLOP', 'PV_frame', 'EXTERIOR'];
+                    } else { # It's the PV surface
+                        $PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'TRAN', 'SLOP', 'PV_top', 'EXTERIOR'];
+                    };
+                    &insert ($hse_file->{"$ZoneName.geo"}, '#END_SURFACE_ATTRIBUTES', 1, 0, 0, "%3s, %-13s %-5s %-5s %-12s %-15s\n", @{$PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'}});
+                    $surface_index++;
+                };
+                
+                # Define PV module surface vertices
+                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'base_frm'}->{'vertices'}},1,4,3,2);
+                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'left_frm'}->{'vertices'}},2,3,7,6);
+                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'top_frm'}->{'vertices'}},5,6,7,8);
+                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'right_frm'}->{'vertices'}},1,5,8,4);
+                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'PV_module'}->{'vertices'}},1,2,6,5);
+                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'back_frm'}->{'vertices'}},4,8,7,3);
+                
+                # Add surface vertex info to the .geo file
+                foreach my $wSurf (@sides) {
+                    &insert ($hse_file->{"$ZoneName.geo"}, '#END_SURFACES', 1, 0, 0, "%u %s # %s\n", '4', "@{$PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'vertices'}}", $wSurf);
+                };
+                
+                # fill out the unused and indentation indexes with array of zeroes equal in length to number of surfaces
+                my @zero_array;
+                foreach (1..6) {push (@zero_array, 0)};
+                &replace ($hse_file->{"$ZoneName.geo"}, "#UNUSED_INDEX", 1, 1, "%s\n", "@zero_array");
+                &replace ($hse_file->{"$ZoneName.geo"}, "#SURFACE_INDENTATION", 1, 1, "%s\n", "@zero_array");
+    
+                # last line in GEO file which lists FLOR surfaces (total elements must equal 6) and floor area (m^2) plus another zero
+                my @base = (6, 0, 0, 0, 0, 0, $PArea, 0);
+                &replace ($hse_file->{"$ZoneName.geo"}, "#BASE", 1, 1, "%s\n", "@base");
+                
+                # Begin .spm file creation
+                # --------------------------------------------------------------------
+                my $num_nodes = 1;
+				my $PV_zone =  $Num_zones+$ZoneCount; # the PV zone number 
+				my $PV_surf = 5; # the surface number which PV is installed
 				
+				my $PV_Voc = sprintf ("%4.4f",$PVdata->{'Vmpp'} * $PVdata->{'Voc/Vmpp'}); # open circuit voltage (V)
+				my $PV_Impp = sprintf ("%4.4f",$PVdata->{'Isc'} /  $PVdata->{'Isc/Impp'}); # Current at maximum power point (I)
+				my $Href = sprintf ("%4.4f",1000); # reference insolation (W/m2)
+				my $alpha = sprintf ("%4.6f",$PVdata->'alpha*1000'} / 1000); # temperature coefficient of short circuit current (1/K)
+				my $beta = sprintf ("%4.4f",$PVdata->{'beta*1000'} / 1000); # coefficient of logarithm of irradiance for open corcuit voltage (-)
+				my $gamma = sprintf ("%4.4f",$PVdata->{'gamma*1000'} / -1000); # temperature coefficient of open-circuit voltage (1/K)
+				my $PV_Isc = sprintf ("%4.4f",$PVdata->{'Isc'});
+				my $PV_Vmpp = sprintf ("%4.4f",$PVdata->{'Vmpp'});
+				
+				my $N = $Href * $input->{$up_name}->{'efficiency'}/100 * $PV_area / $input->{$up_name}->{'power_individual'}; # number of modules on the surface can be calculated when area is defined as the largest integer number less than (Href * efficiency * area / power_individual)
+				my $floor_N = sprintf ("%4.4f",floor ($N));
+				my $PV_factor =  sprintf ("%4.4f",$input->{$up_name}->{'mis_factor'});
+				
+				&insert ($hse_file->{"spm"}, "#END_SPM_DATA", 1, 0, 0, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", "# Node No: $num_nodes", "WATSUN-PV_multic # label","# Zone Surf Node Type Opq/Trn", "$PV_zone $PV_surf 4 5 0", "# No. of data items.", "16", "# Data:", "$PV_Voc $PV_Isc $PV_Vmpp $PV_Impp $Href 298.0000 $alpha $gamma $beta 36.0000 1.0000 $floor_N 0.0000 0.0000 0.0000 $PV_factor");
+                
+                $ZoneCount++;
             };
+            
+            
        
 
             
