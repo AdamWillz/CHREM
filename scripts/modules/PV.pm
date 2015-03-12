@@ -381,12 +381,12 @@ sub trap_finite_first_fit {
                     if ($z != $sides) {push(@BT,$z)};
                 };
                 if ($#BT < 1) { # Only one element in array, 3 sides are equal
-                    $base = $side;
+                    $base = $sides;
                     $top = $BT[0];
                 } elsif ($BT[0] > $BT[1]) {
                     $base = $BT[0];
                     $top = $BT[1];
-                else {
+                } else {
                     $base = $BT[1];
                     $top = $BT[0];
                 };

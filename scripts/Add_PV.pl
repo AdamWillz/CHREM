@@ -49,6 +49,7 @@ use lib qw(./modules);
 use General;
 use PV;
 use Upgrade;
+use Database;
 
 # --------------------------------------------------------------------
 # Declare the global variables
@@ -148,7 +149,12 @@ if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0 || $PVdata->{'Thick'} < 0)
 # -----------------------------------------------
 # Declare important variables for file generation
 # -----------------------------------------------
-$zone_extensions = ['cfc', 'con', 'geo', 'opr', 'tmc'];	# extentions that are used for individual zones
+my $zone_extensions = ['con', 'geo', 'opr', 'tmc'];	# extentions that are used for individual zones
+
+# -----------------------------------------------
+# Develop the ESP-r databases and cross reference keys
+# -----------------------------------------------
+my ($mat_data, $con_data, $optic_data, $cfc_data, $pln_data) = &database_XML();	# construct the databases and leave the information loaded in the variables for use in house generation
 
 # -----------------------------------------------
 # Read in the templates
@@ -161,7 +167,10 @@ foreach my $ext (@{$zone_extensions}) {	# do for each filename extention
 	# note that the file handle below is a variable so that it simply goes out of scope
 	open (my $TEMPLATE, '<', $file) or die ("can't open template: $file");	# open the template
 	$template->{$ext} = [<$TEMPLATE>];	# Slurp the entire file with one line per array element
-}
+};
+
+# hash reference to store encountered issues during the house builds
+my $issues;
 
 # --------------------------------------------------------------------
 # Begin multi-threading for regions and house types
@@ -208,14 +217,19 @@ MAIN: {
         # --------------------------------------------------------------------
         
         foreach my $dir (@dirs) {
-        EACHHSE: {
+            my $hse_name = $dir;
             my $Roof_type;
+            my $hse_file;	# new hash reference to the ESP-r files for this record
+            # house file coordinates to print when an error is encountered
+			my $coordinates;
+        EACHHSE: {
+            
             my $Num_zones = 0;
             
             # Determine the house name
-            my $hse_name = $dir;
             $hse_name =~ s{.*/}{};
             $hse_name =~ s/_[0-9]+//; 	 # Clean up house name if duplicate	
+            $coordinates = {'hse_type' => $hse_type, 'region' => $region, 'file_name' => $hse_name};
             print "Record is $hse_name\n";
             # TODO: If a .spm file exists, die
             
@@ -241,25 +255,25 @@ MAIN: {
                 # RECORD AREA OF FLAT ROOF
                 last EACHHSE;
             };
-            
-            my $hse_file;	# new hash reference to the ESP-r files for this record
+
             foreach my $ext (@{$zone_extensions}) {
                 $hse_file->{$ext} = [@{$template->{$ext}}];	# create the template file for the zone
 			};
-            
+			
+		};
             
             # --------------------------------------------------------------------
             # Interrogate the geometry file
             # --------------------------------------------------------------------
             my $GeoPath = $dir . "/" . $hse_name . "." . $Roof_type . ".geo"; # Path to roof/attic geo file
-            my $OldPath = $GeoPath . ".old";
+            # my $OldPath = $GeoPath . ".old";
             
             # Save original geo file
-            copy($GeoPath,$OldPath);
+            # copy($GeoPath,$OldPath);
             #unlink $GeoPath; # Clear the way for re-writing the geometry file
             
             my $OldGeo;
-            open $OldGeo, $OldPath or die "Could not open $OldPath\n";
+            open $OldGeo, $GeoPath or die "Could not open $GeoPath\n";
             
             my @lines = <$OldGeo>; # Pull entire file into an array
             my $counter=0; # initialize counter, used to index lines in file
@@ -351,10 +365,11 @@ MAIN: {
             # --------------------------------------------------------------------
             # Determine eligible surfaces for PV
             # --------------------------------------------------------------------
+
             # Only surfaces with construction type 'slop'
-            
+            my $PVZoneCount=0; # Counter for the number of PV zones
             # Initialize HASH to hold PV geometry and data
-            my $PVSurfaces;
+            my $PVZones;
             foreach my $index (keys (%{$surf})) {
                 if ($surf->{$index}->{'name'} !~ m/^(floor|ceiling)/i && $surf->{$index}->{'con'} =~ m/(slop)$/i) { # surface is not a floor or ceiling, and is sloped
                     
@@ -410,9 +425,10 @@ MAIN: {
                     };
                     
                     if ($NumColl > 0) { # Collectors may be placed on this surface
-                        $PVSurfaces->{$surf->{$index}->{'name'}}->{'Area'} = $NumColl*($PVdata->{'Area'});
-                        $PVSurfaces->{$surf->{$index}->{'name'}}->{'Slope'} = $Slope;
-                        $PVSurfaces->{$surf->{$index}->{'name'}}->{'Azimuth'} = $Azimuth;
+                        $PVZones->{$surf->{$index}->{'name'}}->{'Area'} = $NumColl*($PVdata->{'Area'});
+                        $PVZones->{$surf->{$index}->{'name'}}->{'Slope'} = $Slope;
+                        $PVZones->{$surf->{$index}->{'name'}}->{'Azimuth'} = $Azimuth;
+                        $PVZoneCount++;
                     };
                 };
             };
@@ -420,17 +436,26 @@ MAIN: {
             # --------------------------------------------------------------------
             # Begin making PV zones
             # --------------------------------------------------------------------
-            my $ZoneCount=1;
+            
             my $PV_orientation = {qw(front SLOP back SLOP right VERT left VERT)};
-            foreach my $PVName (keys (%{$PVSurfaces})) {
-                my $ZoneName = "$hse_name" . '.' . '$PVName' . '_PV';
-                my $PArea = $PVSurfaces->{$PVName}->{'Area'};
-                my $PSlope = $PVSurfaces->{$PVName}->{'Slope'};
-                my $PAzim = $PVSurfaces->{$PVName}->{'Azimuth'};
-                $Pazim = sprintf("%d", $PAzim);
+            foreach my $PVName (keys (%{$PVZones})) {
+                my $ZoneName = "$hse_name" . '.' . "$PVName" . '_PV';
+                my $PArea = $PVZones->{$PVName}->{'Area'};
+                my $PSlope = $PVZones->{$PVName}->{'Slope'};
+                my $PAzim = $PVZones->{$PVName}->{'Azimuth'};
+                
+                # Create zone files
+                foreach my $ext (qw(opr con geo tmc)) {
+					&copy_template($ZoneName, $ext, $hse_file, 0);
+				};
+                
+                # print Dumper $hse_file;
+                # sleep;
+                
+                $PAzim = sprintf("%d", $PAzim);
                 
                 &replace ($hse_file->{"$ZoneName.geo"}, "#ZONE_NAME", 1, 1, "%s\n", "GEN $ZoneName This file describes the ficticious $ZoneName");	# set the name at the top of each zone geo file
-                &replace ($hse_file->{"$ZoneName.geo"}, "#VER_SUR_ROT", 1, 1, "%u %u %u\n", 8, 6, $Pazim); # Set number of zone vertices and surfaces, and orientation
+                &replace ($hse_file->{"$ZoneName.geo"}, "#VER_SUR_ROT", 1, 1, "%u %u %u\n", 8, 6, $PAzim); # Set number of zone vertices and surfaces, and orientation
                 
                 # SET THE ORIGIN AND MAJOR VERTICES OF THE ZONE (note the formatting), Set PV 20 m north of origin
                 
@@ -446,7 +471,7 @@ MAIN: {
                 $z1 = sprintf("%6.3f", $z1); 
                 $x2 = sprintf("%6.2f", $x2);
 
-                push (@{$PVSurfaces->{$PVName}->{'vertices'}->{'base'}},	# base vertices in CCW (looking down)
+                push (@{$PVZones->{$PVName}->{'vertices'}->{'base'}},	# base vertices in CCW (looking down)
 				"$x1 $y1 $z1", "$x2 $y1 $z1", "$x2 $y2 $z2", "$x1 $y2 $z2");
                             
                 # Store top vertices
@@ -459,7 +484,7 @@ MAIN: {
                 $z3 = sprintf("%6.3f", $z3);
                 $z4 = sprintf("%6.3f", $z3);
                 
-                push (@{$PVSurfaces->{$PVName}->{'vertices'}->{'top'}},	# top vertices in CCW (looking down)
+                push (@{$PVZones->{$PVName}->{'vertices'}->{'top'}},	# top vertices in CCW (looking down)
 				"$x1 $y3 $z3", "$x2 $y3 $z3", "$x2 $y4 $z4", "$x1 $y4 $z4");
                 
                 # Begin .geo file creation
@@ -467,41 +492,61 @@ MAIN: {
                 my $vertex_count = 1;
                 foreach my $wSurf ('base', 'top') {
 					# loop over the vertices in the array
-					foreach my $verte (0..$#{$PVSurfaces->{$PVName}->{'vertices'}->{$wSurf}}) {
+					foreach my $verte (0..$#{$PVZones->{$PVName}->{'vertices'}->{$wSurf}}) {
 						# increment the counter
 						$vertex_count++;
 						# insert the vertex with some information
-						&insert ($hse_file->{"$ZoneName.geo"}, "#END_VERTICES", 1, 0, 0, "%s # %s%u; %s\n", $record_indc->{$zone}->{'vertices'}->{$wSurf}->[$verte], "$wSurf v", $verte + 1, "total v$vertex_count");
+						&insert ($hse_file->{"$ZoneName.geo"}, "#END_VERTICES", 1, 0, 0, "%s # %s%u; %s\n", $PVZones->{$PVName}->{'vertices'}->{$wSurf}->[$verte], "$wSurf v", $verte + 1, "total v$vertex_count");
 					};
 				};
                 
                 # @sides = ('base_frm', 'left_frm', 'top_frm', 'right_frm','PV_module','back_frm');
                 
-                # Begin defining PV module surface attributes
+                # Begin defining PV module surface attributes, update 
                 my $surface_index = 1;
                 foreach my $wSurf (@sides) {
+                    my $con = \%{$PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'con'}};
                     if ($wSurf =~ /frm/i && $wSurf !~ /base/i) { # Side frame of the PV
-                        $PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'OPAQ', 'VERT', 'PV_frame', 'EXTERIOR'];
+                        $PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'OPAQ', 'VERT', 'PV_frame', 'EXTERIOR'];
+                        $PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'orientation'} = 'VERT';
                     } elsif ($wSurf =~ /base/i) { # Back of the PV
-                        $PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'OPAQ', 'SLOP', 'PV_frame', 'EXTERIOR'];
+                        $PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'OPAQ', 'SLOP', 'PV_frame', 'EXTERIOR'];
+                        $PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'orientation'} = 'SLOP';
                     } else { # It's the PV surface
-                        $PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'TRAN', 'SLOP', 'PV_top', 'EXTERIOR'];
+                        $PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'} = [$surface_index, $wSurf, 'TRAN', 'SLOP', 'PV_top', 'EXTERIOR'];
+                        $PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'orientation'} = 'SLOP';
                     };
-                    &insert ($hse_file->{"$ZoneName.geo"}, '#END_SURFACE_ATTRIBUTES', 1, 0, 0, "%3s, %-13s %-5s %-5s %-12s %-15s\n", @{$PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'}});
+                    &insert ($hse_file->{"$ZoneName.geo"}, '#END_SURFACE_ATTRIBUTES', 1, 0, 0, "%3s, %-13s %-5s %-5s %-12s %-15s\n", @{$PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'surf_attributes'}});
+                    
+                    # Begin updating constructions file info
+                    if ($wSurf =~ /frm/i) {  # surface is PV frame
+                        $con->{'name'} = 'PV_frame';
+                        $con->{'NumLay'} = 1;
+                    } else {  # it's the PV surface
+                        $con->{'name'} = 'PV_top';
+                        $con->{'NumLay'} = 3;
+                    };
+                    &insert ($hse_file->{"$ZoneName.con"}, "#END_LAYERS_GAPS", 1, 0, 0, "%s\n", "$con->{'NumLay'} 0 # $wSurf $con->{'name'}");
+                    
+                    # Add layer data
+                    # don't check the RSI as it was already set by the previous zone's surface
+					con_surf_PV(0, $ZoneName, $surface,$issues,$coordinates);
+                    
+                    
                     $surface_index++;
                 };
                 
                 # Define PV module surface vertices
-                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'base_frm'}->{'vertices'}},1,4,3,2);
-                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'left_frm'}->{'vertices'}},2,3,7,6);
-                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'top_frm'}->{'vertices'}},5,6,7,8);
-                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'right_frm'}->{'vertices'}},1,5,8,4);
-                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'PV_module'}->{'vertices'}},1,2,6,5);
-                push(@{$PVSurfaces->{$PVName}->{'surfaces'}->{'back_frm'}->{'vertices'}},4,8,7,3);
+                push(@{$PVZones->{$PVName}->{'surfaces'}->{'base_frm'}->{'vertices'}},1,4,3,2);
+                push(@{$PVZones->{$PVName}->{'surfaces'}->{'left_frm'}->{'vertices'}},2,3,7,6);
+                push(@{$PVZones->{$PVName}->{'surfaces'}->{'top_frm'}->{'vertices'}},5,6,7,8);
+                push(@{$PVZones->{$PVName}->{'surfaces'}->{'right_frm'}->{'vertices'}},1,5,8,4);
+                push(@{$PVZones->{$PVName}->{'surfaces'}->{'PV_module'}->{'vertices'}},1,2,6,5);
+                push(@{$PVZones->{$PVName}->{'surfaces'}->{'back_frm'}->{'vertices'}},4,8,7,3);
                 
                 # Add surface vertex info to the .geo file
                 foreach my $wSurf (@sides) {
-                    &insert ($hse_file->{"$ZoneName.geo"}, '#END_SURFACES', 1, 0, 0, "%u %s # %s\n", '4', "@{$PVSurfaces->{$PVName}->{'surfaces'}->{$wSurf}->{'vertices'}}", $wSurf);
+                    &insert ($hse_file->{"$ZoneName.geo"}, '#END_SURFACES', 1, 0, 0, "%u %s # %s\n", '4', "@{$PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'vertices'}}", $wSurf);
                 };
                 
                 # fill out the unused and indentation indexes with array of zeroes equal in length to number of surfaces
@@ -513,30 +558,31 @@ MAIN: {
                 # last line in GEO file which lists FLOR surfaces (total elements must equal 6) and floor area (m^2) plus another zero
                 my @base = (6, 0, 0, 0, 0, 0, $PArea, 0);
                 &replace ($hse_file->{"$ZoneName.geo"}, "#BASE", 1, 1, "%s\n", "@base");
-                
-                # Begin .spm file creation
-                # --------------------------------------------------------------------
-                my $num_nodes = 1;
-				my $PV_zone =  $Num_zones+$ZoneCount; # the PV zone number 
-				my $PV_surf = 5; # the surface number which PV is installed
-				
-				my $PV_Voc = sprintf ("%4.4f",$PVdata->{'Vmpp'} * $PVdata->{'Voc/Vmpp'}); # open circuit voltage (V)
-				my $PV_Impp = sprintf ("%4.4f",$PVdata->{'Isc'} /  $PVdata->{'Isc/Impp'}); # Current at maximum power point (I)
-				my $Href = sprintf ("%4.4f",1000); # reference insolation (W/m2)
-				my $alpha = sprintf ("%4.6f",$PVdata->'alpha*1000'} / 1000); # temperature coefficient of short circuit current (1/K)
-				my $beta = sprintf ("%4.4f",$PVdata->{'beta*1000'} / 1000); # coefficient of logarithm of irradiance for open corcuit voltage (-)
-				my $gamma = sprintf ("%4.4f",$PVdata->{'gamma*1000'} / -1000); # temperature coefficient of open-circuit voltage (1/K)
-				my $PV_Isc = sprintf ("%4.4f",$PVdata->{'Isc'});
-				my $PV_Vmpp = sprintf ("%4.4f",$PVdata->{'Vmpp'});
-				
-				my $N = $Href * $input->{$up_name}->{'efficiency'}/100 * $PV_area / $input->{$up_name}->{'power_individual'}; # number of modules on the surface can be calculated when area is defined as the largest integer number less than (Href * efficiency * area / power_individual)
-				my $floor_N = sprintf ("%4.4f",floor ($N));
-				my $PV_factor =  sprintf ("%4.4f",$input->{$up_name}->{'mis_factor'});
-				
-				&insert ($hse_file->{"spm"}, "#END_SPM_DATA", 1, 0, 0, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", "# Node No: $num_nodes", "WATSUN-PV_multic # label","# Zone Surf Node Type Opq/Trn", "$PV_zone $PV_surf 4 5 0", "# No. of data items.", "16", "# Data:", "$PV_Voc $PV_Isc $PV_Vmpp $PV_Impp $Href 298.0000 $alpha $gamma $beta 36.0000 1.0000 $floor_N 0.0000 0.0000 0.0000 $PV_factor");
-                
-                $ZoneCount++;
-            };
+
+            }; # End of PV Zone creation Loop
+            
+            # Generate .spm file for the PV arrays for this house
+            # --------------------------------------------------------------------
+            #if ($PVZoneCount > 0) {     #There are PV arrays for this house, make the .spm file
+            #    my $num_nodes = 1;
+            #    my $PV_zone =  $Num_zones+$PVZoneCount; # the PV zone number 
+            #    my $PV_surf = 5; # the surface number which PV is installed
+            #    
+            #    my $PV_Voc = sprintf ("%4.4f",$PVdata->{'Vmpp'} * $PVdata->{'Voc/Vmpp'}); # open circuit voltage (V)
+            #    my $PV_Impp = sprintf ("%4.4f",$PVdata->{'Isc'} /  $PVdata->{'Isc/Impp'}); # Current at maximum power point (I)
+            #    my $Href = sprintf ("%4.4f",1000); # reference insolation (W/m2)
+            #    my $alpha = sprintf ("%4.6f",$PVdata->{'alpha*1000'} / 1000); # temperature coefficient of short circuit current (1/K)
+            #    my $beta = sprintf ("%4.4f",$PVdata->{'beta*1000'} / 1000); # coefficient of logarithm of irradiance for open corcuit voltage (-)
+            #    my $gamma = sprintf ("%4.4f",$PVdata->{'gamma*1000'} / -1000); # temperature coefficient of open-circuit voltage (1/K)
+            #    my $PV_Isc = sprintf ("%4.4f",$PVdata->{'Isc'});
+            #    my $PV_Vmpp = sprintf ("%4.4f",$PVdata->{'Vmpp'});
+            #    
+            #    my $N = $Href * $input->{$up_name}->{'efficiency'}/100 * $PV_area / $input->{$up_name}->{'power_individual'}; # number of modules on the surface can be calculated when area is defined as the largest integer number less than (Href * efficiency * area / power_individual)
+            #    my $floor_N = sprintf ("%4.4f",floor ($N));
+            #    my $PV_factor =  sprintf ("%4.4f",$input->{$up_name}->{'mis_factor'});
+            #    
+            #    &insert ($hse_file->{"spm"}, "#END_SPM_DATA", 1, 0, 0, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", "# Node No: $num_nodes", "WATSUN-PV_multic # label","# Zone Surf Node Type Opq/Trn", "$PV_zone $PV_surf 4 5 0", "# No. of data items.", "16", "# Data:", "$PV_Voc $PV_Isc $PV_Vmpp $PV_Impp $Href 298.0000 $alpha $gamma $beta 36.0000 1.0000 $floor_N 0.0000 0.0000 0.0000 $PV_factor");
+            #};
             
             
        
@@ -549,5 +595,179 @@ MAIN: {
         
         };  # end of house loop
     };  # end of EACHHSE
-    };	# end of main code
+};	# end of main code
+
+# -----------------------------------------------
+# Subroutines
+# -----------------------------------------------
+SUBROUTINES: {
+
+	sub copy_template {	# copy the template file for a particular house
+		my $zone = shift;
+		my $ext = shift;
+		my $hse_file = shift;
+		my $coordinates = shift;
+		
+		
+		if (defined ($template->{$ext})) {
+			$hse_file->{"$zone.$ext"} = [@{$template->{$ext}}];	# create the template file for the zone
+		}
+		else {&die_msg ('INITIALIZE HOUSE FILES: missing template', $ext, $coordinates);};
+		return (1);
+	};
+
+
+	sub con_surf_PV {	# fill out the construction, surface attributes, and connections for each particular surface
+		my $RSI_desired = sprintf ("%.2f", shift); #
+		my $zone = shift; # the present zone
+		my $surface = shift; # the present surface (e.g. floor, ceiling)
+		my $PVZones = shift; # info about the zones and surfaces (e.g. surface indices)
+		my $issues = shift; # issue storage
+		my $coordinates = shift; # coordinates for issues
+		
+		# shorten the construction name
+		my $con = \%{$PVZones->{$zone}->{'surfaces'}->{$surface}->{'con'}};
+		
+		# check to see if the full construction is defined, if it is not, the use the construction database to build it.
+		unless (defined ($con->{'layers'})) {
+			# Note we are cloning the database so that it is not used itself (messing up subseuqent calls to the database)
+			%{$con} = %{dclone($con_data->{$con->{'name'}})};
+		};
+		
+		# otherwise, determine the type (OPAQ or TRAN) from the database
+		# This unless protects cloned surfaces from overwritting previous surface data as they both point to the same information
+		unless (defined($con->{'type'})) {
+			$con->{'type'} = $con_data->{$con->{'name'}}->{'type'};
+		};
+
+
+		# initialize an hash ref to store links to the insulation components
+		my $insulation = {};
+		
+		# intialiaze an RSI value
+		$con->{'RSI_orig'} = 0;
+		$con->{'RSI_expected'} = $RSI_desired;
+		
+		# cycle through the layer and determine the total RSI and the insulation layers
+		foreach my $layer (@{$con->{'layers'}}) {
+			# Store the layers material properties from the database - this value may be modified later
+			foreach my $property (qw(conductivity_W_mK density_kg_m3 spec_heat_J_kgK)) {
+				# This unless protects cloned surfaces from overwritting previous surface data as they both point to the same information
+				unless (defined ($layer->{$property})) {
+					$layer->{$property} = $mat_data->{$layer->{'mat'}}->{$property};
+				};
+			};
+			
+			# if the layers component type begins with insulation then
+			if ($layer->{'component'} =~ /^insulation/) {
+				# store the reference to the insulation layer properties
+				$insulation->{$layer->{'component'}} = $layer;
+			};
+		};
+		
+		# format the calculated value
+		$con->{'RSI_orig'} = sprintf ("%.2f", $con->{'RSI_orig'});
+
+		# if the desired RSI is 0 that means do not modify for an RSI value
+		# if it is other than zero, modify the insulation to achieve the desired value
+		# NOTE: do not adjust reversed construction as denoted by code string -1 (because other codes have letters)
+		if ($RSI_desired != 0 && $con->{'code'} ne '-1') {
+		
+			# create a local RSI so we can modify it with the insulation layers without affecting the original value
+			my $RSI = $con->{'RSI_orig'};
+			
+			
+			# cycle through the insulation layers to adjust their thickness to equate the RSI to that desired
+			INSUL_CHECK: foreach my $layer (@{&order($insulation)}) {
+				# calculate the RSI diff (negative means make insulation higher conductivity)
+				my $RSI_diff = sprintf("%.2f", $RSI_desired - $RSI);
+				
+				# Check that we are not zero
+				if ($RSI_diff != 0) {
+					# Declare min and max conductivity values (W/mK)
+					my $min_cond = 0.05 * $insulation->{$layer}->{'conductivity_W_mK'}; # 5% of existing
+					my $max_cond = 250; # ESP-r maximum
+				
+				
+					# calculate the present RSI of the insulation
+					my $RSI_insul = $insulation->{$layer}->{'thickness_mm'} / 1000 / $insulation->{$layer}->{'conductivity_W_mK'};
+					
+					# store the original conductivity for later printout
+					$insulation->{$layer}->{'conductivity_W_mK_orig'} = $insulation->{$layer}->{'conductivity_W_mK'};
+
+					# Check to see that the values of insul and diff do not sum to zero (otherwise the else will be a divide by zero)
+					if (sprintf("%.2f", $RSI_insul + $RSI_diff) <= 0) {
+						$insulation->{$layer}->{'conductivity_W_mK'} = $max_cond;
+					} # Set conductivity to zero
+					else { # Calculate the new layer conductivity
+						$insulation->{$layer}->{'conductivity_W_mK'} = $insulation->{$layer}->{'thickness_mm'} / 1000 / ($RSI_insul + $RSI_diff);
+					};
+					
+					# Check the range of the conductivity - pick a minimum allowable conductivity_W_mK (5% of existing) and max of 250 corresponding to ESP-r
+					($insulation->{$layer}->{'conductivity_W_mK'}, $issues) = check_range("%.3f", $insulation->{$layer}->{'conductivity_W_mK'}, $min_cond, $max_cond, 'CONSTRUCTION layer conductivity', $coordinates, $issues);
+
+					# Calculate the new insul RSI
+					my $RSI_insul2 = $insulation->{$layer}->{'thickness_mm'} / 1000 / $insulation->{$layer}->{'conductivity_W_mK'};
+					# Update the RSI by the change in the insul RSI (- original + new)
+					$RSI = $RSI - $RSI_insul + $RSI_insul2;
+
+				};
+			};
+		};
+		
+# 		print Dumper $con;
+		# Adjustment for framing in the specific heat and density
+		# NOTE: do not adjust reversed construction as denoted by code string -1 (because other codes have letters)
+		if ($con->{'code'} ne '-1' && defined($con->{'framing'}->{'type'}) && defined($insulation->{'insulation_1'})) {
+			# only adjust the values for wood framed, because metal and cwj and truss have so little material in comparison with conventional framing
+			if ($con->{'framing'}->{'type'} =~ /wood/) {
+				# 'f' is framing
+				# 'i' is insulation by itself within the framing
+				# 'I' is the insulation considering its replacement of framing. (e.g. the area of 'I' will be larger than 'i')
+				
+				# Determine the areas
+				my $Area_f = $con->{'framing'}->{'thickness_mm'} * $con->{'framing'}->{'width'};
+				my $Area_i = $insulation->{'insulation_1'}->{'thickness_mm'} * ($con->{'framing'}->{'spacing'} - $con->{'framing'}->{'width'});
+				my $Area_I = $insulation->{'insulation_1'}->{'thickness_mm'} * $con->{'framing'}->{'spacing'};
+				
+				# Determine the density and specific heat
+				my $Rho_f = $mat_data->{'SPF'}->{'density_kg_m3'};
+				my $Rho_i = $insulation->{'insulation_1'}->{'density_kg_m3'};
+				
+				my $C_f = $mat_data->{'SPF'}->{'spec_heat_J_kgK'};
+				my $C_i = $insulation->{'insulation_1'}->{'spec_heat_J_kgK'};
+				
+				# Calculate the area weighted density
+				my $Rho_I = ($Rho_f * $Area_f + $Rho_i * $Area_i) / $Area_I;
+				# Calculate the area and density weighted Cp
+				my $C_I = ($C_f * $Rho_f * $Area_f + $C_i * $Rho_i * $Area_i) / ($Rho_I * $Area_I);
+				
+				# Replace the insulation values to account for this
+				$insulation->{'insulation_1'}->{'density_kg_m3'} = sprintf("%.1f", $Rho_I);
+				$insulation->{'insulation_1'}->{'spec_heat_J_kgK'} = sprintf("%.0f", $C_I);
+			};
+		};
+		
+	
+		$con->{'RSI_final'} = 0;
+		# cycle through the layer and determine the total RSI for comparison NOTE: this is a double check
+		foreach my $layer (@{$con->{'layers'}}) {
+			# Foundation wall structure (concrete or heavy wood) was not included in the RSI calc in HOT2XP, so don't include it
+			unless($facing->{'condition'} eq 'BASESIMP' && $layer->{'component'} =~ /^(slab|wall)/) {
+				# RSI = (mm/1000)/k
+				$con->{'RSI_final'} = $con->{'RSI_final'} + ($layer->{'thickness_mm'} / 1000) / $layer->{'conductivity_W_mK'};
+			};
+		};
+		
+		# format the calculated value
+		$con->{'RSI_final'} = sprintf ("%.2f", $con->{'RSI_final'});
+		
+		# report if the values is not as expected
+		if ($RSI_desired != 0 && abs($con->{'RSI_final'} - $RSI_desired) > 0.1) {
+			$issues = set_issue("%s", $issues, 'Insulation', 'Cannot alter insulation to equal RSI_desired (RSI RSI_desired zone surface house)', "$con->{'RSI_final'} $RSI_desired $zone $surface", $coordinates);
+		};
+
+		return (1);
+	};
+
 };
