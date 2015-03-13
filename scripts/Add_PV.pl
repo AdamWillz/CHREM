@@ -44,6 +44,7 @@ use threads;	# threads-1.71 (to multithread the program)
 use File::Copy;
 use Math::Polygon;
 use Math::Trig;
+use Storable  qw(dclone);
 
 use lib qw(./modules);
 use General;
@@ -149,7 +150,7 @@ if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0 || $PVdata->{'Thick'} < 0)
 # -----------------------------------------------
 # Declare important variables for file generation
 # -----------------------------------------------
-my $zone_extensions = ['con', 'geo', 'opr', 'tmc'];	# extentions that are used for individual zones
+my $zone_extensions = ['con', 'geo', 'opr', 'tmc','htc'];	# extentions that are used for individual zones
 
 # -----------------------------------------------
 # Develop the ESP-r databases and cross reference keys
@@ -445,7 +446,7 @@ MAIN: {
                 my $PAzim = $PVZones->{$PVName}->{'Azimuth'};
                 
                 # Create zone files
-                foreach my $ext (qw(opr con geo tmc)) {
+                foreach my $ext (qw(opr con geo tmc htc)) {
 					&copy_template($ZoneName, $ext, $hse_file, 0);
 				};
                 
@@ -470,6 +471,7 @@ MAIN: {
                 $x1 = sprintf("%6.2f", $x1);
                 $z1 = sprintf("%6.3f", $z1); 
                 $x2 = sprintf("%6.2f", $x2);
+                $y2 = sprintf("%6.2f", $y2);
 
                 push (@{$PVZones->{$PVName}->{'vertices'}->{'base'}},	# base vertices in CCW (looking down)
 				"$x1 $y1 $z1", "$x2 $y1 $z1", "$x2 $y2 $z2", "$x1 $y2 $z2");
@@ -480,16 +482,17 @@ MAIN: {
                 my $z3 = (sin(deg2rad($PSlope))*sqrt($PArea))+(sin(deg2rad(90-$PSlope))*$PVdata->{'Thick'});
                 my $z4 = sin(deg2rad($PSlope))*sqrt($PArea);
                 # Formatting
-                $y3 = sprintf("%6.2f", $y3); 
+                $y3 = sprintf("%6.2f", $y3);
+                $y4 = sprintf("%6.2f", $y4);
                 $z3 = sprintf("%6.3f", $z3);
                 $z4 = sprintf("%6.3f", $z3);
                 
                 push (@{$PVZones->{$PVName}->{'vertices'}->{'top'}},	# top vertices in CCW (looking down)
 				"$x1 $y3 $z3", "$x2 $y3 $z3", "$x2 $y4 $z4", "$x1 $y4 $z4");
                 
-                # Begin .geo file creation
+                # Create the .geo and .con files
                 # --------------------------------------------------------------------
-                my $vertex_count = 1;
+                my $vertex_count = 0;
                 foreach my $wSurf ('base', 'top') {
 					# loop over the vertices in the array
 					foreach my $verte (0..$#{$PVZones->{$PVName}->{'vertices'}->{$wSurf}}) {
@@ -504,6 +507,10 @@ MAIN: {
                 
                 # Begin defining PV module surface attributes, update 
                 my $surface_index = 1;
+                my $em_abs; # store the solar absorbtivity and IR emissivity
+                my @tmc_type;	# initialize arrays to hold optical reference data
+				my $tmc_flag = 0; # to note if real optics are present
+                
                 foreach my $wSurf (@sides) {
                     my $con = \%{$PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'con'}};
                     if ($wSurf =~ /frm/i && $wSurf !~ /base/i) { # Side frame of the PV
@@ -521,21 +528,77 @@ MAIN: {
                     # Begin updating constructions file info
                     if ($wSurf =~ /frm/i) {  # surface is PV frame
                         $con->{'name'} = 'PV_frame';
-                        $con->{'NumLay'} = 1;
                     } else {  # it's the PV surface
                         $con->{'name'} = 'PV_top';
-                        $con->{'NumLay'} = 3;
                     };
-                    &insert ($hse_file->{"$ZoneName.con"}, "#END_LAYERS_GAPS", 1, 0, 0, "%s\n", "$con->{'NumLay'} 0 # $wSurf $con->{'name'}");
+                    
                     
                     # Add layer data
                     # don't check the RSI as it was already set by the previous zone's surface
-					con_surf_PV(0, $ZoneName, $surface,$issues,$coordinates);
+					con_surf_PV(0, $ZoneName, $wSurf,$PVZones->{$PVName}->{'surfaces'}->{$wSurf}->{'con'},$issues,$coordinates);
+
+                    my $gaps = 0;	# holds a count of the number of gaps
+					my @pos_rsi;	# holds the position of the gaps and RSI
+					my $layer_count = 0;
+					my $U_final = 'unknown';
+                    if ($con->{'RSI_final'} > 0) {$U_final= sprintf("%.3f", 1 / $con->{'RSI_final'});};
                     
+                    &insert ($hse_file->{"$ZoneName.con"}, "#END_PROPERTIES", 1, 0, 0, "#\n%s\n", "# CONSTRUCTION: $wSurf - $con->{'name'} - RSI orig $con->{'RSI_orig'} final $con->{'RSI_final'} expected $con->{'RSI_expected'} - U Value final $U_final (W/m^2K) - $con->{'description'} ");
                     
+                    foreach my $layer (@{$con->{'layers'}}) { # Add all the layers to the construction file
+
+						$layer_count++;
+						my $mat = $layer->{'mat'};
+						
+						if ($mat eq 'Gap') {
+							$gaps++;
+							my $U_val = 'unknown';
+							if ($layer->{'gap_RSI'}->{'vert'} > 0) {$U_val= sprintf("%.3f", 1 / $layer->{'gap_RSI'}->{'vert'});};
+							push (@pos_rsi, $layer_count, $layer->{'gap_RSI'}->{'vert'});	# FIX THIS LATER SO THE RSI IS LINKED TO THE POSITION (VERT, HORIZ, SLOPE)
+							&insert ($hse_file->{"$ZoneName.con"}, "#END_PROPERTIES", 1, 0, 0, "%s %s %s\n", "0 0 0", $layer->{'thickness_mm'} / 1000, "0 0 0 0 # $layer->{'component'} - $mat; RSI = $layer->{'gap_RSI'}->{'vert'}; U value = $U_val (W/m^2K)");	# add the surface layer information
+						}
+						elsif (defined ($layer->{'conductivity_W_mK_orig'})) {
+							my $RSI = $layer->{'thickness_mm'} / 1000 / $layer->{'conductivity_W_mK'};
+							my $U_val = 'unknown';
+							if ($RSI > 0) {$U_val= sprintf("%.3f", 1 / $RSI);};
+							$RSI = sprintf("%.1f", $RSI);
+							&insert ($hse_file->{"$ZoneName.con"}, "#END_PROPERTIES", 1, 0, 0, "%s %s %s\n", "$layer->{'conductivity_W_mK'} $layer->{'density_kg_m3'} $layer->{'spec_heat_J_kgK'}", $layer->{'thickness_mm'} / 1000, "0 0 0 0 # $layer->{'component'} - $mat; $layer->{'component'} ; conductivity_W_mK - orig: $layer->{'conductivity_W_mK_orig'} final: $layer->{'conductivity_W_mK'}; RSI = $RSI; U value = $U_val (W/m^2K)");
+						}
+						else {
+							my $RSI = $layer->{'thickness_mm'} / 1000 / $layer->{'conductivity_W_mK'};
+							my $U_val = 'unknown';
+							if ($RSI > 0) {$U_val= sprintf("%.3f", 1 / $RSI);};
+							$RSI = sprintf("%.1f", $RSI);
+							&insert ($hse_file->{"$ZoneName.con"}, "#END_PROPERTIES", 1, 0, 0, "%s %s %s\n", "$layer->{'conductivity_W_mK'} $layer->{'density_kg_m3'} $layer->{'spec_heat_J_kgK'}", $layer->{'thickness_mm'} / 1000, "0 0 0 0 # $layer->{'component'} - $mat; RSI = $RSI; U value = $U_val (W/m^2K)");
+						};	# add the surface layer information
+                    };
+                    
+                    &insert ($hse_file->{"$ZoneName.con"}, "#END_LAYERS_GAPS", 1, 0, 0, "%s\n", "$layer_count $gaps # $wSurf $con->{'name'}");
+                    
+                    if ($con->{'type'} eq "OPAQ") { push (@tmc_type, 0);}
+					elsif ($con->{'type'} eq "TRAN") {
+						push (@tmc_type, $con->{'optic_name'});
+						$tmc_flag = 1;
+					};
+                    if (@pos_rsi) {
+						&insert ($hse_file->{"$ZoneName.con"}, "#END_GAP_POS_AND_RSI", 1, 0, 0, "%s\n", "@pos_rsi # $wSurf $con->{'name'}");
+					};
+                    
+                    push (@{$em_abs->{'em'}->{'inside'}}, $mat_data->{$con->{'layers'}->[$#{$con->{'layers'}}]->{'mat'}}->{'emissivity_in'});
+					push (@{$em_abs->{'em'}->{'outside'}}, $mat_data->{$con->{'layers'}->[0]->{'mat'}}->{'emissivity_out'});
+					push (@{$em_abs->{'abs'}->{'inside'}}, $mat_data->{$con->{'layers'}->[$#{$con->{'layers'}}]->{'mat'}}->{'absorptivity_in'});
+					push (@{$em_abs->{'abs'}->{'outside'}}, $mat_data->{$con->{'layers'}->[0]->{'mat'}}->{'absorptivity_out'});
+
                     $surface_index++;
                 };
                 
+                
+                
+                &insert ($hse_file->{"$ZoneName.con"}, "#EM_INSIDE", 1, 1, 0, "%s\n", "@{$em_abs->{'em'}->{'inside'}}");	# write out the emm/abs of the surfaces for each zone
+				&insert ($hse_file->{"$ZoneName.con"}, "#EM_OUTSIDE", 1, 1, 0, "%s\n", "@{$em_abs->{'em'}->{'outside'}}");
+				&insert ($hse_file->{"$ZoneName.con"}, "#SLR_ABS_INSIDE", 1, 1, 0, "%s\n", "@{$em_abs->{'abs'}->{'inside'}}");
+				&insert ($hse_file->{"$ZoneName.con"}, "#SLR_ABS_OUTSIDE", 1, 1, 0, "%s\n", "@{$em_abs->{'abs'}->{'outside'}}");
+
                 # Define PV module surface vertices
                 push(@{$PVZones->{$PVName}->{'surfaces'}->{'base_frm'}->{'vertices'}},1,4,3,2);
                 push(@{$PVZones->{$PVName}->{'surfaces'}->{'left_frm'}->{'vertices'}},2,3,7,6);
@@ -558,7 +621,42 @@ MAIN: {
                 # last line in GEO file which lists FLOR surfaces (total elements must equal 6) and floor area (m^2) plus another zero
                 my @base = (6, 0, 0, 0, 0, 0, $PArea, 0);
                 &replace ($hse_file->{"$ZoneName.geo"}, "#BASE", 1, 1, "%s\n", "@base");
-
+                
+                # Create the .tmc file
+                # --------------------------------------------------------------------
+                if ($tmc_flag) {
+					&replace ($hse_file->{"$ZoneName.tmc"}, "#SURFACE_COUNT", 1, 1, "%s\n", $#tmc_type + 1);
+					my %optic_lib = (0, 0);
+					foreach my $element (0..$#tmc_type) {
+						my $optic = $tmc_type[$element];
+						unless (defined ($optic_lib{$optic})) {
+							$optic_lib{$optic} = keys (%optic_lib);
+							my $layers = @{$optic_data->{$optic}->{'layers'}};
+							&insert ($hse_file->{"$ZoneName.tmc"}, "#END_TMC_DATA", 1, 0, 0, "%s\n", "$layers $optic");
+							&insert ($hse_file->{"$ZoneName.tmc"}, "#END_TMC_DATA", 1, 0, 0, "%s\n", "$optic_data->{$optic}->{'optic_con_props'}->{'trans_solar'} $optic_data->{$optic}->{'optic_con_props'}->{'trans_vis'}");
+							foreach my $layer (@{$optic_data->{$optic}->{'layers'}}) {
+								&insert ($hse_file->{"$ZoneName.tmc"}, "#END_TMC_DATA", 1, 0, 0, "%s\n", $layer->{'absorption'});
+							};
+							&insert ($hse_file->{"$ZoneName.tmc"}, "#END_TMC_DATA", 1, 0, 0, "%s\n", "0");	# optical control flag
+						};
+						$tmc_type[$element] = $optic_lib{$optic};	# change from optics name to the appearance number in the tmc file
+					};
+					&replace ($hse_file->{"$ZoneName.tmc"}, "#TMC_INDEX", 1, 1, "%s\n", "@tmc_type");	# print the key that links each surface to an optic (by number) 
+				};
+                
+                # Create the .htc file
+                # --------------------------------------------------------------------
+                $surface_index = $surface_index-1;
+                &replace ($hse_file->{"$ZoneName.htc"}, "*HC_CTL", 1, 0, "%s\n", "*HC_CTL for zone $ZoneName");
+                &replace ($hse_file->{"$ZoneName.htc"}, "#NUM_CTL_INTV", 1, 0, "%s\n", "  1  # number control intervals");
+                &replace ($hse_file->{"$ZoneName.htc"}, "#NUM_SURF", 1, 0, "%s\n", "  $surface_index  # number of surfaces");
+                &replace ($hse_file->{"$ZoneName.htc"}, "#SURF_NAMES", 1, 0, "%s\n", "# @sides");
+                
+                #print Dumper $hse_file->{"$ZoneName.con"};
+                #print Dumper $hse_file->{"$ZoneName.geo"};
+                #print Dumper $hse_file->{"$ZoneName.tmc"};
+                print Dumper $hse_file->{"$ZoneName.htc"};
+                sleep;
             }; # End of PV Zone creation Loop
             
             # Generate .spm file for the PV arrays for this house
@@ -621,13 +719,10 @@ SUBROUTINES: {
 		my $RSI_desired = sprintf ("%.2f", shift); #
 		my $zone = shift; # the present zone
 		my $surface = shift; # the present surface (e.g. floor, ceiling)
-		my $PVZones = shift; # info about the zones and surfaces (e.g. surface indices)
+		my $con = shift; # info about the zones and surfaces (e.g. surface indices)
 		my $issues = shift; # issue storage
 		my $coordinates = shift; # coordinates for issues
-		
-		# shorten the construction name
-		my $con = \%{$PVZones->{$zone}->{'surfaces'}->{$surface}->{'con'}};
-		
+
 		# check to see if the full construction is defined, if it is not, the use the construction database to build it.
 		unless (defined ($con->{'layers'})) {
 			# Note we are cloning the database so that it is not used itself (messing up subseuqent calls to the database)
@@ -752,11 +847,8 @@ SUBROUTINES: {
 		$con->{'RSI_final'} = 0;
 		# cycle through the layer and determine the total RSI for comparison NOTE: this is a double check
 		foreach my $layer (@{$con->{'layers'}}) {
-			# Foundation wall structure (concrete or heavy wood) was not included in the RSI calc in HOT2XP, so don't include it
-			unless($facing->{'condition'} eq 'BASESIMP' && $layer->{'component'} =~ /^(slab|wall)/) {
-				# RSI = (mm/1000)/k
-				$con->{'RSI_final'} = $con->{'RSI_final'} + ($layer->{'thickness_mm'} / 1000) / $layer->{'conductivity_W_mK'};
-			};
+			# RSI = (mm/1000)/k
+			$con->{'RSI_final'} = $con->{'RSI_final'} + ($layer->{'thickness_mm'} / 1000) / $layer->{'conductivity_W_mK'};
 		};
 		
 		# format the calculated value

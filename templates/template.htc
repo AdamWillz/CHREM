@@ -1,0 +1,11 @@
+*HC_CTL
+*Date,Wed Mar 11 18:07:47 2015
+#NUM_CTL_INTV
+#NUM_SURF
+#SURF_NAMES
+#PERIODS
+#END_PERIODS
+#CTRL_TYPE: Set the convection control type
+#END_CTRL_TYPE
+*Doc
+#END_CTRL_DATA
