@@ -88,7 +88,7 @@ else { # An inappropriate set_name was provided so die and leave a message
 # Read the PV parameters
 # --------------------------------------------------------------------
 
-my $PVkey = '../Input_upgrade/Input_PV.csv';
+my $PVkey = '../Input_upgrade/Input_PVv2.csv';
 system ("printf \"Reading $PVkey\"");
 # Open and read the crosslisting, note that the file handle below is a variable so that it simply goes out of scope
 open (my $PVFILE, '<', $PVkey) or die ("can't open datafile: $PVkey");
@@ -128,14 +128,10 @@ unless (defined ($PVdata->{'Isc'})) {
 elsif ($PVdata->{'Isc'} <= 0) {
 	die "The short-circuit current value is not correct! \n";
 }
-if ($PVdata->{'Voc/Vmpp'} < 1 ||  $PVdata->{'Voc/Vmpp'} > 2) {
-	die "The Voc/Vmpp ratio is out of range!\n";
-}
-if ($PVdata->{'Isc/Impp'} < 1 ||  $PVdata->{'Voc/Vmpp'} > 2) {
-	die "The Isc/Impp ratio is out of range!\n";
-}
-if ($PVdata->{'efficiency'} < 0 || $PVdata->{'efficiency'} > 100) {
-	die "The efficiency shall be between 0 and 100! \n";
+if ($PVdata->{'gamma'} < 0) {
+    print "WARNING: The Voc temperature coefficient (gamma) was entered as a negative value!\n";
+    print"          ESP-r converts this coefficient to a negative internally. Sure $PVdata->{'gamma'}\n";
+    print"          is the correct value you want to use?\n";
 }
 if ($PVdata->{'mis_factor'} < 0 || $PVdata->{'mis_factor'} > 1) {
 	die "The efficiency shall be between 0 and 1! \n";
@@ -150,7 +146,7 @@ if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0 || $PVdata->{'Thick'} < 0)
 # -----------------------------------------------
 # Declare important variables for file generation
 # -----------------------------------------------
-my $zone_extensions = ['con', 'geo', 'opr', 'tmc','htc'];	# extentions that are used for individual zones
+my $zone_extensions = ['con', 'geo', 'opr', 'tmc','htc','spm'];	# extentions that are used for individual zones
 
 # -----------------------------------------------
 # Develop the ESP-r databases and cross reference keys
@@ -218,15 +214,14 @@ MAIN: {
         # --------------------------------------------------------------------
         
         foreach my $dir (@dirs) {
+        EACHHSE: {
             my $hse_name = $dir;
             my $Roof_type;
             my $hse_file;	# new hash reference to the ESP-r files for this record
             # house file coordinates to print when an error is encountered
 			my $coordinates;
-        EACHHSE: {
-            
             my $Num_zones = 0;
-            
+        
             # Determine the house name
             $hse_name =~ s{.*/}{};
             $hse_name =~ s/_[0-9]+//; 	 # Clean up house name if duplicate	
@@ -260,8 +255,6 @@ MAIN: {
             foreach my $ext (@{$zone_extensions}) {
                 $hse_file->{$ext} = [@{$template->{$ext}}];	# create the template file for the zone
 			};
-			
-		};
             
             # --------------------------------------------------------------------
             # Interrogate the geometry file
@@ -429,29 +422,50 @@ MAIN: {
                         $PVZones->{$surf->{$index}->{'name'}}->{'Area'} = $NumColl*($PVdata->{'Area'});
                         $PVZones->{$surf->{$index}->{'name'}}->{'Slope'} = $Slope;
                         $PVZones->{$surf->{$index}->{'name'}}->{'Azimuth'} = $Azimuth;
+                        $PVZones->{$surf->{$index}->{'name'}}->{'NumColl'} = $NumColl;
                         $PVZoneCount++;
                     };
                 };
             };
-            
+
             # --------------------------------------------------------------------
             # Begin making PV zones
             # --------------------------------------------------------------------
+            my $CFGpath = $dir . "/" . $hse_name . ".cfg"; # Path to cfg file
+            my $CNNpath = $dir . "/" . $hse_name . ".cnn"; # Path to cnn file
+            open (my $CFGid, '<', $CFGpath) or die ("can't open cfg file: $CFGpath");
+            open (my $CNNid, '<', $CNNpath) or die ("can't open cnn file: $CNNpath");
+            $hse_file->{'cfg'} = [<$CFGid>];	# Slurp the entire file with one line per array element
+            $hse_file->{'cnn'} = [<$CNNid>];	# Slurp the entire file with one line per array element
+            close $CFGid;
+            close $CNNid;
             
-            my $PV_orientation = {qw(front SLOP back SLOP right VERT left VERT)};
+            my $Num_new=$Num_zones+$PVZoneCount; # Update number of zones in cfg file
+            &replace ($hse_file->{'cfg'}, "#ZONE_COUNT: no of zones", 1, 1, "%s\n", "$Num_new");
+            
+            my $CurrZone = $Num_zones; # Indexer to hold current zone number
             foreach my $PVName (keys (%{$PVZones})) {
-                my $ZoneName = "$hse_name" . '.' . "$PVName" . '_PV';
+                $CurrZone++;
+                my $ZoneName = "$PVName" . '_PV';
                 my $PArea = $PVZones->{$PVName}->{'Area'};
                 my $PSlope = $PVZones->{$PVName}->{'Slope'};
                 my $PAzim = $PVZones->{$PVName}->{'Azimuth'};
+                
+                # Add zone entry to cfg
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*zon $CurrZone");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*opr ./$hse_name.$ZoneName.opr");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*geo ./$hse_name.$ZoneName.geo");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*con ./$hse_name.$ZoneName.con");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*con ./$hse_name.$ZoneName.tmc");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*con ./$hse_name.$ZoneName.htc");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*zend");
                 
                 # Create zone files
                 foreach my $ext (qw(opr con geo tmc htc)) {
 					&copy_template($ZoneName, $ext, $hse_file, 0);
 				};
                 
-                # print Dumper $hse_file;
-                # sleep;
+                
                 
                 $PAzim = sprintf("%d", $PAzim);
                 
@@ -588,8 +602,17 @@ MAIN: {
 					push (@{$em_abs->{'em'}->{'outside'}}, $mat_data->{$con->{'layers'}->[0]->{'mat'}}->{'emissivity_out'});
 					push (@{$em_abs->{'abs'}->{'inside'}}, $mat_data->{$con->{'layers'}->[$#{$con->{'layers'}}]->{'mat'}}->{'absorptivity_in'});
 					push (@{$em_abs->{'abs'}->{'outside'}}, $mat_data->{$con->{'layers'}->[0]->{'mat'}}->{'absorptivity_out'});
+                    
+                    # Add connection for this surface
+                    &insert ($hse_file->{'cnn'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "$CurrZone $surface_index 0 0 0 # $ZoneName $wSurf facing exterior (EXTERIOR)");
+                    
+                    if ($wSurf !~ /frm/i) {  # surface is the PV, store zone and surface number
+                        $PVZones->{$PVName}->{'ZoneInd'} = $CurrZone;
+                        $PVZones->{$PVName}->{'SurfInd'} = $surface_index;
+                    };
 
                     $surface_index++;
+
                 };
                 
                 
@@ -647,53 +670,95 @@ MAIN: {
                 # Create the .htc file
                 # --------------------------------------------------------------------
                 $surface_index = $surface_index-1;
+                my @InHTC=(); # Internal heat transfer coefficients
+                my @OutHTC=(); # External heat transfer coefficients
+                for (my $i = 1; $i<=$surface_index; $i++) {
+                    if ($i < $surface_index) {
+                        push(@InHTC, "999.0,");
+                        push(@OutHTC, "-1.0000,");
+                    } else {
+                        push(@InHTC, "999.0");
+                        push(@OutHTC, "-1.0000");
+                    };
+                };
+                
                 &replace ($hse_file->{"$ZoneName.htc"}, "*HC_CTL", 1, 0, "%s\n", "*HC_CTL for zone $ZoneName");
                 &replace ($hse_file->{"$ZoneName.htc"}, "#NUM_CTL_INTV", 1, 0, "%s\n", "  1  # number control intervals");
                 &replace ($hse_file->{"$ZoneName.htc"}, "#NUM_SURF", 1, 0, "%s\n", "  $surface_index  # number of surfaces");
-                &replace ($hse_file->{"$ZoneName.htc"}, "#SURF_NAMES", 1, 0, "%s\n", "# @sides");
+                &replace ($hse_file->{"$ZoneName.htc"}, "#SURF_NAMES", 1, 0, "%s\n", "# SURFACES: @sides");
+                &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  0.00    24.00 # start and end time of interval");
+                &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  1 # fixed coefficients calculation control type");
+                &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "*Doc,User supplied hc values");
+                &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @InHTC");
+                &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @OutHTC");
                 
                 #print Dumper $hse_file->{"$ZoneName.con"};
                 #print Dumper $hse_file->{"$ZoneName.geo"};
                 #print Dumper $hse_file->{"$ZoneName.tmc"};
-                print Dumper $hse_file->{"$ZoneName.htc"};
-                sleep;
+                #print Dumper $hse_file->{"$ZoneName.htc"};
+                #sleep;
             }; # End of PV Zone creation Loop
             
             # Generate .spm file for the PV arrays for this house
             # --------------------------------------------------------------------
-            #if ($PVZoneCount > 0) {     #There are PV arrays for this house, make the .spm file
-            #    my $num_nodes = 1;
-            #    my $PV_zone =  $Num_zones+$PVZoneCount; # the PV zone number 
-            #    my $PV_surf = 5; # the surface number which PV is installed
-            #    
-            #    my $PV_Voc = sprintf ("%4.4f",$PVdata->{'Vmpp'} * $PVdata->{'Voc/Vmpp'}); # open circuit voltage (V)
-            #    my $PV_Impp = sprintf ("%4.4f",$PVdata->{'Isc'} /  $PVdata->{'Isc/Impp'}); # Current at maximum power point (I)
-            #    my $Href = sprintf ("%4.4f",1000); # reference insolation (W/m2)
-            #    my $alpha = sprintf ("%4.6f",$PVdata->{'alpha*1000'} / 1000); # temperature coefficient of short circuit current (1/K)
-            #    my $beta = sprintf ("%4.4f",$PVdata->{'beta*1000'} / 1000); # coefficient of logarithm of irradiance for open corcuit voltage (-)
-            #    my $gamma = sprintf ("%4.4f",$PVdata->{'gamma*1000'} / -1000); # temperature coefficient of open-circuit voltage (1/K)
-            #    my $PV_Isc = sprintf ("%4.4f",$PVdata->{'Isc'});
-            #    my $PV_Vmpp = sprintf ("%4.4f",$PVdata->{'Vmpp'});
-            #    
-            #    my $N = $Href * $input->{$up_name}->{'efficiency'}/100 * $PV_area / $input->{$up_name}->{'power_individual'}; # number of modules on the surface can be calculated when area is defined as the largest integer number less than (Href * efficiency * area / power_individual)
-            #    my $floor_N = sprintf ("%4.4f",floor ($N));
-            #    my $PV_factor =  sprintf ("%4.4f",$input->{$up_name}->{'mis_factor'});
-            #    
-            #    &insert ($hse_file->{"spm"}, "#END_SPM_DATA", 1, 0, 0, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", "# Node No: $num_nodes", "WATSUN-PV_multic # label","# Zone Surf Node Type Opq/Trn", "$PV_zone $PV_surf 4 5 0", "# No. of data items.", "16", "# Data:", "$PV_Voc $PV_Isc $PV_Vmpp $PV_Impp $Href 298.0000 $alpha $gamma $beta 36.0000 1.0000 $floor_N 0.0000 0.0000 0.0000 $PV_factor");
-            #};
-            
-            
-       
+            my $SPMfile = $hse_name . ".spm";
+            if ($PVZoneCount > 0) {     #There are PV arrays for this house, make the .spm file
+                &replace ($hse_file->{'spm'}, "# configuration file tempelate.cfg", 1, 0, "%s\n", "# configuration file $hse_name.cfg");
+                &replace ($hse_file->{'spm'}, "#NUM_SPM_NODE", 1, 1, "%s\n", "   $PVZoneCount  # Number of special material nodes.");
+                
+                # Format PV input data
+                my $PV_Voc = sprintf ("%4.4f",$PVdata->{'Voc'});
+                my $PV_Isc = sprintf ("%4.4f",$PVdata->{'Isc'});
+                my $PV_Vmpp = sprintf ("%4.4f",$PVdata->{'Vmpp'});
+                my $PV_Impp = sprintf ("%4.4f",$PVdata->{'Impp'});
+                my $Href = sprintf ("%4.4f",$PVdata->{'ref_ins'});
+                my $Tref = sprintf ("%4.4f",$PVdata->{'ref_temp'});
+                my $alpha = sprintf ("%4.6f",$PVdata->{'alpha'});
+                my $gamma = sprintf ("%4.4f",$PVdata->{'gamma'});
+                my $cells = sprintf ("%4.4f",$PVdata->{'cells'});
+                my $loadType = sprintf ("%4.4f",$PVdata->{'load_type'});
+                my $loadVal = sprintf ("%4.4f",$PVdata->{'load_value'});
+                my $shade = sprintf ("%4.4f",$PVdata->{'shading'});
+                my $MiscLoss = sprintf ("%4.4f",$PVdata->{'mis_factor'});
+                
+                # Determine the coefficient of the logarithm. See "Validation of ESP-r’s equivalent one-diode PV model with data from NIST" 
+                my $dT = (1.38066/1.60218)*0.0001*$PVdata->{'ref_temp'}*$PVdata->{'idealty_factor'}; # Eqn. 8
+                my $Beta = ($PVdata->{'cells'}*$dT)/$PVdata->{'Voc'}; # Eqn. 19
+                $Beta =  sprintf ("%4.4f",$Beta);
 
+                my $Node = 1;
+                foreach my $PVName (keys (%{$PVZones})) { # Add the PV Data for each node
+                
+                    my $NumModule = sprintf ("%4.4f",$PVZones->{$PVName}->{'ZoneInd'});
+                    
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "# Node No:  $Node");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "WATSUN-PV_$Node # label");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "# Zone Surf Node Type Opq/Trn");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "   $PVZones->{$PVName}->{'ZoneInd'}   $PVZones->{$PVName}->{'SurfInd'}   4   5   0");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "# Number of data items.");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "  16");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "# Data:");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "   $PV_Voc    $PV_Isc   $PV_Vmpp    $PV_Impp   $Href  $Tref  $alpha    $gamma    $Beta   $cells");
+                    &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "    1.0000    $NumModule    $loadType    $loadVal    $shade    $MiscLoss");
+                    
+                    $Node++;
+                };
+                print Dumper $hse_file->{'spm'};
+                sleep;
+            };
+
+            # Store the old CNN and cfg files
+            #rename $CFGpath, "$CFGpath.old";
+            #rename $CNNpath, "$CNNpath.old";
             
-            # my $NewGeo;
-            # open $NewGeo, '>', $GeoPath or die "Could not generate $GeoPath\n";
-            # close $NewGeo;
+            &replace ($hse_file->{'cfg'}, "#SPM", 1, 1, "%s\n", "*spf  $SPMfile"); # Add path to .spm file
             
-        
-        };  # end of house loop
-    };  # end of EACHHSE
-};	# end of main code
+            print Dumper $hse_file->{'cnn'};
+            sleep;
+
+        };};  # end of EACHHSE
+    };  # END sub main
+};	# END MAIN
 
 # -----------------------------------------------
 # Subroutines

@@ -5,7 +5,3 @@
 #SURF_NAMES
 #PERIODS
 #END_PERIODS
-#CTRL_TYPE: Set the convection control type
-#END_CTRL_TYPE
-*Doc
-#END_CTRL_DATA
