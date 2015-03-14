@@ -729,7 +729,7 @@ MAIN: {
                 my $Node = 1;
                 foreach my $PVName (keys (%{$PVZones})) { # Add the PV Data for each node
                 
-                    my $NumModule = sprintf ("%4.4f",$PVZones->{$PVName}->{'ZoneInd'});
+                    my $NumModule = sprintf ("%4.4f",$PVZones->{$PVName}->{'NumColl'});
                     
                     &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "# Node No:  $Node");
                     &insert ($hse_file->{'spm'}, "#END_SPM_DATA", 1, 0, 0, "%s\n", "WATSUN-PV_$Node # label");
