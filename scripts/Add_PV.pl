@@ -249,6 +249,7 @@ MAIN: {
             if($Roof_type =~ m/(roof)/i) {
                 print "$hse_name has a flat roof, skipping to next house\n";
                 # RECORD AREA OF FLAT ROOF
+                #TODO: Record that house is ineligible for PV
                 last EACHHSE;
             };
 
@@ -427,18 +428,23 @@ MAIN: {
                     };
                 };
             };
-
+            
+            if (!$PVZones) { # No surfaces were eligible for PV
+                last EACHHSE;
+                #TODO: Record that house is ineligible for PV
+            }:
             # --------------------------------------------------------------------
             # Begin making PV zones
             # --------------------------------------------------------------------
-            my $CFGpath = $dir . "/" . $hse_name . ".cfg"; # Path to cfg file
-            my $CNNpath = $dir . "/" . $hse_name . ".cnn"; # Path to cnn file
-            open (my $CFGid, '<', $CFGpath) or die ("can't open cfg file: $CFGpath");
-            open (my $CNNid, '<', $CNNpath) or die ("can't open cnn file: $CNNpath");
-            $hse_file->{'cfg'} = [<$CFGid>];	# Slurp the entire file with one line per array element
-            $hse_file->{'cnn'} = [<$CNNid>];	# Slurp the entire file with one line per array element
-            close $CFGid;
-            close $CNNid;
+            # Load in building files to be updated
+             foreach my $ext (qw(cfg cnn elec)) {
+                my $FILEpath = $dir . "/" . $hse_name . ".$ext"; # Path to cfg file
+                open (my $FILEid, '<', $FILEpath) or die ("can't open file: $FILEpath");
+                $hse_file->{$ext} = [<$FILEid>];	# Slurp the entire file with one line per array element
+                close $FILEid;
+                # Create backups of old files
+                #rename $FILEpath, "$FILEpath.old";
+            };
             
             my $Num_new=$Num_zones+$PVZoneCount; # Update number of zones in cfg file
             &replace ($hse_file->{'cfg'}, "#ZONE_COUNT: no of zones", 1, 1, "%s\n", "$Num_new");
@@ -743,18 +749,30 @@ MAIN: {
                     
                     $Node++;
                 };
-                print Dumper $hse_file->{'spm'};
-                sleep;
+                #print Dumper $hse_file->{'spm'};
+                #sleep;
             };
 
-            # Store the old CNN and cfg files
-            #rename $CFGpath, "$CFGpath.old";
-            #rename $CNNpath, "$CNNpath.old";
-            
             &replace ($hse_file->{'cfg'}, "#SPM", 1, 1, "%s\n", "*spf  $SPMfile"); # Add path to .spm file
             
-            print Dumper $hse_file->{'cnn'};
+            #print Dumper $hse_file;
             sleep;
+            
+            # -----------------------------------------------
+			# Print out each new esp-r house file for the house record
+			# -----------------------------------------------
+			FILE_PRINTOUT: {
+				foreach my $ext (keys %{$hse_file}) {	# go through each extention inclusive of the zones for this particular record
+                    if ($ext =~ m/^(opr|con|htc|geo|tmc)$/) { # Template file, remove it from HASH
+                        undef $hse_file->{$ext};
+                    } else {
+                        my $file = $dir . "/$hse_name.";
+                        my $FILE;
+                        open ($FILE, '>', $file . $ext) or die ("Can't open datafile: $file$ext");	# open writeable file
+                        foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out
+                    };
+				};
+			};
 
         };};  # end of EACHHSE
     };  # END sub main
