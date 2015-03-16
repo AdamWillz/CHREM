@@ -164,10 +164,26 @@ foreach my $ext (@{$zone_extensions}) {	# do for each filename extention
 	# note that the file handle below is a variable so that it simply goes out of scope
 	open (my $TEMPLATE, '<', $file) or die ("can't open template: $file");	# open the template
 	$template->{$ext} = [<$TEMPLATE>];	# Slurp the entire file with one line per array element
+    close ($TEMPLATE);
 };
 
 # hash reference to store encountered issues during the house builds
 my $issues;
+
+# -----------------------------------------------
+# Report Data
+# -----------------------------------------------
+my $RepHeader = ['surface_area', 'slope','azimuth','PV_area','Num_modules']; # Header items for report
+my $RepData; # Declare HASH to hold report data
+
+my $ResFname = "../summary_files/Add_PV$set_name" . '_Houses.csv';
+
+# Examine the summary files directory, if add PV exists, issue error and terminate
+foreach my $file (<../summary_files/*>) {
+	if ($file =~ /$ResFname/) {
+        die ("ERROR: PV Upgrade for set $set_name exists. Terminating");
+    };
+};
 
 # --------------------------------------------------------------------
 # Begin multi-threading for regions and house types
@@ -248,6 +264,9 @@ MAIN: {
             # If $zone='roof', skip this house as it has a flat roof
             if($Roof_type =~ m/(roof)/i) {
                 print "$hse_name has a flat roof, skipping to next house\n";
+                foreach my $item (@{$RepHeader}) {	#  Set report values
+                    $RepData->{$hse_name}->{'flat_roof'}->{$item}=0;
+                };
                 # RECORD AREA OF FLAT ROOF
                 #TODO: Record that house is ineligible for PV
                 last EACHHSE;
@@ -424,14 +443,23 @@ MAIN: {
                         $PVZones->{$surf->{$index}->{'name'}}->{'Slope'} = $Slope;
                         $PVZones->{$surf->{$index}->{'name'}}->{'Azimuth'} = $Azimuth;
                         $PVZones->{$surf->{$index}->{'name'}}->{'NumColl'} = $NumColl;
+                        
+                        # Add report data
+                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'surface_area'}=sprintf("%4.3f",$area);
+                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'slope'}=sprintf("%4.3f",$Slope);
+                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'azimuth'}=sprintf("%4.3f",$Azimuth);
+                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
+                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
                         $PVZoneCount++;
                     };
                 };
             };
             
             if (!$PVZones) { # No surfaces were eligible for PV
+                foreach my $item (@{$RepHeader}) {	#  Set report values
+                    $RepData->{$hse_name}->{'no_eligible'}->{$item}=0;
+                };
                 last EACHHSE;
-                #TODO: Record that house is ineligible for PV
             }:
             # --------------------------------------------------------------------
             # Begin making PV zones
@@ -777,6 +805,15 @@ MAIN: {
         };};  # end of EACHHSE
     };  # END sub main
 };	# END MAIN
+
+# -----------------------------------------------
+# Write out report data
+# -----------------------------------------------
+# Create a file to print out the house results to
+open (my $RFILE, '>', $ResFname) or die ("\n\nERROR: can't open $ResFname\n");
+
+# Print the header to the file
+
 
 # -----------------------------------------------
 # Subroutines
