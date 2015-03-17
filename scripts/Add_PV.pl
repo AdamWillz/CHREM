@@ -205,8 +205,21 @@ MULTI_THREAD: {
     foreach my $hse_type (&array_order(values %{$hse_types})) {	# return for each house type
 		foreach my $region (&array_order(values %{$regions})) {	# return for each region type
 			$thread_return->{$hse_type}->{$region} = $thread->{$hse_type}->{$region}->join();	# Return the threads together for info collation
+            
+            foreach my $issue_key (keys (%{$thread_return->{$hse_type}->{$region}->{'issues'}})) {
+				my $issue = $thread_return->{$hse_type}->{$region}->{'issues'}->{$issue_key};
+				foreach my $problem (keys (%{$issue})) {
+					$issues->{$issue_key}->{$problem}->{$hse_type}->{$region} = $issue->{$problem}->{$hse_type}->{$region};
+				};
+			};
+            
+            foreach my $PV_key (keys (%{$thread_return->{$hse_type}->{$region}->{'PV_Upgrade'}})) {
+				$RepData->{$hse_type}->{$region} = $thread_return->{$hse_type}->{$region}->{'PV_Upgrade'};
+			};
+            
+            
         };
-    };     
+    };
 };
 
 
@@ -221,6 +234,8 @@ MAIN: {
 		my $hse_type = $pass->{'hse_type'};	# house type number for the thread
 		my $region = $pass->{'region'};	# region number for the thread
         my $set_name = $pass->{'setname'};	# region number for the thread
+        
+        my $hseRepData; # Hold the PV report data
         
         push (my @dirs, <../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
         # print Dumper @dirs;
@@ -242,7 +257,6 @@ MAIN: {
             $hse_name =~ s{.*/}{};
             $hse_name =~ s/_[0-9]+//; 	 # Clean up house name if duplicate	
             $coordinates = {'hse_type' => $hse_type, 'region' => $region, 'file_name' => $hse_name};
-            print "Record is $hse_name\n";
             # TODO: If a .spm file exists, die
             
             # Find all the geometry files for the model
@@ -265,7 +279,7 @@ MAIN: {
             if($Roof_type =~ m/(roof)/i) {
                 print "$hse_name has a flat roof, skipping to next house\n";
                 foreach my $item (@{$RepHeader}) {	#  Set report values
-                    $RepData->{$hse_name}->{'flat_roof'}->{$item}=0;
+                    $hseRepData->{$hse_name}->{'flat_roof'}->{$item}=0;
                 };
                 # RECORD AREA OF FLAT ROOF
                 #TODO: Record that house is ineligible for PV
@@ -445,54 +459,61 @@ MAIN: {
                         $PVZones->{$surf->{$index}->{'name'}}->{'NumColl'} = $NumColl;
                         
                         # Add report data
-                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'surface_area'}=sprintf("%4.3f",$area);
-                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'slope'}=sprintf("%4.3f",$Slope);
-                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'azimuth'}=sprintf("%4.3f",$Azimuth);
-                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
-                        $RepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
+                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'surface_area'}=sprintf("%4.3f",$area);
+                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'slope'}=sprintf("%4.3f",$Slope);
+                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'azimuth'}=sprintf("%4.3f",$Azimuth);
+                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
+                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
                         $PVZoneCount++;
                     };
                 };
             };
-            
+
             if (!$PVZones) { # No surfaces were eligible for PV
                 foreach my $item (@{$RepHeader}) {	#  Set report values
-                    $RepData->{$hse_name}->{'no_eligible'}->{$item}=0;
+                    $hseRepData->{$hse_name}->{'no_eligible'}->{$item}=0;
                 };
-                last EACHHSE;
-            }:
+                last EACHHSE; # MOVE TO NEXT RECORD
+            };
             # --------------------------------------------------------------------
             # Begin making PV zones
             # --------------------------------------------------------------------
             # Load in building files to be updated
-             foreach my $ext (qw(cfg cnn elec)) {
+             foreach my $ext (qw(cfg cnn elec afn ctl)) {
                 my $FILEpath = $dir . "/" . $hse_name . ".$ext"; # Path to cfg file
                 open (my $FILEid, '<', $FILEpath) or die ("can't open file: $FILEpath");
                 $hse_file->{$ext} = [<$FILEid>];	# Slurp the entire file with one line per array element
                 close $FILEid;
                 # Create backups of old files
                 #rename $FILEpath, "$FILEpath.old";
+                #unlink $FILEpath;
             };
             
             my $Num_new=$Num_zones+$PVZoneCount; # Update number of zones in cfg file
             &replace ($hse_file->{'cfg'}, "#ZONE_COUNT: no of zones", 1, 1, "%s\n", "$Num_new");
             
             my $CurrZone = $Num_zones; # Indexer to hold current zone number
+            my $NewSurfaces = 0; # Counter to hold number of new surfaces
             foreach my $PVName (keys (%{$PVZones})) {
                 $CurrZone++;
                 my $ZoneName = "$PVName" . '_PV';
                 my $PArea = $PVZones->{$PVName}->{'Area'};
                 my $PSlope = $PVZones->{$PVName}->{'Slope'};
                 my $PAzim = $PVZones->{$PVName}->{'Azimuth'};
+                my $PVol = $PVZones->{$PVName}->{'Area'}*$PVdata->{'Thick'};
+                $PVol = sprintf("%4.1f",$PVol);
                 
                 # Add zone entry to cfg
                 &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*zon $CurrZone");
                 &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*opr ./$hse_name.$ZoneName.opr");
                 &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*geo ./$hse_name.$ZoneName.geo");
                 &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*con ./$hse_name.$ZoneName.con");
-                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*con ./$hse_name.$ZoneName.tmc");
-                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*con ./$hse_name.$ZoneName.htc");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*tmc ./$hse_name.$ZoneName.tmc");
+                &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*ihc ./$hse_name.$ZoneName.htc");
                 &insert ($hse_file->{'cfg'}, "#END_ZONES", 1, 0, 0, "%s\n", "*zend");
+                
+                # Add entry to afn
+                &insert ($hse_file->{'afn'}, "#END_NODES", 1, 0, 0, "%s\n", "$ZoneName 1 0 1.2 20.0 0 $PVol");
                 
                 # Create zone files
                 foreach my $ext (qw(opr con geo tmc htc)) {
@@ -550,8 +571,6 @@ MAIN: {
 						&insert ($hse_file->{"$ZoneName.geo"}, "#END_VERTICES", 1, 0, 0, "%s # %s%u; %s\n", $PVZones->{$PVName}->{'vertices'}->{$wSurf}->[$verte], "$wSurf v", $verte + 1, "total v$vertex_count");
 					};
 				};
-                
-                # @sides = ('base_frm', 'left_frm', 'top_frm', 'right_frm','PV_module','back_frm');
                 
                 # Begin defining PV module surface attributes, update 
                 my $surface_index = 1;
@@ -646,9 +665,9 @@ MAIN: {
                     };
 
                     $surface_index++;
+                    $NewSurfaces++;
 
                 };
-                
                 
                 
                 &insert ($hse_file->{"$ZoneName.con"}, "#EM_INSIDE", 1, 1, 0, "%s\n", "@{$em_abs->{'em'}->{'inside'}}");	# write out the emm/abs of the surfaces for each zone
@@ -725,13 +744,56 @@ MAIN: {
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "*Doc,User supplied hc values");
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @InHTC");
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @OutHTC");
-                
-                #print Dumper $hse_file->{"$ZoneName.con"};
-                #print Dumper $hse_file->{"$ZoneName.geo"};
-                #print Dumper $hse_file->{"$ZoneName.tmc"};
-                #print Dumper $hse_file->{"$ZoneName.htc"};
-                #sleep;
+
             }; # End of PV Zone creation Loop
+            
+            # Update zone names in cfg
+            # --------------------------------------------------------------------
+            for (my $i=0;$i<=$#{$hse_file->{'cfg'}};$i++) {; 
+                if (@{$hse_file->{'cfg'}}[$i] =~ m/(#PLANT)/) {
+                    my @tokens = split '#', @{$hse_file->{'cfg'}}[$i-1];
+                    foreach my $PVName (keys (%{$PVZones})) {
+                        $tokens[0] = $tokens[0] . " $PVName" . '_PV';
+                    };
+                    my $Pback = $tokens[0] . ' # ' . $tokens[1];
+                    &replace ($hse_file->{'cfg'}, "#PLANT", 1, -1, "%s\n", $Pback);
+                    last;
+                };
+            };
+            
+            # Update number of connections for model
+            # --------------------------------------------------------------------
+            for (my $i=0;$i<=$#{$hse_file->{'cnn'}};$i++) {; 
+                if (@{$hse_file->{'cnn'}}[$i] =~ m/(#CNN_COUNT: number of connections)/) {
+                    my $Oldcons = @{$hse_file->{'cnn'}}[$i+1];
+                    $NewSurfaces = $NewSurfaces+$Oldcons;
+                    &replace ($hse_file->{'cnn'}, "#CNN_COUNT: number of connections", 1, 1, "%s\n", "$NewSurfaces");
+                    last;
+                };
+            };
+            
+            # Update zone links in control file
+            # --------------------------------------------------------------------
+            my $linkZones = '';
+            for (my $i = 1; $i <= $Num_new; $i++) {
+                $linkZones = $linkZones . " $i";
+                print "In the loop";
+            };
+            #&replace ($hse_file->{'ctl'}, "#ZONE_LINKS, each zone (in order) and list the loop number the zone corresponds too (e.g main = 1, if none the equal 0 [bad idea])", 1, 1, "%s\n", $linkZones);
+            #print Dumper $hse_file->{'ctl'};
+            print $linkZones;
+            sleep;
+
+            # Update number of nodes in afn
+            # --------------------------------------------------------------------
+            for (my $i=0;$i<=$#{$hse_file->{'afn'}};$i++) {; 
+                if (@{$hse_file->{'afn'}}[$i] =~ m/(# example: 3 2 2 0.75)/) {
+                    my @tokens = split ' ', @{$hse_file->{'afn'}}[$i+1];  # Split the afn data
+                    $tokens[0] = $tokens[0]+$PVZoneCount;
+                    &replace ($hse_file->{'afn'}, "# example: 3 2 2 0.75", 1, 1, "%s\n", "@tokens");
+                    last;
+                };
+            };
             
             # Generate .spm file for the PV arrays for this house
             # --------------------------------------------------------------------
@@ -784,7 +846,7 @@ MAIN: {
             &replace ($hse_file->{'cfg'}, "#SPM", 1, 1, "%s\n", "*spf  $SPMfile"); # Add path to .spm file
             
             #print Dumper $hse_file;
-            sleep;
+            #sleep;
             
             # -----------------------------------------------
 			# Print out each new esp-r house file for the house record
@@ -801,8 +863,15 @@ MAIN: {
                     };
 				};
 			};
-
-        };};  # end of EACHHSE
+        };
+        };  # end of EACHHSE
+        
+    print "Thread for PV Upgrade of $hse_type $region - Complete\n";
+    
+    my $return = {'issues' => $issues, 'PV_Upgrade' => $hseRepData};
+    
+    return ($return);
+    
     };  # END sub main
 };	# END MAIN
 
@@ -813,7 +882,27 @@ MAIN: {
 open (my $RFILE, '>', $ResFname) or die ("\n\nERROR: can't open $ResFname\n");
 
 # Print the header to the file
+print $RFILE "*header,region,hse_type,HseName,surface,";
+foreach my $item (@{$RepHeader}) {	#  Set report values
+    print $RFILE "$item,";
+};
+print $RFILE "\n";
 
+foreach my $hse_type (keys (%{$RepData})) {
+	foreach my $region (keys (%{$RepData->{$hse_type}})) {
+        foreach my $hseName (keys (%{$RepData->{$hse_type}->{$region}})) {
+            foreach my $surf (keys (%{$RepData->{$hse_type}->{$region}->{$hseName}})) {
+                print $RFILE "*data,$region,$hse_type,$hseName,$surf,";
+                foreach my $item (@{$RepHeader}) {	#  Set report values
+                     print $RFILE "$RepData->{$hse_type}->{$region}->{$hseName}->{$surf}->{$item},";
+                };
+                print $RFILE "\n";
+            };
+        };
+    };
+};
+
+close $RFILE;
 
 # -----------------------------------------------
 # Subroutines
