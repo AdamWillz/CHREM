@@ -72,7 +72,7 @@ my @possible_set_names_print = @{&order($possible_set_names)}; # Order the names
 # Read the command line input arguments
 # --------------------------------------------------------------------
 
-if (@ARGV == 0 || @ARGV == 2) {die "Three arguments are required: house_types regions set_name\n";};	# check for proper argument count
+if (@ARGV == 0 || @ARGV == 3) {die "Four arguments are required: house_types regions set_name run_mode\n";};	# check for proper argument count
 
 # Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
 ($hse_types, $regions, $set_name) = &hse_types_and_regions_and_set_name(shift (@ARGV), shift (@ARGV), shift (@ARGV));
@@ -82,6 +82,23 @@ if (defined($possible_set_names->{$set_name})) { # Check to see if it is defined
 }
 else { # An inappropriate set_name was provided so die and leave a message
 	die "Set_name \"$set_name\" was not found\nPossible set_names are: @possible_set_names_print\n";
+};
+
+my $run_mode = shift (@ARGV);
+if ($run_mode !~ /[0-1]/) {die "Run mode can be (0 = create PV upgrade), (1= Undo upgrade) \n";}
+
+if ($run_mode == 1) { # Scan set and undo upgrade
+    print "Are you sure you want to run clean-up? \n";
+    my $resp = <STDIN>;
+    if ($resp !~ /Y|YES/i) {die;}
+    foreach my $hse_type (values (%{$hse_types})) {
+        foreach my $region (values (%{$regions})) {
+            foreach my $file (<../$hse_type$set_name/$region/*>) {
+                &clean_up_dir($set_name,$file);
+            };
+        };
+    };
+    die "Done clean-up, exiting\n";
 };
 
 # --------------------------------------------------------------------
@@ -294,12 +311,6 @@ MAIN: {
             # Interrogate the geometry file
             # --------------------------------------------------------------------
             my $GeoPath = $dir . "/" . $hse_name . "." . $Roof_type . ".geo"; # Path to roof/attic geo file
-            # my $OldPath = $GeoPath . ".old";
-            
-            # Save original geo file
-            # copy($GeoPath,$OldPath);
-            #unlink $GeoPath; # Clear the way for re-writing the geometry file
-            
             my $OldGeo;
             open $OldGeo, $GeoPath or die "Could not open $GeoPath\n";
             
@@ -485,8 +496,8 @@ MAIN: {
                 $hse_file->{$ext} = [<$FILEid>];	# Slurp the entire file with one line per array element
                 close $FILEid;
                 # Create backups of old files
-                #rename $FILEpath, "$FILEpath.old";
-                #unlink $FILEpath;
+                rename $FILEpath, "$FILEpath.old";
+                unlink $FILEpath;
             };
             
             my $Num_new=$Num_zones+$PVZoneCount; # Update number of zones in cfg file
@@ -499,7 +510,7 @@ MAIN: {
                 my $ZoneName = "$PVName" . '_PV';
                 my $PArea = $PVZones->{$PVName}->{'Area'};
                 my $PSlope = $PVZones->{$PVName}->{'Slope'};
-                my $PAzim = $PVZones->{$PVName}->{'Azimuth'};
+                my $PAzim = 360-$PVZones->{$PVName}->{'Azimuth'}; # Rotation is CCW
                 my $PVol = $PVZones->{$PVName}->{'Area'}*$PVdata->{'Thick'};
                 $PVol = sprintf("%4.1f",$PVol);
                 
@@ -744,12 +755,19 @@ MAIN: {
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "*Doc,User supplied hc values");
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @InHTC");
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @OutHTC");
+                
+                # Create the .opr file
+                # --------------------------------------------------------------------
+                my @OPR_FLAG = ("#END_AIR_WEEKDAY","#END_AIR_SATURDAY","#END_AIR_SUNDAY","#END_CASUAL_WEEKDAY", "#END_CASUAL_SATURDAY","#END_CASUAL_SUNDAY");
+                foreach my $opFlag (@OPR_FLAG) {
+                    &insert ($hse_file->{"$ZoneName.opr"}, $opFlag, 1, 0, 0, "%s\n", "0");
+                };
 
             }; # End of PV Zone creation Loop
             
             # Update zone names in cfg
             # --------------------------------------------------------------------
-            for (my $i=0;$i<=$#{$hse_file->{'cfg'}};$i++) {; 
+            for (my $i=0;$i<=$#{$hse_file->{'cfg'}};$i++) { 
                 if (@{$hse_file->{'cfg'}}[$i] =~ m/(#PLANT)/) {
                     my @tokens = split '#', @{$hse_file->{'cfg'}}[$i-1];
                     foreach my $PVName (keys (%{$PVZones})) {
@@ -763,7 +781,7 @@ MAIN: {
             
             # Update number of connections for model
             # --------------------------------------------------------------------
-            for (my $i=0;$i<=$#{$hse_file->{'cnn'}};$i++) {; 
+            for (my $i=0;$i<=$#{$hse_file->{'cnn'}};$i++) {
                 if (@{$hse_file->{'cnn'}}[$i] =~ m/(#CNN_COUNT: number of connections)/) {
                     my $Oldcons = @{$hse_file->{'cnn'}}[$i+1];
                     $NewSurfaces = $NewSurfaces+$Oldcons;
@@ -774,19 +792,21 @@ MAIN: {
             
             # Update zone links in control file
             # --------------------------------------------------------------------
-            my $linkZones = '';
-            for (my $i = 1; $i <= $Num_new; $i++) {
-                $linkZones = $linkZones . " $i";
-                print "In the loop";
+            for (my $i = 1; $i <= $#{$hse_file->{'ctl'}}; $i++) {
+                if (${$hse_file->{'ctl'}}[$i] =~ /(#ZONE_LINKS)/) {
+                    my @newline = split(' ',${$hse_file->{'ctl'}}[$i+1]);
+                    my $ctlLoop = $newline[$#newline];
+                    for (my $j=0;$j < $PVZoneCount; $j++) {
+                        push(@newline, "$ctlLoop");
+                    };
+                    ${$hse_file->{'ctl'}}[$i+1] = "@newline \n";
+                    last;
+                };
             };
-            #&replace ($hse_file->{'ctl'}, "#ZONE_LINKS, each zone (in order) and list the loop number the zone corresponds too (e.g main = 1, if none the equal 0 [bad idea])", 1, 1, "%s\n", $linkZones);
-            #print Dumper $hse_file->{'ctl'};
-            print $linkZones;
-            sleep;
 
             # Update number of nodes in afn
             # --------------------------------------------------------------------
-            for (my $i=0;$i<=$#{$hse_file->{'afn'}};$i++) {; 
+            for (my $i=0;$i<=$#{$hse_file->{'afn'}};$i++) {
                 if (@{$hse_file->{'afn'}}[$i] =~ m/(# example: 3 2 2 0.75)/) {
                     my @tokens = split ' ', @{$hse_file->{'afn'}}[$i+1];  # Split the afn data
                     $tokens[0] = $tokens[0]+$PVZoneCount;
@@ -923,6 +943,37 @@ SUBROUTINES: {
 		return (1);
 	};
 
+    sub clean_up_dir { # subroutine to destroy PV upgrade
+        my $set_name = shift;
+        my $file = shift;
+
+        # Find all the "old" files for the model and reinstate them
+        my @files = glob "$file/*.old";
+        for (0..$#files){
+            my $To_Del = $files[$_];
+            $To_Del =~ s/\.old$//; # Name of new file to be removed
+            unlink $To_Del;
+            rename $files[$_],$To_Del;
+        };
+        
+        # Find and destroy all PV zone files
+        @files = glob "$file/*_PV.*";
+        for (0..$#files){
+            unlink $files[$_];
+        };
+        
+        # Find and destroy spm file
+        @files = glob "$file/*.spm";
+        for (0..$#files){
+            unlink $files[$_];
+        };
+
+        # Remove old summary file
+        my $ResFname = "../summary_files/Add_PV$set_name" . '_Houses.csv';
+        unlink $ResFname;
+
+    	return (1);
+	};
 
 	sub con_surf_PV {	# fill out the construction, surface attributes, and connections for each particular surface
 		my $RSI_desired = sprintf ("%.2f", shift); #
