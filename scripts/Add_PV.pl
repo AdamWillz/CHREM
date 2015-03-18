@@ -71,9 +71,9 @@ my @possible_set_names_print = @{&order($possible_set_names)}; # Order the names
 
 # PV Mounting Parameters
 # --------------------------------------
-my $AzMin = 90; # Minimum azimuth angle to allow PV mounting on the surface
-my $AzMax = 270; # Maximum azimuth angle to allow PV mounting on the surface
-my $SA_Usable = 0.78; # Percentage of surface area that is usable (TODO: IMPLEMENT THIS)
+my $AzMin = 135; # Minimum azimuth angle to allow PV mounting on the surface
+my $AzMax = 225; # Maximum azimuth angle to allow PV mounting on the surface
+my $SA_Usable = 0.65; # Percentage of surface area that is usable (TODO: IMPLEMENT THIS)
 
 # --------------------------------------------------------------------
 # Read the command line input arguments
@@ -166,6 +166,36 @@ if ($PVdata->{'Area'} < 0 ) {
 if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0 || $PVdata->{'Thick'} < 0) {
 	die "PV module dimensions need to be greater than 0! \n";
 }
+
+# --------------------------------------------------------------------
+# Read the PV inverter parameters
+# --------------------------------------------------------------------
+
+my $Intertkey = '../Input_upgrade/Input_Invert.csv';
+system ("printf \"Reading $Intertkey\"");
+# Open and read the crosslisting, note that the file handle below is a variable so that it simply goes out of scope
+open (my $INVFILE, '<', $Intertkey) or die ("can't open datafile: $PVkey");
+my $INVdata;	# create an crosslisting hash reference
+while (<$INVFILE>) {
+	$_ = rm_EOL_and_trim($_);
+	
+	if ($_ =~ s/^\*header,//) {	# header row has *header tag, so remove this portion, and the key (first header value) leaving the CSV information
+		$INVdata->{'header'} = [CSVsplit($_)];	# split the header into an array
+	}
+		
+	elsif ($_ =~ s/^\*data,//) {	# data lines will begin with the *data tag, so remove this portion, leaving the CSV information
+		@_ = CSVsplit($_);	# split the data onto the @_ array
+		
+		# create a hash slice that uses the header and data array
+		# although this is a complex structure it simply creates a hash with an array of keys and array of values
+		# @{$hash_ref}{@keys} = @values
+		@{$INVdata}{@{$INVdata->{'header'}}} = @_;
+	};
+};
+delete $INVdata->{'header'};
+# notify the user we are complete and start a new line
+print " - Complete\n";
+close($INVFILE);
 
 # -----------------------------------------------
 # Declare important variables for file generation
@@ -501,9 +531,11 @@ MAIN: {
                 };
                 last EACHHSE; # MOVE TO NEXT RECORD
             };
+            
             # --------------------------------------------------------------------
-            # Begin making PV zones
+            # Load and begin manipulating model files
             # --------------------------------------------------------------------
+            
             # Load in building files to be updated
              foreach my $ext (qw(cfg cnn elec afn ctl)) {
                 my $FILEpath = $dir . "/" . $hse_name . ".$ext"; # Path to cfg file
@@ -514,10 +546,44 @@ MAIN: {
                 rename $FILEpath, "$FILEpath.old";
                 unlink $FILEpath;
             };
-            
+
             my $Num_new=$Num_zones+$PVZoneCount; # Update number of zones in cfg file
             &replace ($hse_file->{'cfg'}, "#ZONE_COUNT: no of zones", 1, 1, "%s\n", "$Num_new");
+
+
+            # Add an AC grid node with variable voltage
+            my $NumEnodes=1; # Base CHREM models should only have one node
+            # Record Number of power only components
+            my $NumPowOnly;
+            for (my $i=0;$i<=$#{$hse_file->{'elec'}};$i++) {
+                if (${$hse_file->{'elec'}}[$i] =~ m/(#NUM_POWER_ONLY_COMPONENTS)/) {
+                    $NumPowOnly = @{$hse_file->{'elec'}}[$i+1];
+                    last;
+                };
+            };
             
+            $NumEnodes++;
+            my $GridNode = $NumEnodes; # Store index of the grid node
+            &insert ($hse_file->{'elec'}, "#END_NODES_DATA", 1, 0, 0, "%s\n", "    $NumEnodes  Grid          1-phase         1  variable          220.00    0"); # Grid node
+            
+            # Link Grid node to AC BUS
+            &replace ($hse_file->{'elec'}, "#BEGIN_CONNECTING_COMPONENTS", 1, 1, "%s\n", "    1 # Number of components");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "# Index db  Component     Phase"); # Wire to connect house AC bus to Grid
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "#       ref name          type");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    1    2  To_grid       1-phase");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "  Lossless wire to connect house to grid");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "# Number of additional data items:");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    6");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    0.0000        0.0000        0.0000        0.0000        0.0000        1.0000");
+            
+            &replace ($hse_file->{'elec'}, "#BEGIN_CONNECTIONS", 1, 1, "%s\n", "    1");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "# Connection        Phases  Connection  Start nodes       End nodes"); #Define connection between the nodes
+            &insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "# Index type        1 2 3   component   pha1 pha2 pha3    pha1 pha2 pha3");
+            &insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "    1  1-phase      1 0 0     1         1    0    0       $NumEnodes    0    0");
+
+            # --------------------------------------------------------------------
+            # Begin generating PV Zones
+            # --------------------------------------------------------------------
             my $CurrZone = $Num_zones; # Indexer to hold current zone number
             my $NewSurfaces = 0; # Counter to hold number of new surfaces
             foreach my $PVName (keys (%{$PVZones})) {
@@ -770,6 +836,37 @@ MAIN: {
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "*Doc,User supplied hc values");
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @InHTC");
                 &insert ($hse_file->{"$ZoneName.htc"}, "#END_PERIODS", 1, 0, 0, "%s\n", "  @OutHTC");
+                
+                # Add d.c. bus and component data for this array in elec
+                # --------------------------------------------------------------------
+                $NumEnodes++;; # Increase number of electrical nodes
+                my $SPMnode = $CurrZone - $Num_zones; # Determine special material node
+                # Make d.c. bus
+                &replace ($hse_file->{'elec'}, "#NODES", 1, 1, "%s\n", "  $NumEnodes");
+                &insert ($hse_file->{'elec'}, "#END_NODES_DATA", 1, 0, 0, "%s\n", "    $NumEnodes  n_PV_$PVName       d.c.          1  calc_PV           220.00    $SPMnode");
+                # Assuming there was no hybrid components in the base
+                &replace ($hse_file->{'elec'}, "#NUM_HYBRID_COMPONENTS ", 1, 1, "%s\n", "  $SPMnode");
+                &insert ($hse_file->{'elec'}, "#END_HYBRID_COMPONENT_INFO", 1, 0, 0, "%s\n", "  $SPMnode  spmaterial  PV_$PVName       d.c.           $NumEnodes    0    0    $SPMnode    0    0");
+                &insert ($hse_file->{'elec'}, "#END_HYBRID_COMPONENT_INFO", 1, 0, 0, "%s\n", " The PV-array connected to PV_$PVName for electricity generation");
+                &insert ($hse_file->{'elec'}, "#END_HYBRID_COMPONENT_INFO", 1, 0, 0, "%s\n", "  0");
+                
+                # Create an inverter for this array
+                my $OpMode = sprintf("%d", $INVdata->{'op_mode'});
+                my $NomPow = sprintf("%5.1f", $INVdata->{'Nom_pow'});
+                my $IdleC = sprintf("%6.5E", $INVdata->{'Idle_const'});
+                my $SetV = sprintf("%6.5f", $INVdata->{'Set_V'});
+                my $InRes = sprintf("%7.6E", $INVdata->{'Int_Res'});
+                my $AuxPow = sprintf("%5.1f", $INVdata->{'Aux_pow'});
+                
+                $NumPowOnly++;
+                &replace ($hse_file->{'elec'}, "#NUM_POWER_ONLY_COMPONENTS", 1, 1, "%s\n", "  $NumPowOnly");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "# No.   i.d.  Comp. name   Phase type  links to nodes ");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $NumPowOnly   20  INV_$PVName        d.c.            $NumEnodes    0    0");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", " Inverter for d.c. node n_PV_$PVName");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "# Number of additional data items:");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    6    0");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $OpMode        $NomPow       $IdleC    $SetV       $InRes    $AuxPow");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $NumEnodes    1"); # Connect back to the AC bus (should be first node
                 
                 # Create the .opr file
                 # --------------------------------------------------------------------

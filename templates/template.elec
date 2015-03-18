@@ -76,10 +76,14 @@
 #
 # Listing and Description of components connecting the nodes
 * connecting components
+#BEGIN_CONNECTING_COMPONENTS
   0
+#END_CONNECTING_COMPONENTS
 ** end connecting components
 # connections between nodes in the network 
 * connections
+#BEGIN_CONNECTIONS
   0
+#END_CONNECTIONS
 ** end connections
 ** electrical network end
