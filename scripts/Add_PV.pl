@@ -45,6 +45,7 @@ use File::Copy;
 use Math::Polygon;
 use Math::Trig;
 use Storable  qw(dclone);
+use POSIX qw(floor);
 
 use lib qw(./modules);
 use General;
@@ -67,6 +68,12 @@ my @sides = ('base_frm', 'left_frm', 'top_frm', 'right_frm','PV_module','back_fr
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+Hse_Gen_(.+)_Issues.txt/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
 my @possible_set_names_print = @{&order($possible_set_names)}; # Order the names so we can print them out if an inappropriate value was supplied
+
+# PV Mounting Parameters
+# --------------------------------------
+my $AzMin = 90; # Minimum azimuth angle to allow PV mounting on the surface
+my $AzMax = 270; # Maximum azimuth angle to allow PV mounting on the surface
+my $SA_Usable = 0.78; # Percentage of surface area that is usable (TODO: IMPLEMENT THIS)
 
 # --------------------------------------------------------------------
 # Read the command line input arguments
@@ -190,7 +197,7 @@ my $issues;
 # -----------------------------------------------
 # Report Data
 # -----------------------------------------------
-my $RepHeader = ['surface_area', 'slope','azimuth','PV_area','Num_modules']; # Header items for report
+my $RepHeader = ['surface_area', 'slope','azimuth','PV_area','Num_modules','Surf_Coverage']; # Header items for report
 my $RepData; # Declare HASH to hold report data
 
 my $ResFname = "../summary_files/Add_PV$set_name" . '_Houses.csv';
@@ -448,7 +455,7 @@ MAIN: {
                     my $NumColl=0; # Number of collectors that can fit onto the surface
                     
                     # Determine if the surface is eligible for PV
-                    if ($area > $PVdata->{'Area'} && $Azimuth >= 90 && $Azimuth <= 270 && $Slope < 90) {
+                    if ($area > $PVdata->{'Area'} && $Azimuth >= $AzMin && $Azimuth <= $AzMax && $Slope < 90) {
                         if ($shape =~ m/^(rect)/i) { # surface geometry is rectangular
                             # Call bin packing algorithm
                             $NumColl=&rect_finite_first_fit(\@lengths,$PVdata->{'Length'},$PVdata->{'Width'});
@@ -464,6 +471,13 @@ MAIN: {
                     };
                     
                     if ($NumColl > 0) { # Collectors may be placed on this surface
+                        my $Coverage = ($NumColl*$PVdata->{'Area'})/$area;
+
+                        if ($SA_Usable < 1 && $Coverage > $SA_Usable) { # Check to see if number of collectors needs to be reduced
+                            $NumColl = floor(($SA_Usable*$area)/$PVdata->{'Area'});
+                            $Coverage = ($NumColl*$PVdata->{'Area'})/$area;
+                        };
+
                         $PVZones->{$surf->{$index}->{'name'}}->{'Area'} = $NumColl*($PVdata->{'Area'});
                         $PVZones->{$surf->{$index}->{'name'}}->{'Slope'} = $Slope;
                         $PVZones->{$surf->{$index}->{'name'}}->{'Azimuth'} = $Azimuth;
@@ -475,6 +489,7 @@ MAIN: {
                         $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'azimuth'}=sprintf("%4.3f",$Azimuth);
                         $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
                         $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
+                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Surf_Coverage'}=sprintf("%4.3f",$Coverage);
                         $PVZoneCount++;
                     };
                 };
