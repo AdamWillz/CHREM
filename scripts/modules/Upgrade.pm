@@ -25,6 +25,7 @@ use Data::Dumper;
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
 use Storable  qw(dclone);
+use POSIX qw(ceil floor);
 
 # use lib qw(./modules);
 use General;
@@ -1680,45 +1681,70 @@ sub random_hse_shuffle {
 
     my $hse_ref = shift;
     my $num_hses = shift;
+    my @SourceList = @{$hse_ref};
     my @new_list = ();
-    my @dupl = ();
-    
+    my $dupl;  # HASH to hold the duplicates for set extrapolation
+    my $bDupl = 0; # flag to indicate duplicates 
+
     # Determine size of source list
-    my $size = scalar @{$hse_ref};
+    my $size = scalar @SourceList;
     
-    # Begin generating random list
-	my $k;
-	for ($k = 0; $k < $num_hses; $k++) {
-		my $random = int(rand($size));
-		$new_list[$k] = ${$hse_ref}[$random];
-	}
+    # Check if number of houses requested is greater than source pool
+    if ($num_hses > ($size+1) ) { # More houses requested than available, duplicate
+        $bDupl = 1;
+        my $SizeOut = $size+1;
+        print "$num_hses houses requested, $SizeOut house records available in set. Duplication will occur\n";
+    };
     
-    # Check for duplicates and store record name
-    my $counter = 1; # Used to index one record ahead
-    foreach my $ReName (@new_list) {
-        JUMP: {
-            if (@dupl) { # array is not empty
-                for (my $k = 0; $k < $#dupl; $k=$k+2) {
-                    if ($ReName eq $dupl[$k]) {
-                        # Already identified duplicate, skip to next record
-                        $counter ++;
-                        last JUMP;
-                    }
-                }
-            }
-            my $DupCount=0;
-            for (my $num = $counter; $num <= $#new_list; $num ++) {
-                if ($ReName eq $new_list[$num]) {
-                    $DupCount ++;
-                }
-            }
-            if ($DupCount > 0) {push(@dupl,($ReName,$DupCount))};
-            $counter ++;
+    # Build set of houses
+    if ($bDupl == 0) { # No need to duplicate, pick random houses
+    
+         for (my $k = 0; $k < $num_hses; $k++) {
+            my $random = int(rand($#SourceList));
+            $new_list[$k] = $SourceList[$random];
+            # Remove house from selection pool
+            splice(@SourceList, $random, 1);
         }
-	}
+        
+    } else { # Need to duplicate
+    
+        # Set return house list to the source list
+        @new_list = @SourceList;
+        
+        # Determine number of times to run through list for duplicates
+        my $loopc = ceil(($num_hses-$#SourceList+1)/($#SourceList+1));
+        my $loopf = floor(($num_hses-$#SourceList+1)/($#SourceList+1));
+        my $MOD = ($num_hses-$#SourceList+1) % ($#SourceList+1);
+        
+        if ($loopc > 0 ) { # Initialize duplicate HASH
+            foreach my $record (@SourceList) {
+                $dupl->{"$record"} = $loopf;
+            }
+            
+            if ($MOD > 0) { # Cycle through one more time for duplicates
+                for (my $k = 0; $k < ceil($MOD*($size+1)); $k++) {
+                    my $random = int(rand($#SourceList));
+                    $dupl->{"$SourceList[$random]"} = $dupl->{"$SourceList[$random]"} + 1;
+                    # Remove house from selection pool
+                    splice(@SourceList, $random, 1);
+                }
+            }
+            
+        } else { # DON'T need to duplicate all houses at least once
+
+            for (my $k = 0; $k < int($num_hses-$size+1); $k++) {
+                    my $random = int(rand($#SourceList));
+                    $dupl->{"$SourceList[$random]"} = 1;
+                    # Remove house from selection pool
+                    splice(@SourceList, $random, 1);
+            }
+        }
+
+    }
+
     #print Dumper @new_list;
-    #print Dumper @dupl;
-    return (\@new_list,\@dupl);
+    #print Dumper $dupl;
+    return (\@new_list,$dupl);
 };
 # Final return value of one to indicate that the perl module is successful
 1;
