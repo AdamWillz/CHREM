@@ -1722,7 +1722,7 @@ sub random_hse_shuffle {
             }
             
             if ($MOD > 0) { # Cycle through one more time for duplicates
-                for (my $k = 0; $k < ceil($MOD*($size+1)); $k++) {
+                for (my $k = 0; $k < int($MOD*($size+1)); $k++) {
                     my $random = int(rand($#SourceList));
                     $dupl->{"$SourceList[$random]"} = $dupl->{"$SourceList[$random]"} + 1;
                     # Remove house from selection pool
