@@ -1,13 +1,17 @@
 #!/usr/bin/perl
 
 # ====================================================================
-# Hse_Gen.pl
+# City_Gen.pl
+# Author: Adam Wills
+# Date: Jan 2015
+
+# BASED UPON Hse_Gen.pl
 # Author: Lukas Swan
 # Date: Oct 2009
 # Copyright: Dalhousie University
 
 # INPUT USE:
-# filename.pl [house type numbers seperated by "/"] [region numbers seperated by "/"; 0 means all] [set_name] [simulation timestep in minutes] [upgarde mode]
+# filename.pl [house type numbers seperated by "/"] [region numbers seperated by "/"; 0 means all] [set_name] [simulation timestep in minutes] [House_list]
 
 # DESCRIPTION:
 # This script generates the esp-r house files for each house of the CSDDRD.
@@ -97,29 +101,22 @@ Hash::Merge::specify_behavior(
 my $hse_types;	# declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
 my $regions;	# declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
 my $set_name;
-
 my $time_step;	# declare a scalar to hold the timestep in minutes
-my $upgrade_mode;  # declare a scalar to turn on upgrade or base case (0=Base, 1=upgrade)
-
-my $upgrade_type;  # declare a scalar to store the first upgrade_type to be modeled (e.g. 1-> SDHW)
-my $list_of_upgrades; # declar a hash which shows the list of all possible upgrades
-my $upgrade_num_name; # declare a hash to store the list of upgrade in case of mix upgrade is needed.
-my $penetration; # declare a scalar that store the penetration level for eligible houses
 my $HseList; # declare path to file holding list of houses to be modelled
-my @houses_desired; # declare an array to store the house names or part of to look
+
+my @houses_desired = (); # declare an array to store the house names or part of to look
 my $input;
 my $num_hses; #number of houses less than total that we want to medel for mode 3
-my $hse_dist; # define a hash to hold the distribution of houses that is going to be selected for each region and house type in mode 3
 my $hse_exist;
-my $flag_SDHW = 0;
 my $bRand;
-my @dupl;
+my $dupl; # HASH to hold the duplication information
+my $houses_refer; # Array reference for sorted list of random houses to build
 # --------------------------------------------------------------------
 # Read the command line input arguments
 # --------------------------------------------------------------------
 
 COMMAND_LINE: {
-	if (@ARGV == 0 || @ARGV == 4) {die "Five arguments are required: house_types regions set_name simulation_time-step_(minutes) upgrade_mode; or \"db\" for database generation\n";};	# check for proper argument count
+	if (@ARGV == 0 || @ARGV == 4) {die "Five arguments are required: house_types regions set_name simulation_time-step_(minutes) source_list; or \"db\" for database generation\n";};	# check for proper argument count
 
 	if ($ARGV[0] eq 'db') {&database_XML(); exit;};	# construct the databases and leave the information loaded in the variables for use in house generation
 
@@ -131,95 +128,35 @@ COMMAND_LINE: {
 	if (shift (@ARGV) =~ /^([1-6]?[0-9])$/) {$time_step = $1;}
 	else {die "Simulation time-step must be equal to or between 1 and 60 minutes\n";};
 
-	$upgrade_mode = shift (@ARGV);
-        if ($upgrade_mode !~ /[0-4]/) {die "Upgrade mode can be (0 = base), (1= upgrade), (2= base_upgrade) (3 = base_randome houses) \n";}
-        elsif ($upgrade_mode == 0) {	
-		@houses_desired = @ARGV;
-		if (@houses_desired == 0) {@houses_desired = '.';}
-	}
-	elsif ($upgrade_mode == 3) {
-		@houses_desired = @ARGV;
-		if (@houses_desired == 0) {
-			print "Do the houses exist? \n";
-			$hse_exist = <STDIN>;
-			chomp ($hse_exist);
-			$hse_exist =~ tr/a-z/A-Z/;
-			print "Please provide how many houses to be modeled \n";
-			$num_hses = <STDIN>;
-			chomp ($num_hses);
-			if ($hse_exist =~ /N|NO/) {
-				$hse_dist = &random_house_dist ($hse_types, $regions, $num_hses);
-			}
-			elsif ($hse_exist !~ /Y|YES/) { die "The existance of houses are not clear \n";}
-		}
-	}
-    elsif ($upgrade_mode == 4) {
-        # Building house database from list in file
-        $HseList = shift (@ARGV);
-        print "Create random set from source file? \n";
-        $bRand = <STDIN>;
-        chomp ($bRand);
-        $bRand =~ tr/a-z/A-Z/;
-        
-        # Open file for editing
-        open( my $fh, '<', $HseList) or die "Can't read file '$HseList' [$!]\n";
-        while (my $line = <$fh>) {
-            # Read and process house number from file
-            chomp $line;
-            $line =~ s{\.[^.]+$}{}; # Remove extension from file name if any
-            push(@houses_desired, $line);
-        }
-        close $fh;
-        
-        if ($bRand =~ /Y|YES/) {
-			# Random selection of houses, update @houses_desired
-               print "Please provide how many houses to be modeled \n";
-               $num_hses = <STDIN>;
-               chomp ($num_hses);
-               my ($houses_refer, $dupl_ref) = &random_hse_shuffle(\@houses_desired,$num_hses);
-               # Use array references to update arrays here
-               @houses_desired = @$houses_refer;
-               @dupl = @$dupl_ref;
-        }
-        
+    # Building house database from list in file
+    $HseList = shift (@ARGV);
+    print "Create random set from source file? \n";
+    $bRand = <STDIN>;
+    chomp ($bRand);
+    $bRand =~ tr/a-z/A-Z/;
+    
+    # Open file for editing
+    # Add full path to list
+    $HseList = "../CityFiles/" . $HseList;
+    open( my $fh, '<', $HseList) or die "Can't read file '$HseList' [$!]\n";
+    while (my $line = <$fh>) {
+        # Read and process house number from file
+        chomp $line;
+        $line =~ s{\.[^.]+$}{}; # Remove extension from file name if any
+        push(@houses_desired, $line);
     }
-        else {
-		print "Please specify which upgrade you need from the following list:  \n";
-		$list_of_upgrades = {1, "Solar domestic hot water", 2, "Window area modification", 3, "Window type modification", 
-				     4, "Fixed venetian blind", 5, "Fixed overhang", 6, "Phase change materials", 
-				     7, "Controllabe venetian blind", 8, "Photovoltaics", 9, "BIPV/T"};
-		foreach (sort keys(%{$list_of_upgrades})){
-			 print "$_ : ", $list_of_upgrades->{$_}, "\t";
-		}
-		print "\n";
-		$upgrade_type = <STDIN>;
-		chomp ($upgrade_type);
-		if ($upgrade_type !~ /^[1-9]?$/) {die "Plase provide a number between 1 and 9 \n";}
-		$upgrade_num_name = &upgrade_name($upgrade_type);
-		$input = &input_upgrade($upgrade_num_name);
+    close $fh;
+    
+    if ($bRand =~ /Y|YES/) {
+		# Random selection of houses, update @houses_desired
+           print "Please provide how many houses to be modeled \n";
+           $num_hses = <STDIN>;
+           chomp ($num_hses);
+           ($houses_refer, $dupl) = &random_hse_shuffle(\@houses_desired,$num_hses);
+           # Use array references to update arrays here
+           @houses_desired = @$houses_refer;
+    }
 
-		foreach my $up (keys (%{$upgrade_num_name})){
-			if ($upgrade_num_name->{$up} =~ /SDHW/) {
-				$flag_SDHW = 1;
-			}
-		}
-		
-# 		foreach (values(%{$upgrade_num_name})) {
-# 		      print " the input is:";
-# 		      print Dumper $input;
-# 		}
-# 		die "end of the test\n";
-
-		@houses_desired = @ARGV;
-		# we need penetration level if there is no house_desired specified
-		if (@houses_desired == 0) {
-			print "Please specify the penetration level (it should be a number between 0-100) \n";
-			$penetration= <STDIN>;
-			chomp ($penetration);
-			if ($penetration =~ /\D/ || $penetration < 0 || $penetration > 100 ) {die "The penetration level should be a number between 0-100 \n";}
-		}; # The eligible house will be selected later in main subroutin.
-		
-        }
 };
 
 # -----------------------------------------------
@@ -280,16 +217,7 @@ my $BCD_dhw_al_ann = &cross_ref_readin($BCD_dhw_al_ann_files[0]);	# create an DH
 # -----------------------------------------------
 # The template extentions that will be used in file generation (alphabetical order)
 my $bld_extensions = ['aim', 'cfg', 'cnn', 'ctl', 'dhw', 'elec', 'gshp', 'hvac', 'log', 'mvnt', 'afn'];	# extentions that are building based (not per zone)
-if ($upgrade_mode == 1) {
-	foreach my $up (keys (%{$upgrade_num_name})){
-		if ($upgrade_num_name->{$up} =~ /SDHW/) {
-			$bld_extensions = ['aim', 'cfg', 'cnn', 'ctl', 'dhw', 'elec', 'gshp', 'hvac', 'log', 'mvnt', 'afn', 'pln'];	# extentions that are building based (not per zone)
-		}
-		elsif ($upgrade_num_name->{$up} =~ /PV|PCM/) {
-			$bld_extensions = ['aim', 'cfg', 'cnn', 'ctl', 'dhw', 'elec', 'gshp', 'hvac', 'log', 'mvnt', 'afn', 'spm'];	# extentions that are building based (not per zone)
-		}
-	}
-}
+
 # If the simulation uses TMC file for optic or CFC file two different templates are needed
 my $zone_extensions = ['bsm', 'con', 'geo', 'obs', 'opr', 'tmc'];
 if ($set_name =~ /TMC/i) {
@@ -299,13 +227,6 @@ if ($set_name =~ /TMC/i) {
 elsif ($set_name =~ /CFC/i) {
 # create cfc file for optical properties
 	$zone_extensions = ['bsm','cfc', 'con', 'geo', 'obs', 'opr'];	# extentions that are used for individual zones
-	if ($upgrade_mode == 1) {
-		foreach my $up (keys (%{$upgrade_num_name})){
-			if ($upgrade_num_name->{$up} =~ /PV/) {
-				$zone_extensions = ['bsm','cfc', 'con', 'geo', 'obs', 'opr','tmc'];	# extentions that are used for individual zones
-			}
-		}
-	}
 };
 
 # -----------------------------------------------
@@ -486,6 +407,20 @@ MULTI_THREAD: {
 	open ($FILE, '>', $file . $ext) or die ("Can't open datafile: $file$ext");	# open writeable file
 	print $FILE XMLout($issues);	# printout the XML data
 	close $FILE;
+    
+    # If duplicates were created, print out duplication data to summary_files
+    if (!!$dupl) {
+        print "Inside\n";
+        my $DuplF = "../summary_files/Hse_Gen$set_name" . "_duplicates.csv";
+        open (my $fID, '>', $DuplF) or die ("\n\nERROR: can't open $DuplF\n");
+        # Print the header to the file
+        print $fID "*header,house,duplications,\n";
+        foreach my $item (keys (%{$dupl})) {
+            my $NumDup = $dupl->{$item};
+            print $fID "*data,$item,$NumDup,\n";
+        };
+        close($fID);
+    }
 
 	print "PLEASE CHECK THE Hse_Gen FILES IN THE ../summary_files DIRECTORY FOR ERROR LISTING\n";	# tell user to go look
 };
@@ -523,57 +458,6 @@ MAIN: {
 		my $code_store;
 		my $con_name_store;
 
-
-		# -----------------------------------------------
-		# If the case is run with upgrade the eligible houses are defined here 
-		# -----------------------------------------------
-
-		if ($upgrade_mode == 1 && @houses_desired == 0) { # if we want to model houses with upgrade
-			@houses_desired = &eligible_houses_pent($hse_type, $region, $upgrade_num_name, $penetration, $input);
-		}
-		
-# 		print Dumper $upgrade_num_name;
-		
-		elsif ($upgrade_mode == 2 && @houses_desired == 0) {# if we want to model the base case for the upgrade we already simulated
-			my %win_types = (203, 2010, 210, 2100, 213, 2110, 300, 3000, 320, 3200, 323, 3210, 333, 3310);
-			my $upgrade = ''; 
-			foreach my $up (keys (%{$upgrade_num_name})){
-				if ($upgrade_num_name->{$up} !~ /WTM/) {
-					$upgrade = $upgrade . $upgrade_num_name->{$up}.'_';
-				}
-				else {
-					my $win_type = $win_types{$input->{$upgrade_num_name->{$up}}->{'Wndw_type'}};
-					$upgrade = $upgrade . $upgrade_num_name->{$up}.$win_type.'_';
-				}
-			}
-			my $house_file = '../Desired_houses/selected_houses_'.$upgrade.$hse_type.'_subset_'.$region.'_'.'pent_'.$penetration.'.csv';
-			my $HOUSES;
-			open ($HOUSES, '<', $house_file) or die ("Can't open datafile: $house_file");
-			my $num_hse = 0;
-			      while (<$HOUSES>){
-				   $houses_desired[$num_hse] = &rm_EOL_and_trim($_);
-				   $num_hse++;
-			      }
-            close $HOUSES;
-# 			print "the number of houses are $num_hse \n";
-		}
-	      
-		elsif ($upgrade_mode == 3 && @houses_desired == 0) { # if we want to mdel base houses with knowing the number of targets
-			if ($hse_exist =~ /N|NO/) {
-				@houses_desired = &houses_selected_random($hse_type, $region,$hse_dist, $num_hses);
-			}
-			elsif ($hse_exist =~ /Y|YES/) {
-			      my $house_file = '../Random_houses/random_selected_houses_'.$hse_type.'_subset_'.$region.'_num_'.$num_hses.'.csv';
-			      my $HOUSES;
-			      open ($HOUSES, '<', $house_file) or die ("Can't open datafile: $house_file");
-			      while (<$HOUSES>){
-				@houses_desired = CSVsplit($_);
-			      }
-                  close $HOUSES;
-			}
-		}
-    
-# 		die "end of the test\n";
 		# -----------------------------------------------
 		# GO THROUGH EACH LINE OF THE CSDDRD SOURCE DATAFILE AND BUILD THE HOUSE MODELS
 		# -----------------------------------------------
@@ -634,28 +518,7 @@ MAIN: {
 						or &die_msg ('Attachment: bad attachment value (1-24', $CSDDRD->{'attachment_type'}, $coordinates);
 			
 			# describe the basic sides of the house
-			my @sides = ('front', 'right', 'back', 'left');
-			
-# 			In case of WTM, WAM, FVB and CVB upgrade we need to change the cardinal orientaions to the sides one from input data
-			if ($upgrade_mode == 1) {
-				my $house_sides= &up_house_side ($CSDDRD->{'front_orientation'});
-				foreach my $up_name (values(%{$upgrade_num_name})) {
-					if ($up_name =~ /WTM|WAM|FVB|CVB/) {
-						for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-							foreach (@sides) {
-								if ($input->{$up_name}->{'Side_'.$num} =~ /$house_sides->{$_}/) {
-									$input->{$up_name}->{'Side_'.$num} = $_;
-								}
-							}
-						}
-					}
-				}
-			}
-# 			foreach (values(%{$upgrade_num_name})) {
-# 		      print " the input is:";
-# 		      print  Dumper $input;
-# 		}
-# 		die "end of the test\n";		
+			my @sides = ('front', 'right', 'back', 'left');	
 
 			# -----------------------------------------------
 			# DETERMINE ZONE INFORMATION (NUMBER AND TYPE) FOR USE IN THE GENERATION OF ZONE TEMPLATES
@@ -814,18 +677,6 @@ MAIN: {
 					};
 				};
 				
-				# If we have a PV system we need to add another zone which includes the PV system
-				if ($upgrade_mode == 1) {
-					foreach my $up (keys (%{$upgrade_num_name})){
-						if ($upgrade_num_name->{$up} =~ /PV/) {
-							$zones->{'name->num'}->{'PV'} = keys(%{$zones->{'name->num'}}) + 1;
-							# Record the above/below zone info
-							# in case of PV we have to have a slope ceiling
-							$zones = &lower_and_upper_zone($zones, 'attic', 'PV');
-						}
-					}
-				}
-				
 				# since we have completed the fill of zone names/numbers in order, reverse the hash ref to be a zone number lookup for a name
 				$zones->{'num->name'} = {reverse (%{$zones->{'name->num'}})};
 				# Also store the zone names in order of zone number
@@ -937,14 +788,6 @@ MAIN: {
 			CFG: {
 
 				&replace ($hse_file->{'cfg'}, "#ROOT", 1, 1, "%s\n", "*root $CSDDRD->{'file_name'}");	# Label with the record name (.HSE stripped)
-				# if there is plant network the index in cfg has to be changed
-				if ($upgrade_mode == 1) {
-					foreach my $up (keys (%{$upgrade_num_name})){
-						if ($upgrade_num_name->{$up} =~ /SDHW/) {
-							&replace ($hse_file->{'cfg'},"#INDEX",1,1, "%s\n", "*indx 3 # Building & Plant"); 
-						}
-					}
-				}
 				
 				# Cross reference the weather city to the CWEC weather data
 				if ($CSDDRD->{'HOT2XP_PROVINCE_NAME'} eq $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}}->{'HOT2XP_PROVINCE_NAME'}) {	# find a matching climate name that has an appropriate province name
@@ -986,16 +829,6 @@ MAIN: {
 				&replace ($hse_file->{'cfg'}, "#SIM_PRESET_LINE3", 1, 1, "%s\n", "*sblr $CSDDRD->{'file_name'}.res");	# res file path
 				&replace ($hse_file->{'cfg'}, "#SIM_PRESET_LINE4", 1, 1, "%s\n", "*selr $CSDDRD->{'file_name'}.elr");	# electrical load results file path
 				&replace ($hse_file->{'cfg'}, "#SIM_PRESET_LINE5", 1, 1, "%s\n", "*sflr $CSDDRD->{'file_name'}.mfr");	# mass flow results file path
-				if ($upgrade_mode == 1) {
-					foreach my $up (keys (%{$upgrade_num_name})){
-						if ($upgrade_num_name->{$up} =~ /SDHW/) {
-							&replace ($hse_file->{'cfg'}, "#SIM_PRESET_LINE6", 1, 1, "%s\n", "*splr $CSDDRD->{'file_name'}.plr");	# plant results file path
-						}
-						elsif ($upgrade_num_name->{$up} =~ /PV|PCM/) {
-							&replace ($hse_file->{'cfg'}, "#SPM", 1, 1, "%s\n", "*spf ./$CSDDRD->{'file_name'}.spm");	# special material path
-						}
-					}
-				}
 				&replace ($hse_file->{'cfg'}, "#PROJ_LOG", 1, 2, "%s\n", "$CSDDRD->{'file_name'}.log");	# log file path
 				&replace ($hse_file->{'cfg'}, "#BLD_NAME", 1, 2, "%s\n", "$CSDDRD->{'file_name'}");	# name of the building
 
@@ -1025,37 +858,7 @@ MAIN: {
 				};
 				
 				&replace ($hse_file->{'cfg'}, "#AIR_FLOW_NETWORK", 1, 1, "%s\n%s\n%s\n", "1 # AFN exists", "./$CSDDRD->{'file_name'}.afn ", "@{$zones->{'num_order'}} # Name of corresponding AFN node in zone order listed above");	# air flow network path, and AFN node zone correspondance
-				# path to the plant network in case of SDHW
-				if ($upgrade_mode == 1) {
-					foreach my $up (keys (%{$upgrade_num_name})){
-						if ($upgrade_num_name->{$up} =~ /SDHW/) {
-							&replace ($hse_file->{'cfg'}, "#PLANT", 1, 1, "%s\n%s\n", "* Plant", "./$CSDDRD->{'file_name'}.pln   # plant network description"); 
-						}
-					}
-				}
 			};
-			
-
-			# -----------------------------------------------
-			# Obstruction, Shading and Insolation file
-			# -----------------------------------------------
-# 			OBS_ISI: {
-# 				my $obs = 0;	# replace this with logic to decide if obstruction is present
-				# ALSO FILL OUT THE OBS FILE
-				
-				# If there are obstructions then leave on the *obs file and *isi (for each zone) tags in the cfg file
-# 				unless ($obs) {	# there is no obstruction desired so uncomment it in the cfg file
-				
-# 					foreach my $line (@{$hse_file->{'cfg'}}) {	# check each line of the cfg file
-					
-# 						if (($line =~ /^(\*obs.*)/) || ($line =~ /^(\*isi.*)/)) {	# if *obs or *isi tag is present then
-# 							$line = "#$1\n";	# comment out the *obs or *isi tag
-							# do not put a 'last' statement here b/c we have to comment both the obs and the isi
-# 						};
-# 					};
-# 				};
-# 			};
-
 
 			# -----------------------------------------------
 			# Preliminary geo file generation
@@ -1463,31 +1266,6 @@ MAIN: {
 				# cycle through and check the surface area to window size and determine the popular window type for each side
 				
 				foreach my $surface (@sides) { 
-				
-					# if we have the WAM modification the window area has to be changed to the ratio we want it to be for each side
-					if ($upgrade_mode == 1) {
-						foreach my $up_name (values(%{$upgrade_num_name})) {
-							if ($up_name eq 'WAM') {
-								for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-									if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-										
-										if ($input->{$up_name}->{'Wndw_Wall_Ratio'} !~ /N\/A/) {
-											$CSDDRD->{'wndw_area_' . $surface} = $record_indc->{'wndw'}->{'total'}->{'available-SA'}->{$surface} * $input->{$up_name}->{'Wndw_Wall_Ratio'};
-										}
-										elsif ($input->{$up_name}->{'Wndw_Area'} !~ /N\/A/) {
-											if ($input->{$up_name}->{'Wndw_Area'} <= $record_indc->{'wndw'}->{'total'}->{'available-SA'}->{$surface}) {
-												$CSDDRD->{'wndw_area_' . $surface} = $input->{$up_name}->{'Wndw_Area'};
-											}
-											else {
-												die "the window area is exceeds the available surface area! \n";
-											}
-										}
-										
-									}
-								}
-							}
-						}
-					}
 
 					# check that the window area is less than the available surface area on the side
 					($CSDDRD->{'wndw_area_' . $surface}, $issues) = check_range("%6.2f", $CSDDRD->{'wndw_area_' . $surface}, 0, $record_indc->{'wndw'}->{'total'}->{'available-SA'}->{$surface}, "WINDOWS Available Area - $surface", $coordinates, $issues);
@@ -1527,33 +1305,6 @@ MAIN: {
 						
 						$record_indc->{'wndw'}->{$surface}->{'code'} =~ /(\d{3})\d{3}/ or &die_msg ('GEO: Unknown window code', $record_indc->{'wndw'}->{$surface}->{'code'}, $coordinates);
 						my $wndw_code = $1;
-						if ($upgrade_mode == 1) {
-							foreach my $up_name (values(%{$upgrade_num_name})) {
-								if ($up_name eq 'WTM') {
-									for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-										if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-										    $wndw_code = $input->{$up_name}->{'Wndw_type'};
-										}
-									}
-								}
-								elsif ($up_name =~ /FVB|CVB/) { # defining window type
-									for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-										if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-											$wndw_code =~ /(\d)\d{2}/;
-# 											
-											if (($1 == 2) && ($input->{$up_name}->{'blind_position'} =~ /\w{2}/)) {
-												my $blind_pos = 'B';
-												$wndw_code = $wndw_code.'_'. $blind_pos;
-												
-											}
-											else {
-												$wndw_code = $wndw_code.'_'.$input->{$up_name}->{'blind_position'};
-											}
-										}
-									}
-								}
-							}
-						}
 						if ($set_name =~/TMC/i) {
 							my $con = "WNDW_$wndw_code";
 							# THIS IS A SHORT TERM WORKAROUND TO THE FACT THAT I HAVE NOT CHECKED ALL THE WINDOW TYPES YET FOR EACH SIDE
@@ -2318,32 +2069,6 @@ MAIN: {
 									$con->{'name'} = "WNDW_$1";	#this lines is unnecessary 
 									my $wndw_code = $1;
 									my $fr_code =$2;
-									if ($upgrade_mode == 1) {
-										foreach my $up_name (values(%{$upgrade_num_name})) {
-											if ($up_name eq 'WTM') {
-												for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-													if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-														$wndw_code = $input->{$up_name}->{'Wndw_type'};
-														$fr_code = $input->{$up_name}->{'Frame_type'};
-													}
-												}
-											}
-											elsif ($up_name =~ /FVB|CVB/) { # defining window type in case of shading existance
-												for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-													if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-														$wndw_code =~ /(\d)\d{2}/;
-														if (($1 == 2) && ($input->{$up_name}->{'blind_position'} =~ /\w{2}/)) {
-															my $blind_pos = 'B';
-															$wndw_code = $wndw_code.'_'. $blind_pos;
-														}
-														else {
-															$wndw_code = $wndw_code.'_'.$input->{$up_name}->{'blind_position'};
-														}
-													}
-												}
-											}
-										}
-									}
 									
 									if ($set_name =~ /TMC/i) {
 										# determine the window type name
@@ -2810,32 +2535,6 @@ MAIN: {
 									$con->{'name'} = "WNDW_$1";
 									my $wndw_code = $1;
 									my $fr_code = $2;
-									if ($upgrade_mode == 1) {
-										foreach my $up_name (values(%{$upgrade_num_name})) {
-											if ($up_name eq 'WTM') {
-												for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-													if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-														$wndw_code = $input->{$up_name}->{'Wndw_type'};
-														$fr_code = $input->{$up_name}->{'Frame_type'};
-													}
-												}
-											}
-											elsif ($up_name =~ /FVB|CVB/) { #defining window construction in case of shading existance
-												for (my $num = 1; $num <= $input->{$up_name}->{'Num'}; $num ++) {
-													if ($input->{$up_name}->{'Side_'.$num} =~ /$surface/) {
-														$wndw_code =~ /(\d)\d{2}/;
-														if (($1 == 2) && ($input->{$up_name}->{'blind_position'} =~ /\w{2}/)) {
-															my $blind_pos = 'B';
-															$wndw_code = $wndw_code.'_'. $blind_pos;
-														}
-														else {
-															$wndw_code = $wndw_code.'_'.$input->{$up_name}->{'blind_position'};
-														}
-													}
-												}
-											}
-										}
-									}
 									if ($set_name =~ /TMC/i){
 										# determine the window type name
 										$con->{'name'} = "WNDW_$wndw_code";
@@ -3199,293 +2898,29 @@ MAIN: {
 								
 								unless (defined ($optic_C_lib{$optic})) {
 									$optic_C_lib{$optic} = keys (%optic_C_lib);
-									my $layers_solar;
-									my $layers_visible;
-									my $layers_longwave;
-									if ($upgrade_mode == 1) {
-										CFC_FILE: foreach my $up_name (values(%{$upgrade_num_name})) {
-											if ($up_name =~ /FVB|CVB/) {
-												my $optic_old = $optic;
-												$optic =~ /(\w{7}\d{3})\w{2}/;
-												$optic = $1;
-												# count number of layers
-												$layers_solar = @{$cfc_data->{$optic}->{'layers_solar_normal'}};
-												$layers_visible = @{$cfc_data->{$optic}->{'layers_visible_normal'}};
-												$layers_longwave = @{$cfc_data->{$optic}->{'layers_longwave_normal'}};
-												$layers_solar = $layers_solar + 2;
-												
-												# print the number of layers;
-												&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s\n", "$layers_solar");
-												my $blind_type = 'Blind_'.$input->{$up_name}->{'slat_type'};
-												# insert eaach layer of glazing and shading in the cfc file
-												if ($input->{$up_name}->{'blind_position'} =~ /O/) {#	if the blind is in outter side
-													foreach my $shade_solar (@{$cfc_data->{$blind_type}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_solar->{'R_Tran'}, $shade_solar->{'description'} );
-													};
-													foreach my $gap_solar (@{$cfc_data->{'GAP'}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_solar->{'R_Tran'}, $gap_solar->{'description'} );
-													};
-													foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
-													};
-													foreach my $shade_visible (@{$cfc_data->{$blind_type}->{'layers_visible_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_visible->{'R_Tran'}, $shade_visible->{'description'});
-													};
-													foreach my $gap_visible (@{$cfc_data->{'GAP'}->{'layers_visible_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_visible->{'R_Tran'}, $gap_visible->{'description'});
-													};
-													foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
-													};
-													foreach my $shade_longwave (@{$cfc_data->{$blind_type}->{'layers_longwave_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_longwave->{'R_Tran'}, $shade_longwave->{'description'});
-													};
-													foreach my $gap_longwave (@{$cfc_data->{'GAP'}->{'layers_longwave_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_longwave->{'R_Tran'}, $gap_longwave->{'description'});
-													};
-													foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
-													};
-													
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", "2 0" );
-													foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", $layer_solar->{'code'});
-													};
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" );
-													foreach my $gap_gas (@{$cfc_data->{'GAP'}->{'gas_layers'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $gap_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $gap_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $gap_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $gap_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-													};
-													foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-													};
-												}
-												elsif ($input->{$up_name}->{'blind_position'} =~ /I/) {# if the blind is in inner side
-													foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
-													};
-													foreach my $gap_solar (@{$cfc_data->{'GAP'}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_solar->{'R_Tran'}, $gap_solar->{'description'} );
-													};
-													foreach my $shade_solar (@{$cfc_data->{$blind_type}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_solar->{'R_Tran'}, $shade_solar->{'description'} );
-													};
-													foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
-													};
-													foreach my $gap_visible (@{$cfc_data->{'GAP'}->{'layers_visible_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_visible->{'R_Tran'}, $gap_visible->{'description'});
-													};
-													foreach my $shade_visible (@{$cfc_data->{$blind_type}->{'layers_visible_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_visible->{'R_Tran'}, $shade_visible->{'description'});
-													};
-													foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
-													};
-													foreach my $gap_longwave (@{$cfc_data->{'GAP'}->{'layers_longwave_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_longwave->{'R_Tran'}, $gap_longwave->{'description'});
-													}; 
-													foreach my $shade_longwave (@{$cfc_data->{$blind_type}->{'layers_longwave_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_longwave->{'R_Tran'}, $shade_longwave->{'description'});
-													};
-													
-													foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", $layer_solar->{'code'});
-													};
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", "0 2" );
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" ); 
-													foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-													};
-													foreach my $gap_gas (@{$cfc_data->{'GAP'}->{'gas_layers'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $gap_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $gap_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $gap_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $gap_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-													};
-													
-												}
-												elsif ($input->{$up_name}->{'blind_position'} =~ /B|BO/) {# if the blind is between glazing in case of double glazed or between the outter pane in triple glazed case
-													my $glazing = 0;
-													foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-														if ($layer_solar->{'description'} =~ /glazing/) {
-															$glazing++;
-														}
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
-														if (($layer_solar->{'description'} =~ /glazing/) && ($glazing == 1)) {
-															
-															foreach my $gap_solar (@{$cfc_data->{'GAP'}->{'layers_solar_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_solar->{'R_Tran'}, $gap_solar->{'description'} );
-															}
-															foreach my $shade_solar (@{$cfc_data->{$blind_type}->{'layers_solar_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_solar->{'R_Tran'}, $shade_solar->{'description'} );
-															};
-														};
-													};
-													$glazing = 0;
-													foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
-														if ($layer_visible->{'description'} =~ /glazing/) {
-															$glazing++;
-														}
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
-														if (($layer_visible->{'description'} =~ /glazing/) && ($glazing == 1)) {
-															foreach my $gap_visible (@{$cfc_data->{'GAP'}->{'layers_visible_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_visible->{'R_Tran'}, $gap_visible->{'description'});
-															};
-															foreach my $shade_visible (@{$cfc_data->{$blind_type}->{'layers_visible_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_visible->{'R_Tran'}, $shade_visible->{'description'});
-															};
-														}
-													}
-													$glazing = 0;
-													foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
-														if ($layer_longwave->{'description'} =~ /glazing/) {
-															$glazing++;
-														}
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
-														if (($layer_longwave->{'description'} =~ /glazing/) && ($glazing == 1)) {
-															foreach my $gap_longwave (@{$cfc_data->{'GAP'}->{'layers_longwave_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_longwave->{'R_Tran'}, $gap_longwave->{'description'});
-															};
-															foreach my $shade_longwave (@{$cfc_data->{$blind_type}->{'layers_longwave_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_longwave->{'R_Tran'}, $shade_longwave->{'description'});
-															};
-														}
-													}
-													if ($input->{$up_name}->{'blind_position'} =~ /B/) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", "1,0,2,0,1" );
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" ); 
-														foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-															&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-														};
-														foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-															&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-														};
-													}
-													else{
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", "1,0,2,0,1,0,1" );
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" ); 
-														foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-															&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-														};
-														my $num_layer = 0;
-														foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-															&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-															$num_layer++;
-															if ($num_layer == 1) {last;}
-														};
-														
-													}
-												}
-												elsif ($input->{$up_name}->{'blind_position'} =~ /BI/) {# if the blind is between the inner pane in triple glazed case
-													my $glazing = 0;
-													foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-														if ($layer_solar->{'description'} =~ /glazing/) {
-															$glazing++;
-														}
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
-														if (($layer_solar->{'description'} =~ /glazing/) && ($glazing == 2)) {
-															
-															foreach my $gap_solar (@{$cfc_data->{'GAP'}->{'layers_solar_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_solar->{'R_Tran'}, $gap_solar->{'description'} );
-															}
-															foreach my $shade_solar (@{$cfc_data->{$blind_type}->{'layers_solar_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_solar->{'R_Tran'}, $shade_solar->{'description'} );
-															};
-														};
-													};
-													$glazing = 0;
-													foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
-														if ($layer_visible->{'description'} =~ /glazing/) {
-															$glazing++;
-														}
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
-														if (($layer_visible->{'description'} =~ /glazing/) && ($glazing == 2)) {
-															foreach my $gap_visible (@{$cfc_data->{'GAP'}->{'layers_visible_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_visible->{'R_Tran'}, $gap_visible->{'description'});
-															};
-															foreach my $shade_visible (@{$cfc_data->{$blind_type}->{'layers_visible_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_visible->{'R_Tran'}, $shade_visible->{'description'});
-															};
-														}
-													}
-													$glazing = 0;
-													foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
-														if ($layer_longwave->{'description'} =~ /glazing/) {
-															$glazing++;
-														}
-														&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
-														if (($layer_longwave->{'description'} =~ /glazing/) && ($glazing == 2)) {
-															foreach my $gap_longwave (@{$cfc_data->{'GAP'}->{'layers_longwave_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $gap_longwave->{'R_Tran'}, $gap_longwave->{'description'});
-															};
-															foreach my $shade_longwave (@{$cfc_data->{$blind_type}->{'layers_longwave_normal'}}) {
-																&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $shade_longwave->{'R_Tran'}, $shade_longwave->{'description'});
-															};
-														}
-													}
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", "1,0,1,0,2,0,1" );
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" );
-													my $num_layer = 0;
-													foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-														&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-														$num_layer++;
-														if ($num_layer == 1) {last;}
-													};
-												}
-												&insert ($hse_file->{"$zone.cfc"},"#END_GAS_SLAT_DATA", 1, 0, 0, "%s\n", "# slat-type blind attributes for cfc type: 1");
-												&insert ($hse_file->{"$zone.cfc"},"#END_GAS_SLAT_DATA", 1, 0, 0, "%s\n", "# slat: width(mm); spacing(mm); angle(deg); orientation(HORZ/VERT); crown (mm); w/r ratio; slat thickness (mm)");
-												&insert ($hse_file->{"$zone.cfc"},"#END_GAS_SLAT_DATA", 1, 0, 0, "%s %s %s %s %s %s %s\n", $input->{$up_name}->{'width'}, $input->{$up_name}->{'spacing'}, $input->{$up_name}->{'slat_angle'}, $input->{$up_name}->{'orientation'}, $input->{$up_name}->{'crown'}, $input->{$up_name}->{'w/r_ratio'}, $input->{$up_name}->{'thickness'}); 
-												$optic = $optic_old;
-												last CFC_FILE; # we need to make the cfc file once no matter how many upgrade we have
-											}
-											else {#no shading 
-												$layers_solar = @{$cfc_data->{$optic}->{'layers_solar_normal'}};
-												$layers_visible = @{$cfc_data->{$optic}->{'layers_visible_normal'}};
-												$layers_longwave = @{$cfc_data->{$optic}->{'layers_longwave_normal'}};
-												# print the number of layers;
-												&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s\n", "$layers_solar");
-# 												print "$layers_solar \n";
-												foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-													&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
-												};
-												foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
-													&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
-												};
-												foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
-													&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
-												};
-												foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", $layer_solar->{'code'});
-												};
-												&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" );	
-												foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-													&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-												};
-												last CFC_FILE; # we need to make the cfc file once no matter how many upgrade we have
-											}
-										}
-									}
-									else{# no upgrade 
-										my $layers_solar = @{$cfc_data->{$optic}->{'layers_solar_normal'}};
-										my $layers_visible = @{$cfc_data->{$optic}->{'layers_visible_normal'}};
-										my $layers_longwave = @{$cfc_data->{$optic}->{'layers_longwave_normal'}};
-										# print the number of layers;
-										&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s\n", "$layers_solar");
-# 										print "$layers_solar \n";
-										foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-											&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
-										};
-										foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
-											&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
-										};
-										foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
-											&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
-										};
-										foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
-											&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", $layer_solar->{'code'});
-										};
-										&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" );	
-										foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
-											&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
-										};
-									}
+									my $layers_solar = @{$cfc_data->{$optic}->{'layers_solar_normal'}};
+									my $layers_visible = @{$cfc_data->{$optic}->{'layers_visible_normal'}};
+									my $layers_longwave = @{$cfc_data->{$optic}->{'layers_longwave_normal'}};
+									# print the number of layers;
+									&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s\n", "$layers_solar");
+# 									print "$layers_solar \n";
+									foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
+										&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_solar->{'R_Tran'}, $layer_solar->{'description'} );
+									};
+									foreach my $layer_visible (@{$cfc_data->{$optic}->{'layers_visible_normal'}}) {
+										&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_visible->{'R_Tran'}, $layer_visible->{'description'});
+									};
+									foreach my $layer_longwave (@{$cfc_data->{$optic}->{'layers_longwave_normal'}}) {
+										&insert ($hse_file->{"$zone.cfc"}, "#END_CFC_DATA", 1, 0, 0, "%s # %s \n", $layer_longwave->{'R_Tran'}, $layer_longwave->{'description'});
+									};
+									foreach my $layer_solar (@{$cfc_data->{$optic}->{'layers_solar_normal'}}) {
+										&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s ", $layer_solar->{'code'});
+									};
+									&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "# %s\n", "layer type index" );	
+									foreach my $layer_gas (@{$cfc_data->{$optic}->{'gas_layers'}}) {
+										&insert ($hse_file->{"$zone.cfc"}, "#END_GAS_SLAT_DATA", 1, 0, 0, "%s # %s\n%s # %s\n%s # %s\n%s # %s\n", $layer_gas->{'mol_mass'}, "molecular mass of gas mixture (g/gmole)",  $layer_gas->{'coefs_cond'}, "a and b coeffs.- gas conductivity (W/m.K)", $layer_gas->{'coefs_visc'}, "a and b coeffs.- gas viscosity (N.s/m2)", $layer_gas->{'coefs_spec_h'}, "a and b coeffs.- specific heat (J/kg.K)");
+									};
+									
 									
 
 									
@@ -3790,25 +3225,6 @@ MAIN: {
 							&insert ($hse_file->{'elec'}, '#END_POWER_ONLY_COMPONENT_INFO', 1, 0, 0, "  %s\n", $field);
 						};
 					};
-					if ($upgrade_mode == 1) { # in case of PV we need a DC_AC Inverter and PV_bus 
-						foreach my $up (keys (%{$upgrade_num_name})){
-							if ($upgrade_num_name->{$up} =~ /PV/) {
-								$component++;
-								&insert ($hse_file->{'elec'}, '#END_POWER_ONLY_COMPONENT_INFO', 1, 0, 0, "  %s\n", "$component   20  DC_ACinve       d.c.           2    0    0");
-								&insert ($hse_file->{'elec'}, '#END_POWER_ONLY_COMPONENT_INFO', 1, 0, 0, "  %s\n", "DC_AC Inverter for PV module");
-								&insert ($hse_file->{'elec'}, '#END_POWER_ONLY_COMPONENT_INFO', 1, 0, 0, "  %s\n", '6 0');
-								&insert ($hse_file->{'elec'}, '#END_POWER_ONLY_COMPONENT_INFO', 1, 0, 0, "  %s\n", '1.000 5000.0 0.89750E-05 3.6500 2.0000 0.0000');
-								# sending and recieving node (send is PV and receive is AC)
-								&insert ($hse_file->{'elec'}, '#END_POWER_ONLY_COMPONENT_INFO', 1, 0, 0, "  %s\n", '2 1');
-								&insert ($hse_file->{'elec'}, '#END_NODES_DATA', 1, 0, 0, "  %s\n", "  2   PV_bus         d.c.          1  calc_PV           220.00    1");
-								&replace ($hse_file->{'elec'}, '#NODES', 1, 1, "  %s\n", '2');
-								&replace ($hse_file->{'elec'}, '#NUM_HYBRID_COMPONENTS', 1, 1, "  %s\n", '1');
-								&insert ($hse_file->{'elec'}, '#END_HYBRID_COMPONENT_INFO', 1, 0, 0, "  %s\n %s \n", '1  spmaterial  pv-array       d.c.           2    0    0    1    0    0', 'The PV-array connected to a PV_BUS for the electricity generation');
-								&insert ($hse_file->{'elec'}, '#END_ADD', 1, 0, 0, "  %s\n", '0');
-							}
-						}
-					}
-					
 					&replace ($hse_file->{'elec'}, '#NUM_POWER_ONLY_COMPONENTS', 1, 1, "  %s\n", $component);
 
 					# -----------------------------------------------
@@ -3994,82 +3410,6 @@ MAIN: {
 						};
 					};
 				};
-				
-	# 			-----------------------------------------------
-	# 			SPM file
-	# 			-----------------------------------------------
-	# 			if we have PV, BIPV/T or PCM we need spm file
-				SPM: {
-					if ($upgrade_mode == 1) {
-						foreach my $up_name (values (%{$upgrade_num_name})){
-							if ($up_name =~ /PV/) {
-								my $num_nodes = 1;
-								my $PV_zone =  $zones->{'name->num'}->{'PV'}; # the PV zone number 
-								my $PV_surf = $record_indc->{'PV'}->{'surfaces'}->{'ceiling'}->{'index'}; # the surface number which PV is installed
-								
-								my $PV_Voc = sprintf ("%4.4f",$input->{$up_name}->{'Vmpp'} * $input->{$up_name}->{'Voc/Vmpp'}); # open circuit voltage (V)
-								my $PV_Impp = sprintf ("%4.4f",$input->{$up_name}->{'Isc'} /  $input->{$up_name}->{'Isc/Impp'}); # Current at maximum power point (I)
-								my $Href = sprintf ("%4.4f",1000); # reference insolation (W/m2)
-								my $alpha = sprintf ("%4.6f",$input->{$up_name}->{'alpha*1000'} / 1000); # temperature coefficient of short circuit current (1/K)
-								my $beta = sprintf ("%4.4f",$input->{$up_name}->{'beta*1000'} / 1000); # coefficient of logarithm of irradiance for open corcuit voltage (-)
-								my $gamma = sprintf ("%4.4f",$input->{$up_name}->{'gamma*1000'} / -1000); # temperature coefficient of open-circuit voltage (1/K)
-								my $PV_Isc = sprintf ("%4.4f",$input->{$up_name}->{'Isc'});
-								my $PV_Vmpp = sprintf ("%4.4f",$input->{$up_name}->{'Vmpp'});
-								my $PV_area = $record_indc->{'PV'}->{'SA'}->{'top'};
-								
-								my $N = $Href * $input->{$up_name}->{'efficiency'}/100 * $PV_area / $input->{$up_name}->{'power_individual'}; # number of modules on the surface can be calculated when area is defined as the largest integer number less than (Href * efficiency * area / power_individual)
-								my $floor_N = sprintf ("%4.4f",floor ($N));
-								my $PV_factor =  sprintf ("%4.4f",$input->{$up_name}->{'mis_factor'});
-								
-								&insert ($hse_file->{"spm"}, "#END_SPM_DATA", 1, 0, 0, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", "# Node No: $num_nodes", "WATSUN-PV_multic # label","# Zone Surf Node Type Opq/Trn", "$PV_zone $PV_surf 4 5 0", "# No. of data items.", "16", "# Data:", "$PV_Voc $PV_Isc $PV_Vmpp $PV_Impp $Href 298.0000 $alpha $gamma $beta 36.0000 1.0000 $floor_N 0.0000 0.0000 0.0000 $PV_factor");
-							}
-							if ($up_name =~ /PCM/) {
-								my $num_nodes = 1;
-								my @PCM_surf;
-								my @con_name;
-								my @node;
-								$PCM_surf[1] = $record_indc->{'main_1'}->{'surfaces'}->{'floor'}->{'index'}; # the surface number which PCM is installed
-								$con_name[1] = $record_indc->{'main_1'}->{'surfaces'}->{'floor'}->{'construction'}->{'name'}; # the construction name of floor
-								
-								# if there is an exposed floor we have two nodes to add special materials
-								if (defined ($record_indc->{'main_1'}->{'surfaces'}->{'floor-exposed'}->{'index'})){
-									$num_nodes = 2; 
-									$PCM_surf[2] = $record_indc->{'main_1'}->{'surfaces'}->{'floor-exposed'}->{'index'};
-									$con_name[2] = $record_indc->{'main_1'}->{'surfaces'}->{'floor-exposed'}->{'construction'}->{'name'};
-								}
-								for (my $con = 1; $con <= $num_nodes; $con ++) {
-									if ($con_name[$con] =~ /M->B|M_slab/) {
-										$node[$con] = 2;
-									}
-									elsif ($con_name[$con] =~ /M->C|M_slab_bot|M_slab_top/) {
-										$node[$con] = 4;
-									}
-									else {
-										$node[$con] = 6;
-									}
-								}
-								&insert ($hse_file->{"spm"}, "#NUM_SPM_NODE", 1, 1, 1, "%s\n", "$num_nodes # No. of special material nodes.");
-								my $PCM_zone =  $zones->{'name->num'}->{'main_1'}; # the PCM zone number
-								
-								
-								
-								my $melt_temp = sprintf ("%4.4f",$input->{$up_name}->{'melt_temp'});
-								my $solid_temp = sprintf ("%4.4f",$input->{$up_name}->{'solid_temp'});
-								my $conducticity_solid =  sprintf ("%4.4f",$input->{$up_name}->{'cond_sol'});
-								my $conducticity_liquid =  sprintf ("%4.4f",$input->{$up_name}->{'cond_liq'});
-								my $specific_heat =  sprintf ("%4.4f",$input->{$up_name}->{'spec_heat'});
-								my $latent_a =  sprintf ("%4.4f",$input->{$up_name}->{'member_a'});
-								my $latent_b =  sprintf ("%4.4f",$input->{$up_name}->{'member_b'});
-								
-								for (my $num = 1; $num <= $num_nodes; $num ++) {
-									&insert ($hse_file->{"spm"}, "#END_SPM_DATA", 1, 0, 0, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", "# Node No: $num", "PCM_Cap # label","# Zone Surf Node Type Opq/Trn", "$PCM_zone $PCM_surf[$num] $node[$num] 53 1", "# No. of data items.", "7", "# Data:", "$melt_temp $solid_temp $conducticity_solid $conducticity_liquid $specific_heat $latent_a  $latent_b");
-								}
-								
-								
-							}
-						}
-					}
-				};
 
 	# 			-----------------------------------------------
 	# 			DHW file
@@ -4077,18 +3417,8 @@ MAIN: {
 	
 	
 				DHW: {
-					if ( ($upgrade_mode == 1) && ($flag_SDHW == 1) ) { # in case of SDHW we don't need dhw file we defind it by plant network
-						foreach my $line (@{$hse_file->{'cfg'}}) {	# read each line of cfg
-							if ($line =~ /^(\*dhw.*)/) {	# if the *dhw tag is found then
-								$line = "#$1\n";	# comment the *dhw tag
-								last DHW;	# when found jump out of loop and DHW all together
-							};
-						};
-						
-					}
 					
-					
-					elsif ($CSDDRD->{'DHW_energy_src'} == 9) {	# DHW is not available, so comment the *dhw line in the cfg file
+					if ($CSDDRD->{'DHW_energy_src'} == 9) {	# DHW is not available, so comment the *dhw line in the cfg file
 						foreach my $line (@{$hse_file->{'cfg'}}) {	# read each line of cfg
 							if ($line =~ /^(\*dhw.*)/) {	# if the *dhw tag is found then
 								$line = "#$1\n";	# comment the *dhw tag
@@ -4421,245 +3751,7 @@ MAIN: {
 				
 				# Define the controller to service each zone in order. Because there is a controller for each zone, the controller number for the zone is equal to the zone number
 				&replace ($hse_file->{'ctl'}, '#ZONE_LINKS', 1, 1, "%s\n", "@{$zones->{'name->num'}}{@{$zones->{'num_order'}}}");
-				
-				# write out the control file if we have CVB
-				if ($upgrade_mode == 1) {
-					foreach my $up_name (values(%{$upgrade_num_name})) {
-						if ($up_name eq 'CVB') {
-							
-							# number of cfc function depends on the number of zones and the type of windows (i.e each zone can have up to 4 functions)
-							my $function->{'total'} = 0;
-							my $cfc_type;
-							my $cfc_side;
-							my $type_num = 0;
-							my $wndw_code;
-							my $cfc_name_side;
-							ZONE_LOOP:foreach my $zone (@{$zones->{'num_order'}}) {
-								my $house_side= &up_house_side ($CSDDRD->{'front_orientation'});
-								$function->{$zone} = 0;
-								my @wndw_zone = ();
-								my $surf_num = 0;
-								my $side_num = 0;
-								SIDE1_LOOP:foreach my $surface (@sides) {
-									if (defined ($record_indc->{$zone}->{$surface.'-aper'}->{'SA'})) {
-										$surf_num++;
-										
-										$record_indc->{'wndw'}->{$surface}->{'code'} =~ /(\d{3})\d{3}/;
-										$wndw_code->{$surface} = $1;
-										SIDE2_LOOP:foreach my $surface_2 (@sides) {
-											if (defined ($record_indc->{$zone}->{$surface_2.'-aper'}->{'SA'})){
-												$record_indc->{'wndw'}->{$surface_2}->{'code'} =~ /(\d{3})\d{3}/;
-												$wndw_code->{$surface_2} = $1;
-												if (($surface eq $surface_2) && $surf_num == 1) {
-													  push (@{$cfc_type->{$zone}->{$surf_num}},$surface_2);
-												}
-												elsif ( $surf_num == 1) {
-													if ($wndw_code->{$surface_2} == $wndw_code->{$surface}) {
-														 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-													}
-													
-												}
-												elsif ($surf_num == 2 ) {
-													unless (my $matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-1}})){
-														
-														if (!defined (@{$cfc_type->{$zone}->{$surf_num}}))  {
-															
-															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-														}
-														elsif (@{$cfc_type->{$zone}->{$surf_num}} == 0) {
-															push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-														}
-														else {
-															foreach my $val (@{$cfc_type->{$zone}->{$surf_num}}) {
-																unless ($surface_2 eq $val){
-																	if ($wndw_code->{$surface_2} == $wndw_code->{$val}){
-																		push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-																	}
-																}
-															}
-														}
-										
-													}
-												}
-												elsif ($surf_num == 3 ) {
-													my $matched;
-													unless (($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-1}})) || ($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-2}}))) {
-														if (!defined (@{$cfc_type->{$zone}->{$surf_num}}))  {
-															
-															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-														}
-														elsif (@{$cfc_type->{$zone}->{$surf_num}} == 0) {
-															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-														}
-														else {
-															foreach my $val (@{$cfc_type->{$zone}->{$surf_num}}) {
-																unless ($surface_2 eq $val){
-																	if ($wndw_code->{$surface_2} == $wndw_code->{$val}){
-																		push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-																	}
-																}
-															}
-														}
-										
-													}
-												}
-												elsif ($surf_num == 4 ) {
-													my $matched;
-													unless (($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-1}})) || ($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-2}})) || ($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-3}}))) {
-														if (!defined (@{$cfc_type->{$zone}->{$surf_num}}))  {
-															
-															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-														}
-														elsif (@{$cfc_type->{$zone}->{$surf_num}} == 0) {
-															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-														}
-														else {
-															foreach my $val (@{$cfc_type->{$zone}->{$surf_num}}) {
-																unless ($surface_2 eq $val){
-																	if ($wndw_code->{$surface_2} == $wndw_code->{$val}){
-																		push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
-																	}
-																}
-															}
-														}
-										
-													}
-												}
-											}
-											if (defined (@{$cfc_type->{$zone}->{$surf_num}})) {
-												$side_num = $side_num + $cfc_type->{$zone}->{$surf_num};
-												if ($side_num == 4) {
-													last SIDE1_LOOP;
-												}
-											}
-										} # end SIDE2_LOOP
-									} 
-								} #end SIDE1_LOOP
-									for (my $n = 1; $n < $surf_num; $n ++) {
-										my %uniqe_side   = map { $_ => 1 } @{$cfc_type->{$zone}->{$n}};
-										@{$cfc_type->{$zone}->{$n}} = keys %uniqe_side;
-										foreach my $side_cfc (@{$cfc_type->{$zone}->{$n}}) {
-# 											print "$side_cfc and  $house_side->{$side_cfc} \n";
-											push (@{$cfc_name_side->{$zone}->{$n}}, $house_side->{$side_cfc});
-										}
-# 										print Dumper $cfc_name_side->{$zone}->{$n};
-# 										print Dumper $cfc_type->{$zone}->{$n};
-										if (defined @{$cfc_type->{$zone}->{$n}}) {# total number of function in building (each zone can have up to 4 functions and each building up to 5 zones so teh function will be between 0 and 20)
-											$function->{$zone}++;
-											$function->{'total'}++;
-										}
-									}
-# 								print "the zone is $zone and $function->{$zone} \n";
-								} # end ZONE_LOOP
-# 								print "$function->{'total'} \n";	
-							&insert ($hse_file->{'ctl'},'#END_CFC_FUNCTIONS_DATA',1, 0, 0, "%s \n%s \n%s \n%s \n", "* CFC","no complex fen. control description supplied","#NUM_CFC_FUNCTIONS number of cfc functions", $function->{'total'});
-# 							die "end of test \n";
-# 							# assign the cfc type and surface and zone that sensor should be assigned
-							ZONE_CHECK:foreach my $zone (keys (%{$zones->{'name->num'}})) {
-								my $house_side= &up_house_side ($CSDDRD->{'front_orientation'});
-								if ($function->{$zone} == 1) { # we have one cfc type so the sensor should be place on west wall if there is any window, if not then try east, south, north 
-									my $matched;
-									my $surface;
-									if ($matched = grep (/West/i, @{$cfc_name_side->{$zone}->{$function->{$zone}}})) {
-										
-										foreach my $key_side (keys %{$house_side}){
-											if ($house_side->{$key_side} =~ /West/i){
-												$surface = $key_side;
-											}
-										}
-										my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-										&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'West-wall',$surf_number, $function->{$zone},$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-									}
-									elsif ($matched = grep (/East/i, @{$cfc_name_side->{$zone}->{$function->{$zone}}})) {
-										foreach my $key_side (keys %{$house_side}){
-											if ($house_side->{$key_side} =~ /East/i){
-												$surface = $key_side;
-											}
-										}
-										my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-										&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'East-wall',$surf_number, $function->{$zone},$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-									}
-									elsif ($matched = grep (/South/i, @{$cfc_name_side->{$zone}->{$function->{$zone}}})) {
-										foreach my $key_side (keys %{$house_side}){
-											if ($house_side->{$key_side} =~ /South/i){
-												$surface = $key_side;
-											}
-										}
-										my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-										&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'South-wall',$surf_number, $function->{$zone},$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-									}
-									elsif ($matched = grep (/North/i, @{$cfc_name_side->{$zone}->{$function->{$zone}}})) {
-										foreach my $key_side (keys %{$house_side}){
-											if ($house_side->{$key_side} =~ /North/i){
-												$surface = $key_side;
-											}
-										}
-										my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-										&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'North-wall',$surf_number, $function->{$zone},$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-									}
-								}
-								elsif ($function->{$zone} > 1) {
-									my $matched;
-									my $surface;
-									for (my $type = 1; $type <= $function->{$zone}; $type++) { 
-										if ($matched = grep (/West/i, @{$cfc_name_side->{$zone}->{$type}})) {
-										
-											foreach my $key_side (keys %{$house_side}){
-												if ($house_side->{$key_side} =~ /West/i){
-													$surface = $key_side;
-												}
-											}
-											my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-											&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'West-wall',$surf_number, $type,$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-										}
-										elsif ($matched = grep (/East/i, @{$cfc_name_side->{$zone}->{$type}})) {
-											foreach my $key_side (keys %{$house_side}){
-												if ($house_side->{$key_side} =~ /East/i){
-													$surface = $key_side;
-												}
-											}
-											my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-											&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'East-wall',$surf_number, $type,$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-										}
-										elsif ($matched = grep (/South/i, @{$cfc_name_side->{$zone}->{$type}})) {
-											foreach my $key_side (keys %{$house_side}){
-												if ($house_side->{$key_side} =~ /South/i){
-													$surface = $key_side;
-												}
-											}
-											my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-											&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'South-wall',$surf_number, $type,$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-										}
-										elsif ($matched = grep (/North/i, @{$cfc_name_side->{$zone}->{$type}})) {
-											foreach my $key_side (keys %{$house_side}){
-												if ($house_side->{$key_side} =~ /North/i){
-													$surface = $key_side;
-												}
-											}
-											my $surf_number = $record_indc->{$zone}->{'surfaces'}->{$surface}->{'index'};
-											&insert ($hse_file->{'ctl'}, '#END_CFC_FUNCTIONS_DATA', 1, 0, 0, "%s", &CFC_control($zones->{'name->num'}->{$zone},'North-wall',$surf_number, $type,$input->{$up_name}->{'sensor'},$input->{$up_name}->{'actuator'}));
-										}
-									}
-								}
-							}
-# 								
-						}
-						elsif ($up_name eq 'SDHW') {
-							 unless ($CSDDRD->{'DHW_energy_src'} == 9) {	# if DHW is available
-							 # the control file for the SDHW is hard coded be aware of component number in the pln and ctl file 
-								if ($input->{$up_name}->{'system_type'} =~ /2/) {
-									&insert ($hse_file->{'ctl'},'#END_PLANT_FUNCTIONS_DATA',1, 0, 0, "%s \n%s \n%s \n", "* Plant","no plant control description supplied","4 #NUM_PLANT_LOOPS number of plant loops");
-								}
-								else {
-									&insert ($hse_file->{'ctl'},'#END_PLANT_FUNCTIONS_DATA',1, 0, 0, "%s \n%s \n%s \n", "* Plant","no plant control description supplied","3 #NUM_PLANT_LOOPS number of plant loops");
-								}
-							}
-							my $multiplier = $dhw_al->{'data'}{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'} / $BCD_dhw_al_ann->{'data'}->{$bcd_sdhw}->{'DHW_LpY'};
-							&insert ($hse_file->{'ctl'}, '#END_PLANT_FUNCTIONS_DATA', 1, 0, 0, "%s", &SDHW_control($input->{$up_name}->{'system_type'},$CSDDRD->{'DHW_energy_src'},$multiplier, $input->{$up_name}->{'pump_on'}));
-							
-						}
-					}
-				}
+
 			};
 
 
@@ -4727,190 +3819,7 @@ MAIN: {
 				};
 
 
-			};
-			
-			
-			# -----------------------------------------------
-			# Generate the *.pln file
-			# -----------------------------------------------
-			if ($upgrade_mode == 1) { # in case of SDHW we have to define plant network
-				foreach my $up_name (values (%{$upgrade_num_name})){
-					if ($up_name =~ /SDHW/) {
-						PLN: {
-						# specify total number of components in plant and simulation type
-							my $comp_num = 0;
-							my $sim_type = 3; # this is the energy balance + 2 phase flow simulation type
-							my @list_component;
-							if ( $input->{$up_name}->{'system_type'} =~ /2/) {
-								$comp_num = 9;
-								unless ($CSDDRD->{'DHW_energy_src'} == 2) { # if the dhw fuel is electricity or oil use electricity tank
-									@list_component = ('solar_collector', 'collector_pump', 'storage_tank', 'electric_tank', 'mains_water', 'tank_pump', 'heat_exchanger', 'water_draw', 'water_flow');
-								}
-								else {# if the NG is the dhw fuel 
-									@list_component = ('solar_collector', 'collector_pump', 'storage_tank', 'fuel_tank', 'mains_water', 'tank_pump', 'heat_exchanger', 'water_draw', 'water_flow');
-								}
-							}
-							else {
-								$comp_num = 6;
-								unless ($CSDDRD->{'DHW_energy_src'} == 2) { # if the dhw fuel is electricity or oil use electricity tank
-									@list_component = ('solar_collector', 'collector_pump', 'solar_tank','electric_tank', 'mains_water', 'water_flow' );
-								}
-								else {# if the NG is the dhw fuel 
-									@list_component = ('solar_collector', 'collector_pump', 'solar_tank','fuel_tank', 'mains_water', 'water_flow');
-								}
-							}
-							&replace ($hse_file->{"pln"}, "#COMPONENT_NUM", 1, 1, "%s %s\n", $comp_num, $sim_type);
-							my $num =1;
-							my $comp_name;
-							foreach my $comp (@list_component) {
-								$comp_name = $comp;
-								if ($comp_name =~ /collector_pump|tank_pump/) {
-									$comp = 'pump';
-								}
-								
-								&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s   %s%s %s\n", '#->', $num, ',', $pln_data->{$comp}->{'description'});
-								&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s   %s\n", $comp_name, $pln_data->{$comp}->{'comp_num'});
-								&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s   %s\n", $pln_data->{$comp}->{'num_control'}, "# Component has $pln_data->{$comp}->{'num_control'} control variable(s).");
-								if ( $pln_data->{$comp}->{'num_control'} > 0) {
-									&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s\n", $pln_data->{$comp}->{'cont_data'});
-								}
-								&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s\n", $pln_data->{$comp}->{'num_data'});
-								
-								foreach my $comp_data (@{$pln_data->{$comp}->{'comp_data'}}) {
-										if ($comp_data->{'description'} =~ /Collector area \(m2\)/i) {
-											if ($dhw_al->{'data'}{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'} <= 73000) { # average daily consumption less then 200 liter one solar panel is requierd
-												&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $comp_data->{'amount'}, "# $comp_data->{'number'} $comp_data->{'description'}");
-											}
-											else { 
-												my $amount = 2* $comp_data->{'amount'};
-												&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $amount, "# $comp_data->{'number'} $comp_data->{'description'}");
-											}
-										}
-										elsif ($comp_data->{'description'} =~ /Collector azimuth/i) {
-											my $amount;
-											if (($CSDDRD->{'front_orientation'} == 1) || ($CSDDRD->{'front_orientation'}  == 5)) { # if the front is south or north the collector shall be on south side
-												$amount = 180;
-											}
-											elsif (($CSDDRD->{'front_orientation'} == 2) || ($CSDDRD->{'front_orientation'}  == 6)) { # if the front is south-east or north-east the collector is on south-east part
-												$amount = 135;
-											}
-											elsif (($CSDDRD->{'front_orientation'} == 4) || ($CSDDRD->{'front_orientation'}  == 8)) { # if the front is south-west or north-west the collector is on south-west part
-												$amount = -135;
-											}
-											elsif ($CSDDRD->{'front_orientation'} == 3)  { # if the front is east
-												$amount = 90;
-											}
-											elsif ($CSDDRD->{'front_orientation'} == 7)  { # if the front is west
-												$amount = -90;
-											}
-											&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $amount, "# $comp_data->{'number'} $comp_data->{'description'}");
-										}
-										elsif ($comp_data->{'description'} =~ /Mass fraction of propylene glycol/i) {
-											my $amount;
-											$amount = $input->{$up_name}->{'glycol_perc'};
-											&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $amount, "# $comp_data->{'number'} $comp_data->{'description'}");
-										}
-										elsif ($comp_data->{'description'} =~ /Nominal burner capacity when ON|Heater element capacity when ON/i) {
-											my $amount;
-											my $energy_src = $dhw_energy_src->{'energy_type'}->[$CSDDRD->{'DHW_energy_src'}];	# make ref to shorten the name
-											my $tank_type = $energy_src->{'tank_type'}->[$CSDDRD->{'DHW_equip_type'}];	# make ref to shorten the tank type name
-											$amount = $tank_type->{'Element_watts'};
-											&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $amount, "# $comp_data->{'number'} $comp_data->{'description'}");
-										}
-										elsif ($comp_data->{'description'} =~ /Combustion \+ flue efficiency/i) {
-											my $amount;
-											$amount = 83; # the number is detremined for a tank
-											&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $amount, "# $comp_data->{'number'} $comp_data->{'description'}");
-										}
-										
-										else {
-											&insert ($hse_file->{'pln'}, "#COMPONENT_DATA_END", 1, 0, 0, "%s  %s\n", $comp_data->{'amount'}, "# $comp_data->{'number'} $comp_data->{'description'}");
-										}
-								}
-								$num = $num +1;
-								
-							}
-							# insert the conncetions between components in pln
-							if ( $input->{$up_name}->{'system_type'} =~ /2/) {
-								&replace ($hse_file->{"pln"}, "#CONNECTIONS_NUM", 1, 1, "%s   %s\n", '12', '# Total number of connections');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_collector  1  3  collector_pump   1  1.000                 # 1');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'heat_exchanger   1  3  solar_collector  1  1.000                 # 2');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'collector_pump   1  3  heat_exchanger   1  1.000                 # 3');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'heat_exchanger   2  3  tank_pump        1  1.000                 # 4');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'storage_tank     1  3  mains_water      1  1.000                 # 5');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'storage_tank     1  3  heat_exchanger   2  1.000                 # 6');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'tank_pump        1  3  storage_tank     1  0.500                 # 7');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_draw       1  3  storage_tank     1  0.500                 # 8');
-								unless ($CSDDRD->{'DHW_energy_src'} == 2) {
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'electric_tank    1  3  water_draw       1  1.000                 # 9');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_flow       1  3  electric_tank    1  1.000                 # 10');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'electric_tank    1  2  tank_pump        1  0.000  20.00  0.00    # 11');
-								}
-								else {
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'fuel_tank    1  3  water_draw       1  1.000                 # 9');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_flow   1  3  fuel_tank        1  1.000                 # 10');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'fuel_tank    1  2  tank_pump        1  0.000  20.00  0.00    # 11');
-								}
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'mains_water      1  3  water_flow       1  1.000                 # 12');
-							}
-							elsif ($input->{$up_name}->{'system_type'} =~ /3/) { 
-								&replace ($hse_file->{"pln"}, "#CONNECTIONS_NUM", 1, 1, "%s   %s\n", '8', '# Total number of connections');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_collector  1  3  collector_pump   1  1.000                 # 1');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_tank       1  3  mains_water      1  1.000                 # 2');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'collector_pump   1  3  solar_tank       2  1.000                 # 3');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_tank       2  3  solar_collector  1  1.000                 # 4');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'mains_water      1  3  water_flow       1  1.000                 # 5');
-								unless ($CSDDRD->{'DHW_energy_src'} == 2) {
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'electric_tank    1  3  solar_tank       1  1.000                 # 6');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'electric_tank    1  2  collector_pump   1  0.000  20.00  0.00    # 7');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_flow       1  3  electric_tank    1  1.000                 # 8');
-								}
-								else {
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'fuel_tank        1  3  solar_tank       1  1.000                 # 6');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'fuel_tank        1  2  collector_pump   1  0.000  20.00  0.00    # 7');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_flow       1  3  fuel_tank        1  1.000                 # 8');
-								}
-							}
-							elsif ($input->{$up_name}->{'system_type'} =~ /4/) { 
-								&replace ($hse_file->{"pln"}, "#CONNECTIONS_NUM", 1, 1, "%s   %s\n", '8', '# Total number of connections');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_collector  1  3  collector_pump   1  1.000                 # 1');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_tank       2  3  mains_water      1  1.000                 # 2');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'collector_pump   1  3  solar_tank       1  1.000                 # 3');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'solar_tank       1  3  solar_collector  1  1.000                 # 4');
-								&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'mains_water      1  3  water_flow       1  1.000                 # 5');
-								unless ($CSDDRD->{'DHW_energy_src'} == 2) {
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'electric_tank    1  3  solar_tank       2  1.000                 # 6');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'electric_tank    1  2  collector_pump   1  0.000  20.00  0.00    # 7');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_flow       1  3  electric_tank    1  1.000                 # 8');
-								}
-								else {
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'fuel_tank        1  3  solar_tank       2  1.000                 # 6');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'fuel_tank        1  2  collector_pump   1  0.000  20.00  0.00    # 7');
-									&insert ($hse_file->{'pln'}, "#CONNECTIONS_DATA", 1, 0, 0, "%s \n", 'water_flow       1  3  fuel_tank        1  1.000                 # 8');
-								}
-							}
-							&insert ($hse_file->{'pln'}, "#CONTAINMENTS_DATA", 1, 0, 0, "%s \n", 'solar_collector  0   0.00000    0.00000    0.00000');
-							my $zone_dhw;
-							if ($zones->{'name->num'}->{'bsmt'}) {$zone_dhw = sprintf ("%.5f", $zones->{'name->num'}->{'bsmt'});}	# tank is in bsmt zone
-							else {$zone_dhw = sprintf ("%.5f", $zones->{'name->num'}->{'main_1'});};	# tank is in main_1 zone
-							if ( $input->{$up_name}->{'system_type'} =~ /2/) {
-								&insert ($hse_file->{'pln'}, "#CONTAINMENTS_DATA", 1, 0, 0, "%s \n", "storage_tank     3   $zone_dhw    0.00000    0.00000");
-							}
-							elsif ( $input->{$up_name}->{'system_type'} =~ /3|4/) {
-								&insert ($hse_file->{'pln'}, "#CONTAINMENTS_DATA", 1, 0, 0, "%s \n", "solar_tank       3   $zone_dhw    0.00000    0.00000");
-							}
-							unless ($CSDDRD->{'DHW_energy_src'} == 2) {
-								&insert ($hse_file->{'pln'}, "#CONTAINMENTS_DATA", 1, 0, 0, "%s \n", "electric_tank    3   $zone_dhw    0.00000    0.00000");
-							}
-							else {
-								&insert ($hse_file->{'pln'}, "#CONTAINMENTS_DATA", 1, 0, 0, "%s \n", "fuel_tank        3   $zone_dhw    0.00000    0.00000");
-							}
-								
-						};
-					};
-				};
-			};
-			      
+			};    
 
 			# -----------------------------------------------
 			# Generate the *.mvnt file
@@ -5116,33 +4025,24 @@ MAIN: {
 			# -----------------------------------------------
 			# Print out each esp-r house file for the house record
 			# -----------------------------------------------
-			FILE_PRINTOUT: {
+			FILE_PRINTOUT: {         
+
 				# Develop a path and make the directory tree to get to that path
 				$CSDDRD->{'file_name'} = $CSDDRD->{'file_name'};
                 # Variable to hold new pathname
                 my $NewFolder = $CSDDRD->{'file_name'};
-                # Check if upgrade mode 4 (city gen) and if there are duplicates
-                if ($upgrade_mode == 4) {
-                    # Lets look for duplicates
-                    for (my $k = 0; $k < $#dupl; $k=$k+2) {
-                        if (($NewFolder eq $dupl[$k]) && $dupl[$k+1] != 0) {
-                            # This is a duplicate append folder name
-                            $NewFolder = $NewFolder . "_$dupl[$k+1]";
-                            $dupl[$k+1] = $dupl[$k+1] -1;
-                        }
-                    }            
-                }
 				my $folder = "../$hse_type$set_name/$region/$NewFolder";	# path to the folder for writing the house folder
 				mkpath ($folder);	# make the output path directory tree to store the house files
 				
 				foreach my $ext (keys %{$hse_file}) {	# go through each extention inclusive of the zones for this particular record
-					my $file = $folder . "/$CSDDRD->{'file_name'}.";
+					my $file = $folder . "/$NewFolder.";
 					my $FILE;
 					open ($FILE, '>', $file . $ext) or die ("Can't open datafile: $file$ext");	# open writeable file
 					foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out
                     close $FILE;
 				};
 				copy ("../templates/input.xml", "$folder/input.xml") or die ("can't copy file: ../templates/input.xml to $folder/input.xml");	# add an input.xml file to the house for XML reporting of results
+
 			};
 
 # 			print Dumper $record_indc;

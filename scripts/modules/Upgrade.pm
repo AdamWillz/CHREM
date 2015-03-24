@@ -1682,18 +1682,17 @@ sub random_hse_shuffle {
     my $hse_ref = shift;
     my $num_hses = shift;
     my @SourceList = @{$hse_ref};
-    my @new_list = ();
+    my @new_list;
     my $dupl;  # HASH to hold the duplicates for set extrapolation
     my $bDupl = 0; # flag to indicate duplicates 
 
     # Determine size of source list
     my $size = scalar @SourceList;
-    
+
     # Check if number of houses requested is greater than source pool
-    if ($num_hses > ($size+1) ) { # More houses requested than available, duplicate
+    if ($num_hses > $size ) { # More houses requested than available, duplicate
         $bDupl = 1;
-        my $SizeOut = $size+1;
-        print "$num_hses houses requested, $SizeOut house records available in set. Duplication will occur\n";
+        print "$num_hses houses requested, $size house records available in set. Duplication will occur\n";
     };
     
     # Build set of houses
@@ -1712,17 +1711,16 @@ sub random_hse_shuffle {
         @new_list = @SourceList;
         
         # Determine number of times to run through list for duplicates
-        my $loopc = ceil(($num_hses-$#SourceList+1)/($#SourceList+1));
-        my $loopf = floor(($num_hses-$#SourceList+1)/($#SourceList+1));
-        my $MOD = ($num_hses-$#SourceList+1) % ($#SourceList+1);
+        my $loop = floor(($num_hses-$size)/$size);
+        my $MOD = ($num_hses-$size) % $size;
         
-        if ($loopc > 0 ) { # Initialize duplicate HASH
+        if ($loop > 0 ) { # Initialize duplicate HASH, every house is duplicated at least once
             foreach my $record (@SourceList) {
-                $dupl->{"$record"} = $loopf;
+                $dupl->{"$record"} = $loop;
             }
-            
-            if ($MOD > 0) { # Cycle through one more time for duplicates
-                for (my $k = 0; $k < int($MOD*($size+1)); $k++) {
+
+            if ($MOD > 0) { # Bring in the remainder of houses to make up the umber requested
+                for (my $k = 0; $k < int($MOD); $k++) {
                     my $random = int(rand($#SourceList));
                     $dupl->{"$SourceList[$random]"} = $dupl->{"$SourceList[$random]"} + 1;
                     # Remove house from selection pool
@@ -1732,14 +1730,13 @@ sub random_hse_shuffle {
             
         } else { # DON'T need to duplicate all houses at least once
 
-            for (my $k = 0; $k < int($num_hses-$size+1); $k++) {
+            for (my $k = 0; $k < int($num_hses-$size); $k++) {
                     my $random = int(rand($#SourceList));
                     $dupl->{"$SourceList[$random]"} = 1;
                     # Remove house from selection pool
                     splice(@SourceList, $random, 1);
             }
         }
-
     }
 
     #print Dumper @new_list;

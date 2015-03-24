@@ -42,13 +42,6 @@ make
 make install
 cd ..
 
-tar -xf local-lib-1.008004.tar.gz
-cd local-lib-1.008004
-perl Makefile.PL
-make
-make install
-cd ..
-
 tar -xf threads-1.89.tar.gz
 cd threads-1.71
 perl Makefile.PL
