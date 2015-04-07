@@ -262,6 +262,12 @@ sub collect_results_data {
 		
 		# Otherwise continue by reading the results XML file
 		my $results_hse = XMLin($folder . "/$hse_name.xml");
+        
+        if (!defined $results_hse->{'parameter'}) {
+            print "House is $hse_name\n";
+            #print Dumper $results_hse;
+            sleep;
+        };
 
 		# Cycle over the results and filter for SCD (secondary consumption), also filter for certain zones, the '' will skip anything else
 		foreach my $key (@{&order($results_hse->{'parameter'}, ['CHREM/SCD', "CHREM/zone_0[$main_bsmt_zone_nums]/Power/(GN_Heat|GN_Cool|CD_Opaq|CD_Trans|AV_AmbVent|AV_Infil|SW_Opaq|SW_Trans)"], [''])}) {

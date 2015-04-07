@@ -45,10 +45,11 @@ use File::Copy;
 use Math::Polygon;
 use Math::Trig;
 use Storable  qw(dclone);
-use POSIX qw(floor);
+use POSIX qw(ceil floor);
 
 use lib qw(./modules);
 use General;
+use Cross_reference;
 use PV;
 use Upgrade;
 use Database;
@@ -161,41 +162,23 @@ if ($PVdata->{'mis_factor'} < 0 || $PVdata->{'mis_factor'} > 1) {
 	die "The efficiency shall be between 0 and 1! \n";
 }
 if ($PVdata->{'Area'} < 0 ) {
-	die "The area needs to be greater than 0! \n";
+	die "The area [m2] needs to be greater than 0! \n";
 }
 if ($PVdata->{'Length'} < 0 || $PVdata->{'Width'} < 0 || $PVdata->{'Thick'} < 0) {
-	die "PV module dimensions need to be greater than 0! \n";
+	die "PV module dimensions [m] need to be greater than 0! \n";
+}
+if ($PVdata->{'Max_Array_P'} < 0) {
+	die "PV array maximum power [kW] output must be greater than 0! \n";
+}
+if ($PVdata->{'P_rated'} < 0) {
+	die "PV panel rated power [W] must be greater than 0! \n";
 }
 
 # --------------------------------------------------------------------
 # Read the PV inverter parameters
 # --------------------------------------------------------------------
-
-my $Intertkey = '../Input_upgrade/Input_Invert.csv';
-system ("printf \"Reading $Intertkey\"");
-# Open and read the crosslisting, note that the file handle below is a variable so that it simply goes out of scope
-open (my $INVFILE, '<', $Intertkey) or die ("can't open datafile: $PVkey");
-my $INVdata;	# create an crosslisting hash reference
-while (<$INVFILE>) {
-	$_ = rm_EOL_and_trim($_);
-	
-	if ($_ =~ s/^\*header,//) {	# header row has *header tag, so remove this portion, and the key (first header value) leaving the CSV information
-		$INVdata->{'header'} = [CSVsplit($_)];	# split the header into an array
-	}
-		
-	elsif ($_ =~ s/^\*data,//) {	# data lines will begin with the *data tag, so remove this portion, leaving the CSV information
-		@_ = CSVsplit($_);	# split the data onto the @_ array
-		
-		# create a hash slice that uses the header and data array
-		# although this is a complex structure it simply creates a hash with an array of keys and array of values
-		# @{$hash_ref}{@keys} = @values
-		@{$INVdata}{@{$INVdata->{'header'}}} = @_;
-	};
-};
-delete $INVdata->{'header'};
-# notify the user we are complete and start a new line
-print " - Complete\n";
-close($INVFILE);
+my $Intertkey = '../Input_upgrade/Input_Inverter.xml';
+my $Inverter_data = &key_XML_readin($Intertkey, [1]);
 
 # -----------------------------------------------
 # Declare important variables for file generation
@@ -505,7 +488,7 @@ MAIN: {
 
                         if ($SA_Usable < 1 && $Coverage > $SA_Usable) { # Check to see if number of collectors needs to be reduced
                             $NumColl = floor(($SA_Usable*$area)/$PVdata->{'Area'});
-                            $Coverage = ($NumColl*$PVdata->{'Area'})/$area;
+                            #$Coverage = ($NumColl*$PVdata->{'Area'})/$area;
                         };
 
                         $PVZones->{$surf->{$index}->{'name'}}->{'Area'} = $NumColl*($PVdata->{'Area'});
@@ -517,9 +500,9 @@ MAIN: {
                         $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'surface_area'}=sprintf("%4.3f",$area);
                         $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'slope'}=sprintf("%4.3f",$Slope);
                         $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'azimuth'}=sprintf("%4.3f",$Azimuth);
-                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
-                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
-                        $hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Surf_Coverage'}=sprintf("%4.3f",$Coverage);
+                        #$hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
+                        #$hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
+                        #$hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Surf_Coverage'}=sprintf("%4.3f",$Coverage);
                         $PVZoneCount++;
                     };
                 };
@@ -531,7 +514,40 @@ MAIN: {
                 };
                 last EACHHSE; # MOVE TO NEXT RECORD
             };
-            
+
+            # --------------------------------------------------------------------
+            # Adjust number of collectors based on max. allowable power rating
+            # --------------------------------------------------------------------
+            if ($PVdata->{'Max_Array_P'} > 0) {
+                my $PVTotPower=0;
+                my $FindMax->{'MaxVal'} = 0;
+                foreach my $index (keys (%{$PVZones})) {
+                    my $ArrayPow = $PVZones->{$index}->{'NumColl'}*$PVdata->{'P_rated'};
+                    $PVTotPower = $PVTotPower+$ArrayPow;
+                    if ($ArrayPow > $FindMax->{'MaxVal'}) {
+                        $FindMax->{'MaxVal'} = $ArrayPow;
+                        $FindMax->{'name'} = $index;
+                    };
+                };
+                if ($PVTotPower > $PVdata->{'Max_Array_P'}) { # Arrays for house exceed max allowable production, reduce number of panels
+                    # Determine number of collectors to be reduced
+                    my $NumReduce = ceil(($PVTotPower-$PVdata->{'Max_Array_P'})/$PVdata->{'P_rated'});
+                    $PVZones->{$FindMax->{'name'}}->{'NumColl'} = $PVZones->{$FindMax->{'name'}}->{'NumColl'}-$NumReduce;
+                };
+            };
+
+            # --------------------------------------------------------------------
+            # Store additional report data for house PV upgrade
+            # --------------------------------------------------------------------
+            foreach my $PVsurfaces (keys (%{$PVZones})) {
+                my $Coverage = ($PVZones->{$PVsurfaces}->{'NumColl'}*$PVdata->{'Area'})/$hseRepData->{$hse_name}->{$PVsurfaces}->{'surface_area'};
+
+                $hseRepData->{$hse_name}->{$PVsurfaces}->{'PV_area'}=sprintf("%4.3f",$PVZones->{$PVsurfaces}->{'NumColl'}*$PVdata->{'Area'});
+                $hseRepData->{$hse_name}->{$PVsurfaces}->{'Num_modules'}=sprintf("%d",$PVZones->{$PVsurfaces}->{'NumColl'});
+                $hseRepData->{$hse_name}->{$PVsurfaces}->{'Surf_Coverage'}=sprintf("%4.3f",$Coverage);
+                
+            };
+
             # --------------------------------------------------------------------
             # Load and begin manipulating model files
             # --------------------------------------------------------------------
@@ -851,12 +867,18 @@ MAIN: {
                 &insert ($hse_file->{'elec'}, "#END_HYBRID_COMPONENT_INFO", 1, 0, 0, "%s\n", "  0");
                 
                 # Create an inverter for this array
-                my $OpMode = sprintf("%d", $INVdata->{'op_mode'});
-                my $NomPow = sprintf("%5.1f", $INVdata->{'Nom_pow'});
-                my $IdleC = sprintf("%6.5E", $INVdata->{'Idle_const'});
-                my $SetV = sprintf("%6.5f", $INVdata->{'Set_V'});
-                my $InRes = sprintf("%7.6E", $INVdata->{'Int_Res'});
-                my $AuxPow = sprintf("%5.1f", $INVdata->{'Aux_pow'});
+                my $InvPnm = &invert_nom($PVZones->{$PVName}->{'NumColl'}*$PVdata->{'P_rated'}); # Nominal power rating for inverter [W]
+                
+                if ($InvPnm == 9999) { # Array rating lager than available inverters
+                    #TODO Error handling
+                };
+                
+                my $OpMode = '1'; # Operation mode: 1 is power input know, 2 is output known
+                my $NomPow = sprintf("%5.1f", $Inverter_data->{"$InvPnm"}->{'Pn'});
+                my $IdleC = sprintf("%6.5E", $Inverter_data->{"$InvPnm"}->{'P0Pn'});
+                my $SetV = sprintf("%6.5f", $Inverter_data->{"$InvPnm"}->{'Us'});
+                my $InRes = sprintf("%7.6E", $Inverter_data->{"$InvPnm"}->{'RiPn'});
+                my $AuxPow = sprintf("%5.1f", $Inverter_data->{"$InvPnm"}->{'AuxPwr'});
                 
                 $NumPowOnly++;
                 &replace ($hse_file->{'elec'}, "#NUM_POWER_ONLY_COMPONENTS", 1, 1, "%s\n", "  $NumPowOnly");
@@ -866,7 +888,7 @@ MAIN: {
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "# Number of additional data items:");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    6    0");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $OpMode        $NomPow       $IdleC    $SetV       $InRes    $AuxPow");
-                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $NumEnodes    1"); # Connect back to the AC bus (should be first node
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $NumEnodes    1"); # Connect back to the AC bus (should be first node)
                 
                 # Create the .opr file
                 # --------------------------------------------------------------------
@@ -1232,6 +1254,52 @@ SUBROUTINES: {
 		};
 
 		return (1);
+	};
+    
+    sub invert_nom {	# Select the required nominal power rating for given array 
+		my $Qarray = shift; # Nominal power output of array
+        my $Pnom;           # Nominal power rating of inverter
+
+		if ($Qarray <= 200) {
+			$Pnom = 200;
+		} elsif ($Qarray <= 1100) {
+            $Pnom = 1100;
+        } elsif ($Qarray <= 1670) {
+            $Pnom = 1670;
+        } elsif ($Qarray <= 2000) {
+            $Pnom = 2000;
+        } elsif ($Qarray <= 3000) {
+            $Pnom = 3000;
+        } elsif ($Qarray <= 4000) {
+            $Pnom = 4000;
+        } elsif ($Qarray <= 5000) {
+            $Pnom = 5000;
+        } elsif ($Qarray <= 6000) {
+            $Pnom = 6000;
+        } elsif ($Qarray <= 7000) {
+            $Pnom = 7000;
+        } elsif ($Qarray <= 8000) {
+            $Pnom = 8000;
+        } elsif ($Qarray <= 10000) {
+            $Pnom = 10000;
+        } elsif ($Qarray <= 30000) {
+            $Pnom = 30000;
+        } elsif ($Qarray <= 50000) {
+            $Pnom = 50000;
+        } elsif ($Qarray <= 75000) {
+            $Pnom = 75000;
+        } elsif ($Qarray <= 100000) {
+            $Pnom = 100000;
+        } elsif ($Qarray <= 135000) {
+            $Pnom = 135000;
+        } elsif ($Qarray <= 250000) {
+            $Pnom = 250000;
+        } else { # Array power bigger than available units
+            $Pnom = 9999;
+        };
+        
+        
+		return ($Pnom);
 	};
 
 };
