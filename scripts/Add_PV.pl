@@ -879,12 +879,13 @@ MAIN: {
                 my $SetV = sprintf("%6.5f", $Inverter_data->{"$InvPnm"}->{'Us'});
                 my $InRes = sprintf("%7.6E", $Inverter_data->{"$InvPnm"}->{'RiPn'});
                 my $AuxPow = sprintf("%5.1f", $Inverter_data->{"$InvPnm"}->{'AuxPwr'});
+                my $InverterDesc = $Inverter_data->{"$InvPnm"}->{'description'};
                 
                 $NumPowOnly++;
                 &replace ($hse_file->{'elec'}, "#NUM_POWER_ONLY_COMPONENTS", 1, 1, "%s\n", "  $NumPowOnly");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "# No.   i.d.  Comp. name   Phase type  links to nodes ");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $NumPowOnly   20  INV_$PVName        d.c.            $NumEnodes    0    0");
-                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", " Inverter for d.c. node n_PV_$PVName");
+                &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", " $InverterDesc n_PV_$PVName");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "# Number of additional data items:");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    6    0");
                 &insert ($hse_file->{'elec'}, "#END_POWER_ONLY_COMPONENT_INFO", 1, 0, 0, "%s\n", "    $OpMode        $NomPow       $IdleC    $SetV       $InRes    $AuxPow");
