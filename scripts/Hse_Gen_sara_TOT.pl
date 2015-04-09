@@ -1078,7 +1078,7 @@ MAIN: {
 						# determine the z2 based on the zone type
 						if ($zone eq 'attic') {
 							# attic is assumed to be 5/12 roofline with peak in parallel with long side of house. Attc is mounted to top corner of main above 0,0
-							$record_indc->{$zone}->{'z2'} = $record_indc->{$zone}->{'z1'} + &smallest($record_indc->{'y'}, $record_indc->{$zone}->{'x'}) / 2 * 12 / 12;	# determine height of zone
+							$record_indc->{$zone}->{'z2'} = $record_indc->{$zone}->{'z1'} + &smallest($record_indc->{'y'}, $record_indc->{$zone}->{'x'}) / 2 * 5 / 12;	# determine height of zone
 						}
 						elsif ($zone eq 'roof') {
 							# create a vented roof airspace, not very thick
