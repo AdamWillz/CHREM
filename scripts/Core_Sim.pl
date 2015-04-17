@@ -124,6 +124,7 @@ SIMULATION: {
 		$filename = $house_name .'.bps';
 # 		system ("timelimit -T500 bps -- -mode text -file $cfg -p sim_presets silent >> $filename");	#call the bps simulator with arguements to automate it
 		system ("bps -mode text -file $cfg -p sim_presets silent >> $filename");	#call the bps simulator with arguements to automate it
+        unlink $house_name .'.mfr'; # Destroy the .mfr file
 		
 
 		
