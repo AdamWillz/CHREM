@@ -508,32 +508,50 @@ MAIN: {
                 };
             };
 
+            # --------------------------------------------------------------------
+            # Adjust number of collectors based on max. allowable power rating
+            # --------------------------------------------------------------------
+            if ($PVZones) {
+                if ($PVdata->{'Max_Array_P'} > 0) {
+                    my $PVTotPower=0;
+                    my $FindMax->{'MaxVal'} = 0;
+                    foreach my $index (keys (%{$PVZones})) {
+                        my $ArrayPow = $PVZones->{$index}->{'NumColl'}*$PVdata->{'P_rated'};
+                        $PVTotPower = $PVTotPower+$ArrayPow;
+                        if ($ArrayPow > $FindMax->{'MaxVal'}) {
+                            $FindMax->{'MaxVal'} = $ArrayPow;
+                            $FindMax->{'name'} = $index;
+                        };
+                    };
+                    if ($PVTotPower > $PVdata->{'Max_Array_P'}) { # Arrays for house exceed max allowable production, reduce number of panels
+                        # Determine number of collectors to be reduced
+                        my $NumReduce = ceil(($PVTotPower-$PVdata->{'Max_Array_P'})/$PVdata->{'P_rated'});
+                        $PVZones->{$FindMax->{'name'}}->{'NumColl'} = $PVZones->{$FindMax->{'name'}}->{'NumColl'}-$NumReduce;
+                        
+                        if ($PVZones->{$FindMax->{'name'}}->{'NumColl'} <= 0) { # All collectors rem
+                            print "WARNING: All collectors removed from surface $FindMax->{'name'}, house $hse_name\n";
+                        };
+                    };
+                };
+                
+                # If surfaces have no collectors, remove them
+                foreach my $PVsurfaces (keys (%{$PVZones})) {
+                    if ($PVZones->{$PVsurfaces }->{'NumColl'} <= 0) {
+                        delete $PVZones->{$PVsurfaces};
+                        delete $hseRepData->{$hse_name}->{$PVsurfaces};
+                    };
+                };
+                if (%{$PVZones} <= 0) { # All collectors removed
+                    undef $PVZones;
+                };
+   
+            };
+            
             if (!$PVZones) { # No surfaces were eligible for PV
                 foreach my $item (@{$RepHeader}) {	#  Set report values
                     $hseRepData->{$hse_name}->{'no_eligible'}->{$item}=0;
                 };
                 last EACHHSE; # MOVE TO NEXT RECORD
-            };
-
-            # --------------------------------------------------------------------
-            # Adjust number of collectors based on max. allowable power rating
-            # --------------------------------------------------------------------
-            if ($PVdata->{'Max_Array_P'} > 0) {
-                my $PVTotPower=0;
-                my $FindMax->{'MaxVal'} = 0;
-                foreach my $index (keys (%{$PVZones})) {
-                    my $ArrayPow = $PVZones->{$index}->{'NumColl'}*$PVdata->{'P_rated'};
-                    $PVTotPower = $PVTotPower+$ArrayPow;
-                    if ($ArrayPow > $FindMax->{'MaxVal'}) {
-                        $FindMax->{'MaxVal'} = $ArrayPow;
-                        $FindMax->{'name'} = $index;
-                    };
-                };
-                if ($PVTotPower > $PVdata->{'Max_Array_P'}) { # Arrays for house exceed max allowable production, reduce number of panels
-                    # Determine number of collectors to be reduced
-                    my $NumReduce = ceil(($PVTotPower-$PVdata->{'Max_Array_P'})/$PVdata->{'P_rated'});
-                    $PVZones->{$FindMax->{'name'}}->{'NumColl'} = $PVZones->{$FindMax->{'name'}}->{'NumColl'}-$NumReduce;
-                };
             };
 
             # --------------------------------------------------------------------
