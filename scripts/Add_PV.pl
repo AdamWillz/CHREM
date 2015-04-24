@@ -541,7 +541,8 @@ MAIN: {
                         delete $hseRepData->{$hse_name}->{$PVsurfaces};
                     };
                 };
-                if (%{$PVZones} <= 0) { # All collectors removed
+                my $hashCount = keys %{$PVZones};
+                if ($hashCount <= 0) { # All collectors removed
                     undef $PVZones;
                 };
    
