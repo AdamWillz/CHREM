@@ -43,7 +43,7 @@ make install
 cd ..
 
 tar -xf threads-1.89.tar.gz
-cd threads-1.71
+cd threads-1.89
 perl Makefile.PL
 make
 make install
