@@ -100,8 +100,9 @@ sub surf_slope_azimuth {
 
     
     # Determine the slope angle
-    $nMag = sqrt(($Nn[0]**2) + ($Nn[2]**2)); # Magnitude of the normal vector projected to xz plane
-    my $Slope = acos(abs($Nn[0])/$nMag);
+    $nMag = sqrt(($Nn[0]**2) + ($Nn[1]**2)); # Magnitude of the normal vector projected to xz plane
+    my $VMag = abs(sqrt(($Nn[0]**2) + ($Nn[1]**2) + ($Nn[2]**2))); # Magnitude of the normal, assuming positive z-component
+    my $Slope = acos($nMag/$VMag);
     $Slope = 90-rad2deg($Slope);
     
     $nMag = sqrt(($n[0]**2) + ($n[1]**2) + ($n[2]**2));

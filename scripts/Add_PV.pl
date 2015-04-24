@@ -74,7 +74,7 @@ my @possible_set_names_print = @{&order($possible_set_names)}; # Order the names
 # --------------------------------------
 my $AzMin = 135; # Minimum azimuth angle to allow PV mounting on the surface
 my $AzMax = 225; # Maximum azimuth angle to allow PV mounting on the surface
-my $SA_Usable = 0.65; # Percentage of surface area that is usable (TODO: IMPLEMENT THIS)
+my $SA_Usable = 0.65; # Percentage of surface area that is usable
 
 # --------------------------------------------------------------------
 # Read the command line input arguments
