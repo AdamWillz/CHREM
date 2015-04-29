@@ -70,12 +70,6 @@ my @sides = ('base_frm', 'left_frm', 'top_frm', 'right_frm','PV_module','back_fr
 my $possible_set_names = {map {$_, 1} grep(s/.+Hse_Gen_(.+)_Issues.txt/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
 my @possible_set_names_print = @{&order($possible_set_names)}; # Order the names so we can print them out if an inappropriate value was supplied
 
-# PV Mounting Parameters
-# --------------------------------------
-my $AzMin = 135; # Minimum azimuth angle to allow PV mounting on the surface
-my $AzMax = 225; # Maximum azimuth angle to allow PV mounting on the surface
-my $SA_Usable = 0.65; # Percentage of surface area that is usable
-
 # --------------------------------------------------------------------
 # Read the command line input arguments
 # --------------------------------------------------------------------
@@ -173,6 +167,22 @@ if ($PVdata->{'Max_Array_P'} < 0) {
 if ($PVdata->{'P_rated'} < 0) {
 	die "PV panel rated power [W] must be greater than 0! \n";
 }
+
+# PV Mounting Parameters
+# --------------------------------------
+my $AzMin = $PVdata->{'AzMin'}; # Minimum azimuth angle to allow PV mounting on the surface [deg]
+my $AzMax = $PVdata->{'AzMax'}; # Maximum azimuth angle to allow PV mounting on the surface [deg]
+my $SA_Usable = $PVdata->{'SA_Usable'}; # Percentage of surface area that is usable
+
+if ($AzMin < 0 || $AzMax < 0 || $AzMin > 360 || $AzMax > 360) {
+    die "Mounting angles for PV outside acceptable range! \n";
+} elsif ($AzMin > $AzMax) {
+    die "Minumum mounting angle for PV cannot be greater than maximum angle\n!";
+};
+
+if ($SA_Usable > 1) {
+    die "Usable surface area ratio cannot be greater than 1!\n";
+};
 
 # --------------------------------------------------------------------
 # Read the PV inverter parameters
@@ -596,25 +606,25 @@ MAIN: {
                     last;
                 };
             };
-            
-            $NumEnodes++;
-            my $GridNode = $NumEnodes; # Store index of the grid node
-            &insert ($hse_file->{'elec'}, "#END_NODES_DATA", 1, 0, 0, "%s\n", "    $NumEnodes  Grid          1-phase         1  variable          220.00    0"); # Grid node
-            
-            # Link Grid node to AC BUS
-            &replace ($hse_file->{'elec'}, "#BEGIN_CONNECTING_COMPONENTS", 1, 1, "%s\n", "    1 # Number of components");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "# Index db  Component     Phase"); # Wire to connect house AC bus to Grid
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "#       ref name          type");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    1    2  To_grid       1-phase");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "  Lossless wire to connect house to grid");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "# Number of additional data items:");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    6");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    0.0000        0.0000        0.0000        0.0000        0.0000        1.0000");
-            
-            &replace ($hse_file->{'elec'}, "#BEGIN_CONNECTIONS", 1, 1, "%s\n", "    1");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "# Connection        Phases  Connection  Start nodes       End nodes"); #Define connection between the nodes
-            &insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "# Index type        1 2 3   component   pha1 pha2 pha3    pha1 pha2 pha3");
-            &insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "    1  1-phase      1 0 0     1         1    0    0       $NumEnodes    0    0");
+            # ADW Apr 29, 2015: Removed grid node from electrical network
+            #$NumEnodes++;
+            #my $GridNode = $NumEnodes; # Store index of the grid node
+            #&insert ($hse_file->{'elec'}, "#END_NODES_DATA", 1, 0, 0, "%s\n", "    $NumEnodes  Grid          1-phase         1  variable          240.00    0"); # Grid node
+            #
+            ## Link Grid node to AC BUS
+            #&replace ($hse_file->{'elec'}, "#BEGIN_CONNECTING_COMPONENTS", 1, 1, "%s\n", "    1 # Number of components");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "# Index db  Component     Phase"); # Wire to connect house AC bus to Grid
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "#       ref name          type");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    1    2  To_grid       1-phase");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "  Lossless wire to connect house to grid");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "# Number of additional data items:");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    6");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTING_COMPONENTS", 1, 0, 0, "%s\n", "    0.0000        0.0000        0.0000        0.0000        0.0000        1.0000");
+            #
+            #&replace ($hse_file->{'elec'}, "#BEGIN_CONNECTIONS", 1, 1, "%s\n", "    1");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "# Connection        Phases  Connection  Start nodes       End nodes"); #Define connection between the nodes
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "# Index type        1 2 3   component   pha1 pha2 pha3    pha1 pha2 pha3");
+            #&insert ($hse_file->{'elec'}, "#END_CONNECTIONS", 1, 0, 0, "%s\n", "    1  1-phase      1 0 0     1         1    0    0       $NumEnodes    0    0");
 
             # --------------------------------------------------------------------
             # Begin generating PV Zones
@@ -878,7 +888,7 @@ MAIN: {
                 my $SPMnode = $CurrZone - $Num_zones; # Determine special material node
                 # Make d.c. bus
                 &replace ($hse_file->{'elec'}, "#NODES", 1, 1, "%s\n", "  $NumEnodes");
-                &insert ($hse_file->{'elec'}, "#END_NODES_DATA", 1, 0, 0, "%s\n", "    $NumEnodes  n_PV_$PVName       d.c.          1  calc_PV           220.00    $SPMnode");
+                &insert ($hse_file->{'elec'}, "#END_NODES_DATA", 1, 0, 0, "%s\n", "    $NumEnodes  n_PV_$PVName       d.c.          1  calc_PV           240.00    $SPMnode");
                 # Assuming there was no hybrid components in the base
                 &replace ($hse_file->{'elec'}, "#NUM_HYBRID_COMPONENTS ", 1, 1, "%s\n", "  $SPMnode");
                 &insert ($hse_file->{'elec'}, "#END_HYBRID_COMPONENT_INFO", 1, 0, 0, "%s\n", "  $SPMnode  spmaterial  PV_$PVName       d.c.           $NumEnodes    0    0    $SPMnode    0    0");

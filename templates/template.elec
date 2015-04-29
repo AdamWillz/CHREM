@@ -19,7 +19,7 @@
 #NODES
   1
 # No.    Node name   Phase type   Phase Node type    Base volt
-    1  V_node_1      1-phase         1  fixed_V           220.00    0
+    1  V_node_1      1-phase         1  fixed_V           240.00    0
 #END_NODES_DATA
 ** end nodes
 # List and details of load and generator connections to nodes
