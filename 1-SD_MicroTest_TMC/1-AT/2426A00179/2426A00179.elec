@@ -1,0 +1,104 @@
+* FileVersion
+# FOR SOME REASON THIS FILE LIKES THE TWO SPACES IN FRONT OF VALUES
+  1.00
+* electrical network
+# ESP-r Electrical network file created with configuration file:
+#CFG_FILE
+  ./2426A00179.cfg
+# Network description:
+  Appliance and Lighting load based on fcl file
+* net type 
+# DO NOT ADJUST THE BELOW SPACING OF NETWORK TYPE
+  balanced
+* base power value (all nodes)
+  1000
+* phase angles (each phase)
+  0 120 240
+# List and details of nodes in the network
+* nodes
+#NODES
+  1
+# No.    Node name   Phase type   Phase Node type    Base volt
+    1  V_node_1      1-phase         1  fixed_V           240.00    0
+#END_NODES_DATA
+** end nodes
+# List and details of load and generator connections to nodes
+* hybrid components
+# The Number of hybrid components
+#NUM_HYBRID_COMPONENTS 
+  0
+#
+# Data for each hybrid component 
+# The example is 
+#
+# No. comp. type   comp. name      phase type  connects node(s)  location
+#   1  spmaterial    pv-array      d.c.            2    0    0     1    0    0
+# description:
+# The PV-array connected to a PV_BUS for the electricity generation
+#BEGIN_HYBRID_COMPONENT_INFO
+#END_HYBRID_COMPONENT_INFO
+# No. of additional data items:
+#    0
+#END_ADD
+** end hybrid
+# END HYBRID COMPONENTS
+#
+#
+# LIST AND DETAILS OF POWER ONLY COMPONENTS
+* power-only components
+#
+# The Number of Power Only Components
+#NUM_POWER_ONLY_COMPONENTS
+  3
+#
+# Data For Each Power Only Component (All Ordered, 5 lines per component)
+# The next section is an EXAMPLE COMPONENT
+#
+# No.   i.d.  Comp. name   Phase type  links to nodes NOTE: i.d. 10 for fcl; i.d. 18 for bcd
+#    1   18  AL_comp       1-phase         1    0    0
+# description:
+#  Appliance and Lighting represeneted by non-HVAC load on elec network
+# no. of additional data items: first is numerical, second is string
+#  4 1
+# data_numerical: numerical values of multiplier, interpolation (1=step, 2=linear), hydrogen loads (ignore=0, 1=deduct loads), file type (fcl=1, bcd=2)
+#  1 1 0 2
+# data_string: fcl filename or bcd field name
+#  AL-Other
+#
+#BEGIN_POWER_ONLY_COMPONENT_INFO
+  1   18  ALStoveElectric       1-phase         1    0    0
+  Appliance and Lighting Load due to ALStoveElectric imposed on the Electrical Network
+  4 1
+  1.34 1 0 2
+  ALStoveElectric
+  2   18  ALOtherElectric       1-phase         1    0    0
+  Appliance and Lighting Load due to ALOtherElectric imposed on the Electrical Network
+  4 1
+  1.34 1 0 2
+  ALOtherElectric
+  3   18  AL-Dryer       1-phase         1    0    0
+  Appliance and Lighting Load due to AL-Dryer imposed on the Electrical Network
+  4 1
+  0.58 1 0 2
+  AL-Dryer
+#END_POWER_ONLY_COMPONENT_INFO
+#
+#
+** end power-only 
+# END OF POWER ONLY COMPONENTS
+#
+#
+#
+# Listing and Description of components connecting the nodes
+* connecting components
+#BEGIN_CONNECTING_COMPONENTS
+  0
+#END_CONNECTING_COMPONENTS
+** end connecting components
+# connections between nodes in the network 
+* connections
+#BEGIN_CONNECTIONS
+  0
+#END_CONNECTIONS
+** end connections
+** electrical network end
