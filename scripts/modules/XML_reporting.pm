@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(organize_xml_log zone_energy_balance zone_temperatures secondary_consumption GHG_conversion organize_xml_log_tree);
+our @EXPORT = qw(organize_xml_log zone_energy_balance zone_temperatures secondary_consumption GHG_conversion organize_xml_log_tree site_balance);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -1347,6 +1347,104 @@ sub organize_xml_log_tree {
 	
 	return (1);
 };
+
+# ====================================================================
+# site_balance
+# This pull the data from the .xml.orig output file regarding site
+# generation and load 
+# ====================================================================
+
+sub site_balance {
+	my $house_name = shift; # House name
+	my $sim_period = shift; # Simulation period hash reference
+	my $zone_name_num = shift; # Zone names and numbers hash reference
+	my $province = shift; # The province name
+	my $coordinates = shift; # House coordinate information for error reporting
+	
+	my $file = $house_name . '.xml'; # Create a complete filename with extension
+
+	# If the xml.orig file exists
+	if (-e "$file.orig") {
+        my $XML = XMLin($file . '.orig'); # Readin the XML data from the orig file
+        my $NodeBalance->{'parameter'} = dclone($XML->{'CHREM'}->{'Site_Bal'}->{'NodeBalance'}->{'V_node_1'}); # Create a reference to the XML house bus node
+        
+        my @month_names = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec); # Short month names
+        my ($month_num, $num_month, $month_days); # Declare some month information hash refs
+        @{$month_num}{@month_names} = (1..12); # Key = month name, value = month number [1..12]
+        $num_month = {reverse(%{$month_num})}; # Key = month number [1..12], value = month name
+        @{$month_days}{@month_names} = qw(31 28 31 30 31 30 31 31 30 31 30 31); # Key = month name, value = days in month
+        
+        my $month_num_begin = $month_num->{'Jan'};
+        my $month_num_end = $month_num->{'Dec'};
+        
+        # Pull data from house bus
+        foreach my $param (keys %{$NodeBalance->{'parameter'}}) {
+            # Use key convention
+            my $param2 = "CHREM/Site_Bal/NodeBalance/House_AC/" . $param;
+            $NodeBalance->{'parameter'}->{$param2} = $NodeBalance->{'parameter'}->{$param};
+            delete $NodeBalance->{'parameter'}->{$param};
+            $param = $param2;
+        
+            my ($unit) = ($NodeBalance->{'parameter'}->{$param}->{'units'} =~ /\((.+)\)/); # Strip the units value of brackets and store it as 'normal' units
+            $NodeBalance->{'parameter'}->{$param}->{'units'} = {'normal' => $unit}; # Set units equal to this as the nominal unit type for non-integrated values
+            
+            # Cycle over the binned_data (by month and annual) and relocate the data up the tree
+            foreach my $element (@{$NodeBalance->{'parameter'}->{$param}->{'binned_data'}}) {
+                my $period; # Define a period variable
+                if ($element->{'type'} eq 'annual') { # If the type is annual
+                    $period = 'P00_Period'; # Store the period name
+                    delete $element->{'type'}; # Delete the redundant information
+                }
+                elsif ($element->{'type'} eq 'monthly') { # Elsif the type is monthly
+                    my $month = $num_month->{$element->{'index'} + $month_num_begin}; # Store the period by month name.
+                    $period = sprintf("P%02u_%s", $month_num->{$month}, $month); # Store the period by mm_mmm
+                    delete @{$element}{'type', 'index'}; # Delete the redundant information
+                    }
+                else { # Report if the type is unknown
+         		&die_msg("Bad XML reporting binned data type in $file: should be 'annual' or 'monthly'", $element->{'type'}, $coordinates);
+                };
+                # Save the information up the tree by cloning the remainder of the element to that period
+                $NodeBalance->{'parameter'}->{$param}->{$period} = dclone($element);
+            };
+            # Delete the redundant information
+            delete $NodeBalance->{'parameter'}->{$param}->{'binned_data'};
+                        
+            # Integrated data
+            if (defined($NodeBalance->{'parameter'}->{$param}->{'integrated_data'})) {
+                # Cycle over the integrated data
+                foreach my $element (@{$NodeBalance->{'parameter'}->{$param}->{'integrated_data'}->{'bin'}}) {
+                    my $period; # Define a period variable
+                    if ($element->{'type'} eq 'annual') { # If the type is annual
+                        $period = 'P00_Period'; # Store the period
+                    }
+                    elsif ($element->{'type'} eq 'monthly') { # Elsif the type is monthly
+                        my $month = $num_month->{$element->{'number'} + $month_num_begin}; # Store the period by month name.
+                        $period = sprintf("P%02u_%s", $month_num->{$month}, $month); # Store the period by mm_mmm
+                    }
+                    else { # Report if the type is unknown
+         			&die_msg("Bad XML reporting integrated data bin type in $file: should be 'annual' or 'monthly'", $element->{'type'}, $coordinates);
+                    };
+                    
+                    # Check that the integrated value is not NAN
+                    if ($element->{'content'} =~ /nan/i) {
+                        return(0);
+                    };
+                    
+                    # Save the information (integrated value) up the tree under a key of 'integrated'
+                    $NodeBalance->{'parameter'}->{$param}->{$period}->{'integrated'} = $element->{'content'};
+                };
+        
+                # Also store the integrated units type
+                ($NodeBalance->{'parameter'}->{$param}->{'units'}->{'integrated'}) = $NodeBalance->{'parameter'}->{$param}->{'integrated_data'}->{'units'};
+                # Delete the redundant information
+                delete $NodeBalance->{'parameter'}->{$param}->{'integrated_data'};
+            };
+        };
+        
+        return(1);
+        
+    } else {return(0);};
+};    
 
 # Final return value of one to indicate that the perl module is successful
 1;
