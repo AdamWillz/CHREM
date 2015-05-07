@@ -227,8 +227,6 @@ sub collect_results_data {
         my $XML = XMLin("$folder/$hse_name.xml");
         # Remove the 'parameter' field
         my $parameters = $XML->{'parameter'};
-        print Dumper $parameters;
-        sleep;
         
         my @FF=();
         # Pull all the src data for site that isn't electricity
@@ -248,9 +246,9 @@ sub collect_results_data {
                         };
 
                         # Store the source energy for this period
-                        $Output->{$key}->{$period}->{'site'}=$parameters->{$key}->{$period}->{'integrated'};
-                        $Output->{$key}->{$period}->{'source'}=$parameters->{$key}->{$period}->{'integrated'}*$SEF;
-                        $Output->{$key}->{'units'}=$parameters->{$key}->{'units'}->{'integrated'};
+                        $Output->{"CHREM/Site_Bal/src/$src/energy"}->{$period}->{'site'}=$parameters->{$key}->{$period}->{'integrated'};
+                        $Output->{"CHREM/Site_Bal/src/$src/energy"}->{$period}->{'source'}=$parameters->{$key}->{$period}->{'integrated'}*$SEF;
+                        $Output->{"CHREM/Site_Bal/src/$src/energy"}->{'units'}=$parameters->{$key}->{'units'}->{'integrated'};
                         
                         # Determine method to for GHG calculation
                         $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{'units'} = 'kg';
@@ -334,43 +332,88 @@ sub SiteBalanceRep {
     my $results_all=shift; 
     my $set_name=shift;
     
+    #print Dumper $results_all;
+    
     my $fileSiteBal = "../summary_files/SiteBal$set_name" . ".csv";
     my @SiteBal=();
     my $fileSrcBal = "../summary_files/SrcBal$set_name" . ".csv";
     my @SrcBal=();
-    my $fileGHG = "../summary_files/SourceGHG$set_name" . ".csv";
-    my @GHG=();
-    my $fileComm = "../summary_files/SrcBalTotal$set_name" . ".csv";
-    my @Comm=();
     
     # Local strings
     my $header = "house,type,province,";
     my @Mon = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-    
-    # Create a HASH reference
-    $parameter = $results_all->{$hse_name}->{'parameter'};
+    my @Per = ();
+    my $i=1;
+    foreach my $m (@Mon) {
+        my $ins = sprintf("%02s", $i);
+        push(@Per, ("P$ins" . "_$m"));
+        $i++;
+    };
+    push(@Per, 'P00_Period');
+    push(@Mon, 'Ann');
+    my @FF=('natural_gas','propane','oil');
 
-    foreach my $hse_name (keys %{$results_all}) {
-        foreach my $hse_name (keys %{$results_all->{$hse_name}}) {
-            my $type = $results_all->{$hse_name}->{'hse_type'};
-            my $region = $results_all->{$hse_name}->{'region'};
-            my $parameter = $results_all->{$hse_name}->{'parameter'};
-            
-            # Determine source energy types
-            my @FF=();
-            foreach my $key (keys %{$parameters}) {
-                if ($key =~ /^CHREM\/(Site_Bal)\/src\/(\w+)\/GHG$/) {
-                    my $src = $1;
-                    push(@FF, $src);
-                };
-            };
-            
-            # Build in the headers
-            
-            
-        
+    my @Sitekeys = ("CHREM/Site_Bal/NodeBalance/V_node_1/net_export","CHREM/Site_Bal/NodeBalance/V_node_1/net_import");
+    my @labels=(",,,Elec_export [GJ],,,,,,,,,,,,,Elec_import [GJ],,,,,,,,,,,,,");
+    push(@labels, "house,type,province,");   
+    foreach my $ff (@FF) {
+        push(@Sitekeys, "CHREM/Site_Bal/src/$ff/energy");
+        $labels[0] = $labels[0] . "$ff" ."_import [GJ],,,,,,,,,,,,,";
+    };
+    $labels[0] = $labels[0] . "\n";
+     
+    for (my $i=1;$i<=(3+$#FF);$i++) {
+        foreach my $mark (@Mon) {
+            $labels[1] = $labels[1] . "$mark,";
         };
     };
+    $labels[1] = $labels[1] . "\n";
+    push(@SiteBal, @labels);
+    push(@SrcBal, @labels);
+    
+    # Begin looping through data
+    foreach my $hse_name (keys %{$results_all}) {
+        my $type = $results_all->{$hse_name}->{'hse_type'};
+        my $region = $results_all->{$hse_name}->{'region'};
+        my $parameter = $results_all->{$hse_name}->{'parameter'};
+        
+        my $Siteline = "$hse_name,$type,$region,";
+        my $Srcline = $Siteline;
+        
+        foreach my $keylog (@Sitekeys) {
+            foreach my $period (@Per) {
+                my $data;
+                if (defined $parameter->{$keylog}->{$period}->{'source'}) {
+                    $data = $parameter->{$keylog}->{$period}->{'source'};
+                } else {
+                    $data = "0";
+                };
+                $Srcline = $Srcline . "$data,";
+                
+                if (defined $parameter->{$keylog}->{$period}->{'site'}) {
+                    $data = $parameter->{$keylog}->{$period}->{'site'};
+                } else {
+                    $data = "0";
+                };
+                $Siteline = $Siteline . "$data,";
+
+            };
+        };
+        $Srcline = $Srcline . "\n";
+        $Siteline = $Siteline . "\n";
+        push(@SiteBal, $Siteline);
+        push(@SrcBal, $Srcline);
+
+    };
+    
+    # pass the output
+	open (my $FILE, '>', $fileSiteBal) or die ("\n\nERROR: can't open $fileSiteBal\n");
+    print $FILE @SiteBal;
+    close($fileSiteBal);
+    
+    open ($FILE, '>', $fileSrcBal) or die ("\n\nERROR: can't open $fileSrcBal\n");
+    print $FILE @SrcBal;
+    close($fileSrcBal);
 
     return(1);
 };
