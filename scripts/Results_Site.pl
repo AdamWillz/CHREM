@@ -52,6 +52,7 @@ my $regions; # declare an hash array to store the regions to be modeled (e.g. 1 
 my $set_name; # store the results set name
 my $cores; # store the input core info
 my @houses_desired; # declare an array to store the house names or part of to look
+my $mode;
 
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+Sim_(.+)_Sim-Status.+/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -61,7 +62,7 @@ my @possible_set_names_print = @{&order($possible_set_names)}; # Order the names
 # Read the command line input arguments
 #--------------------------------------------------------------------
 COMMAND_LINE: {
-	if (@ARGV < 5) {die "A minimum Four arguments are required: house_types regions set_name core_information mode[house names]\nPossible set_names are: @possible_set_names_print\n";};
+	if (@ARGV < 5) {die "A minimum Four arguments are required: house_types regions set_name core_information mode [house names]\nPossible set_names are: @possible_set_names_print\n";};
 	
 	# Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
 	($hse_types, $regions, $set_name) = &hse_types_and_regions_and_set_name(shift(@ARGV), shift(@ARGV), shift(@ARGV));
@@ -96,7 +97,7 @@ COMMAND_LINE: {
 		die ("CORE argument numeric values are inappropriate (e.g. high_core > #_of_cores)\n");
 	};
     
-    my $mode = shift;
+    $mode = shift;
     if ($mode < 0 || $mode > 2) {
         die ("Results mode but be between 0 and 2\nMode 0: Only consider CHREM T and D losses\nMode 1: EnergyStar source energy factors\nMode 2: NREL source energy factors");
     };
@@ -175,7 +176,7 @@ MULTITHREAD_RESULTS: {
 	};
 	
 	# Call the remaining results printout and pass the results_all
-	&print_results_out($results_all, $set_name);
+	&SiteBalanceRep($results_all, $set_name);
 	
 	my $localtime = localtime(time);
 	print "Set: $set_name; End Time: $localtime\n";
@@ -185,8 +186,8 @@ MULTITHREAD_RESULTS: {
 # Subroutine to collect the XML data
 #--------------------------------------------------------------------
 sub collect_results_data {
-    my ($folders_ref, $mode ) = @_;
-    my @folders = @$folders_ref;
+    my @folders = @_;
+    my $mode = pop @folders;
 	
 	#--------------------------------------------------------------------
 	# Cycle through the data and collect the results
@@ -212,6 +213,7 @@ sub collect_results_data {
 		my ($hse_type, $region, $hse_name) = ($folder =~ /^\.\.\/(\d-\w{2}).+\/(\d-\w{2})\/(.+)$/);
         $results_all->{$hse_name}->{'hse_type'} = $hse_type;
         $results_all->{$hse_name}->{'region'} = $region;
+        $results_all->{$hse_name}->{'parameter'} = {};
         
         my $Output = $results_all->{$hse_name}->{'parameter'};
         my $site_ghg;
@@ -225,23 +227,45 @@ sub collect_results_data {
         my $XML = XMLin("$folder/$hse_name.xml");
         # Remove the 'parameter' field
         my $parameters = $XML->{'parameter'};
-
+        print Dumper $parameters;
+        sleep;
+        
+        my @FF=();
         # Pull all the src data for site that isn't electricity
-        my $SEF = 1;
         foreach my $key (keys %{$parameters}) {
-            if ($key =~ /^CHREM\/SCD\/src\/(\w+)\/quantity$/) {
+            if ($key =~ /^CHREM\/SCD\/src\/(\w+)\/energy$/) {
                 my $src = $1;
+                push(@FF, $src);
                 unless ($src =~ /electricity/) {
                     foreach my $period (@{&order($parameters->{$key}, [], [qw(units description)])}) {
+
+                        # Determine source energy factor (SEF) to use
+                        my $SEF = 1;
                         if ($mode == 1 ) { # EnergyStar source factors
-                            $SEF = $en_srcs->{$src}->{'ESsource'}
+                            $SEF = $en_srcs->{$src}->{'ESource'};
                         } elsif ($mode == 2) { # NREL
-                        
+                            $SEF = $en_srcs->{$src}->{'NREL'}->{'NSource'};
                         };
-                        $Output->{$key}->{$period}->{'integrated'}=$parameters->{$key}->{$period}->{'integrated'}*$SEF;
-                        $Output->{"CHREM/SCD/src/$src/GHG"}->{$period}->{'integrated'} = $parameters->{$key}->{$period}->{'integrated'} * $en_srcs->{$src}->{'GHGIF'} / 1000;
+
+                        # Store the source energy for this period
+                        $Output->{$key}->{$period}->{'site'}=$parameters->{$key}->{$period}->{'integrated'};
+                        $Output->{$key}->{$period}->{'source'}=$parameters->{$key}->{$period}->{'integrated'}*$SEF;
+                        $Output->{$key}->{'units'}=$parameters->{$key}->{'units'}->{'integrated'};
+                        
+                        # Determine method to for GHG calculation
+                        $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{'units'} = 'kg';
+                        if ($mode < 2) { # Use the CHREM method
+                            $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'site'} = $parameters->{"CHREM/SCD/src/$src/quantity"}->{$period}->{'integrated'} * $en_srcs->{$src}->{'GHGIF'} / 1000;
+                            $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'source'} = $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'site'};
+                            
+                        } else { # Using factors from NREL
+                            $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'site'} = $parameters->{"CHREM/SCD/src/$src/quantity"}->{$period}->{'integrated'} * $en_srcs->{$src}->{'NREL'}->{'siteCombGHGIF'} / 1000;
+                            $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'pre'} = $parameters->{"CHREM/SCD/src/$src/quantity"}->{$period}->{'integrated'} * $en_srcs->{$src}->{'NREL'}->{'preCombGHGIF'} / 1000;
+                            $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'source'} = $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'site'} + $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'pre'};
+                        };
                         unless (defined($site_ghg->{$period})) {$site_ghg->{$period} = 0;};
-                        $site_ghg->{$period} = $site_ghg->{$period} + $parameters->{"CHREM/SCD/src/$src/GHG"}->{$period}->{'integrated'};
+                        # Update the site GHG
+                        $site_ghg->{$period} = $site_ghg->{$period} + $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'source'};
                     };
                 };
             };
@@ -249,35 +273,105 @@ sub collect_results_data {
         # Pull the grid data
         my $per_sum = 0;
         my $import = 'CHREM/Site_Bal/NodeBalance/V_node_1/net_import';
+        $Output->{$import}->{'units'} = $parameters->{$import}->{'units'}->{'integrated'};
+        $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{'units'} = 'kg';
 		foreach my $period (@{&order($parameters->{$import}, [], [qw(units P00 description)])}) {
 			my $mult;
+            # Site electricity import
+            $Output->{$import}->{$period}->{'site'} = $parameters->{$import}->{$period}->{'integrated'};
             
-			if (defined($en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{$period}->{'GHGIFavg'})) {
-				$mult = $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{$period}->{'GHGIFavg'};
-			}
-			else {
-				$mult = $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'GHGIFavg'};
-			};
-            $Output->{$import}->{$period}->{'integrated'} = $parameters->{$import}->{$period}->{'integrated'};
-			$Output->{"CHREM/SCD/src/electricity/GHG"}->{$period}->{'integrated'} = $parameters->{$import}->{$period}->{'integrated'} / (1 - $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'trans_dist_loss'}) * $mult / 1000;
-			unless (defined($site_ghg->{$period})) {$site_ghg->{$period} = 0;};
-			$site_ghg->{$period} = $site_ghg->{$period} + $parameters->{"CHREM/SCD/src/electricity/GHG"}->{$period}->{'integrated'};
-			$per_sum = $per_sum + $parameters->{"CHREM/SCD/src/electricity/GHG"}->{$period}->{'integrated'}
+            if ($mode < 2) {
+                if (defined($en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{$period}->{'GHGIFavg'})) {
+                    $mult = $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{$period}->{'GHGIFavg'};
+                }
+                else {
+                    $mult = $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'GHGIFavg'};
+                };
+                
+                if ($mode == 1) { # EnergyStar source factor
+                    $Output->{$import}->{$period}->{'source'} = $parameters->{$import}->{$period}->{'integrated'}*$en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'ESsource'};
+                } else {
+                    $Output->{$import}->{$period}->{'source'} = $Output->{$import}->{$period}->{'site'};
+                }; 
+                
+                $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'} = $parameters->{$import}->{$period}->{'integrated'} / (1 - $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'trans_dist_loss'}) * $mult / 1000;
+
+           } elsif ($mode == 2) { # EnergyStar method
+                $mult = $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'NGHGIFavg'};
+                # Source energy
+                $Output->{$import}->{$period}->{'source'} = $Output->{$import}->{$period}->{'site'} * $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'NSource'};
+                
+                $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'} = $Output->{$import}->{$period}->{'source'} * $mult / 1000;
+           };
+           
+           unless (defined($site_ghg->{$period})) {$site_ghg->{$period} = 0;};
+           $site_ghg->{$period} = $site_ghg->{$period} + $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'};
+           $per_sum = $per_sum + $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'};
+
 		};
-		$Output->{"CHREM/SCD/src/electricity/GHG"}->{'P00_Period'}->{'integrated'} = $per_sum;
+		$Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{'P00_Period'}->{'source'} = $per_sum;
 		unless (defined($site_ghg->{'P00_Period'})) {$site_ghg->{'P00_Period'} = 0;};
-		$site_ghg->{'P00_Period'} = $site_ghg->{'P00_Period'} + $parameters->{"CHREM/SCD/src/electricity/GHG"}->{'P00_Period'}->{'integrated'};
+		$site_ghg->{'P00_Period'} = $site_ghg->{'P00_Period'} + $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{'P00_Period'}->{'source'};
         
         
         # Pull the exported to grid data
         $import = 'CHREM/Site_Bal/NodeBalance/V_node_1/net_export';
+        $Output->{$import}->{'units'} = $parameters->{$import}->{'units'}->{'integrated'};
 		foreach my $period (@{&order($parameters->{$import}, [], [qw(units P00 description)])}) {
-            $Output->{$import}->{$period}->{'integrated'} = $parameters->{$import}->{$period}->{'integrated'};
+            $Output->{$import}->{$period}->{'site'} = $parameters->{$import}->{$period}->{'integrated'};
 		};
         
 	};
-# 	print Dumper $results_all;
 	
 	return ($results_all);
+};
+
+#--------------------------------------------------------------------
+# Subroutine to print out the site balance data
+#--------------------------------------------------------------------
+sub SiteBalanceRep {
+
+    my $results_all=shift; 
+    my $set_name=shift;
+    
+    my $fileSiteBal = "../summary_files/SiteBal$set_name" . ".csv";
+    my @SiteBal=();
+    my $fileSrcBal = "../summary_files/SrcBal$set_name" . ".csv";
+    my @SrcBal=();
+    my $fileGHG = "../summary_files/SourceGHG$set_name" . ".csv";
+    my @GHG=();
+    my $fileComm = "../summary_files/SrcBalTotal$set_name" . ".csv";
+    my @Comm=();
+    
+    # Local strings
+    my $header = "house,type,province,";
+    my @Mon = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+    
+    # Create a HASH reference
+    $parameter = $results_all->{$hse_name}->{'parameter'};
+
+    foreach my $hse_name (keys %{$results_all}) {
+        foreach my $hse_name (keys %{$results_all->{$hse_name}}) {
+            my $type = $results_all->{$hse_name}->{'hse_type'};
+            my $region = $results_all->{$hse_name}->{'region'};
+            my $parameter = $results_all->{$hse_name}->{'parameter'};
+            
+            # Determine source energy types
+            my @FF=();
+            foreach my $key (keys %{$parameters}) {
+                if ($key =~ /^CHREM\/(Site_Bal)\/src\/(\w+)\/GHG$/) {
+                    my $src = $1;
+                    push(@FF, $src);
+                };
+            };
+            
+            # Build in the headers
+            
+            
+        
+        };
+    };
+
+    return(1);
 };
 

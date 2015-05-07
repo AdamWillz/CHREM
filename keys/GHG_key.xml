@@ -21,11 +21,17 @@
 <!-- The following are constituent components and must be multiplied by intensity factors and summed to a C) equivalent -->
 <!-- Data is from Environment Canada GHG Emissions Inventory: http://www.ec.gc.ca/ges-ghg/default.asp?lang=En&n=DDCA72D0-1 -->
 
-	<en_src name = "natural_gas" unit="g/m3" CO2="1875" CH4="0.037" N2O="0.035" GHGIF="1886" ESsource="1.02"/>
+	<en_src name = "natural_gas" unit="g/m3" CO2="1875" CH4="0.037" N2O="0.035" GHGIF="1886" ESsource="1.02">
+        <NREL preCombGHGIF="445" siteCombGHGIF="1970" NSource = "1.103"/>
+    </en_src>
 
-	<en_src name = "propane" unit="g/l" CO2="1510" CH4="0.027" N2O="0.108" GHGIF="1543" ESsource="1.03"/>
+	<en_src name = "propane" unit="g/l" CO2="1510" CH4="0.027" N2O="0.108" GHGIF="1543" ESsource="1.03">
+        <NREL preCombGHGIF="307" siteCombGHGIF="1620" NSource = "1.140"/>
+    </en_src>
 
-	<en_src name = "oil" unit="g/l" CO2="2725" CH4="0.026" N2O="0.006" GHGIF="2727" ESsource="1.01"/>
+	<en_src name = "oil" unit="g/l" CO2="2725" CH4="0.026" N2O="0.006" GHGIF="2727" ESsource="1.01">
+        <NREL preCombGHGIF="491" siteCombGHGIF="2730" NSource = "1.162"/>
+    </en_src>
 
 <!-- ELECTRICITY -->
 
@@ -39,7 +45,7 @@ generation in Canada-->
 	<en_src name = "electricity" perunit="g/kWh">
 
 		<province name="NEWFOUNDLAND" trans_dist_loss="0.09">
-			<period name="P00_Period" GHGIFavg="26" GHGIFmarginal="22" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="26" GHGIFmarginal="22" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
@@ -55,7 +61,7 @@ generation in Canada-->
 		</province>
 
 		<province name="PRINCE EDWARD ISLAND" trans_dist_loss="0.06">
-			<period name="P00_Period" GHGIFavg="191" GHGIFmarginal="6" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="191" GHGIFmarginal="6" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
@@ -71,7 +77,7 @@ generation in Canada-->
 		</province>
 
 		<province name="NOVA SCOTIA" trans_dist_loss="0.04">
-			<period name="P00_Period" GHGIFavg="733" GHGIFmarginal="360" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="733" GHGIFmarginal="360" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
@@ -87,7 +93,7 @@ generation in Canada-->
 		</province>
 
 		<province name="NEW BRUNSWICK" trans_dist_loss="0.06">
-			<period name="P00_Period" GHGIFavg="433" GHGIFmarginal="800" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="433" GHGIFmarginal="800" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
@@ -104,38 +110,38 @@ generation in Canada-->
 
 		<province name="QUEBEC" trans_dist_loss="0.04">
 			<period name="P00_Period" GHGIFavg="6" ESsource="2.05" />
-			<period name="P01_Jan" GHGIFmarginal="23" ESsource="2.05" />
-			<period name="P02_Feb" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P03_Mar" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P04_Apr" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P05_May" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P06_Jun" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P07_Jul" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P08_Aug" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P09_Sep" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P10_Oct" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P11_Nov" GHGIFmarginal="0" ESsource="2.05" />
-			<period name="P12_Dec" GHGIFmarginal="0" ESsource="2.05" />
+			<period name="P01_Jan" GHGIFmarginal="23" />
+			<period name="P02_Feb" GHGIFmarginal="0" />
+			<period name="P03_Mar" GHGIFmarginal="0" />
+			<period name="P04_Apr" GHGIFmarginal="0" />
+			<period name="P05_May" GHGIFmarginal="0" />
+			<period name="P06_Jun" GHGIFmarginal="0" />
+			<period name="P07_Jul" GHGIFmarginal="0" />
+			<period name="P08_Aug" GHGIFmarginal="0" />
+			<period name="P09_Sep" GHGIFmarginal="0" />
+			<period name="P10_Oct" GHGIFmarginal="0" />
+			<period name="P11_Nov" GHGIFmarginal="0" />
+			<period name="P12_Dec" GHGIFmarginal="0" />
 		</province>
 
 		<province name="ONTARIO" trans_dist_loss="0.06">
-			<period name="P00_Period" GHGIFavg="199" ESsource="2.05" />
-			<period name="P01_Jan" GHGIFmarginal="395" GHGIFmarginal2="221" ESsource="2.05" />
-			<period name="P02_Feb" GHGIFmarginal="352" GHGIFmarginal2="211" ESsource="2.05" />
-			<period name="P03_Mar" GHGIFmarginal="329" GHGIFmarginal2="199" ESsource="2.05" />
-			<period name="P04_Apr" GHGIFmarginal="463" GHGIFmarginal2="246" ESsource="2.05" />
-			<period name="P05_May" GHGIFmarginal="501" GHGIFmarginal2="259" ESsource="2.05" />
-			<period name="P06_Jun" GHGIFmarginal="514" GHGIFmarginal2="294" ESsource="2.05" />
-			<period name="P07_Jul" GHGIFmarginal="489" GHGIFmarginal2="276" ESsource="2.05" />
-			<period name="P08_Aug" GHGIFmarginal="491" GHGIFmarginal2="276" ESsource="2.05" />
-			<period name="P09_Sep" GHGIFmarginal="455" GHGIFmarginal2="259" ESsource="2.05" />
-			<period name="P10_Oct" GHGIFmarginal="458" GHGIFmarginal2="262" ESsource="2.05" />
-			<period name="P11_Nov" GHGIFmarginal="379" GHGIFmarginal2="231" ESsource="2.05" />
-			<period name="P12_Dec" GHGIFmarginal="371" GHGIFmarginal2="227" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="199" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
+			<period name="P01_Jan" GHGIFmarginal="395" GHGIFmarginal2="221" />
+			<period name="P02_Feb" GHGIFmarginal="352" GHGIFmarginal2="211" />
+			<period name="P03_Mar" GHGIFmarginal="329" GHGIFmarginal2="199" />
+			<period name="P04_Apr" GHGIFmarginal="463" GHGIFmarginal2="246" />
+			<period name="P05_May" GHGIFmarginal="501" GHGIFmarginal2="259" />
+			<period name="P06_Jun" GHGIFmarginal="514" GHGIFmarginal2="294" />
+			<period name="P07_Jul" GHGIFmarginal="489" GHGIFmarginal2="276" />
+			<period name="P08_Aug" GHGIFmarginal="491" GHGIFmarginal2="276" />
+			<period name="P09_Sep" GHGIFmarginal="455" GHGIFmarginal2="259" />
+			<period name="P10_Oct" GHGIFmarginal="458" GHGIFmarginal2="262" />
+			<period name="P11_Nov" GHGIFmarginal="379" GHGIFmarginal2="231" />
+			<period name="P12_Dec" GHGIFmarginal="371" GHGIFmarginal2="227" />
 		</province>
 
 		<province name="MANITOBA" trans_dist_loss="0.12">
-			<period name="P00_Period" GHGIFavg="13" GHGIFmarginal="1" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="13" GHGIFmarginal="1" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
@@ -151,7 +157,7 @@ generation in Canada-->
 		</province>
 
 		<province name="SASKATCHEWAN" trans_dist_loss="0.06">
-			<period name="P00_Period" GHGIFavg="789" GHGIFmarginal="225" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="789" GHGIFmarginal="225" ESsource="2.05" NSource="3.365" NGHGIFavg="789" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
@@ -167,23 +173,23 @@ generation in Canada-->
 		</province>
 
 		<province name="ALBERTA" trans_dist_loss="0.04">
-			<period name="P00_Period" GHGIFavg="921" ESsource="2.05"/>
-			<period name="P01_Jan" GHGIFmarginal="825" ESsource="2.05" />
-			<period name="P02_Feb" GHGIFmarginal="825" ESsource="2.05" />
-			<period name="P03_Mar" GHGIFmarginal="795" ESsource="2.05" />
-			<period name="P04_Apr" GHGIFmarginal="795" ESsource="2.05" />
-			<period name="P05_May" GHGIFmarginal="795" ESsource="2.05" />
-			<period name="P06_Jun" GHGIFmarginal="780" ESsource="2.05" />
-			<period name="P07_Jul" GHGIFmarginal="780" ESsource="2.05" />
-			<period name="P08_Aug" GHGIFmarginal="780" ESsource="2.05" />
-			<period name="P09_Sep" GHGIFmarginal="780" ESsource="2.05" />
-			<period name="P10_Oct" GHGIFmarginal="795" ESsource="2.05" />
-			<period name="P11_Nov" GHGIFmarginal="825" ESsource="2.05" />
-			<period name="P12_Dec" GHGIFmarginal="825" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="921" ESsource="2.05" NSource="2.894" NGHGIFavg="594" />
+			<period name="P01_Jan" GHGIFmarginal="825" />
+			<period name="P02_Feb" GHGIFmarginal="825" />
+			<period name="P03_Mar" GHGIFmarginal="795" />
+			<period name="P04_Apr" GHGIFmarginal="795" />
+			<period name="P05_May" GHGIFmarginal="795" />
+			<period name="P06_Jun" GHGIFmarginal="780" />
+			<period name="P07_Jul" GHGIFmarginal="780" />
+			<period name="P08_Aug" GHGIFmarginal="780" />
+			<period name="P09_Sep" GHGIFmarginal="780" />
+			<period name="P10_Oct" GHGIFmarginal="795" />
+			<period name="P11_Nov" GHGIFmarginal="825" />
+			<period name="P12_Dec" GHGIFmarginal="825" />
 		</province>
 
 		<province name="BRITISH COLUMBIA" trans_dist_loss="0.03">
-			<period name="P00_Period" GHGIFavg="22" GHGIFmarginal="18" ESsource="2.05" />
+			<period name="P00_Period" GHGIFavg="22" GHGIFmarginal="18" ESsource="2.05" NSource="2.894" NGHGIFavg="594" />
 			<period name="P01_Jan" />
 			<period name="P02_Feb" />
 			<period name="P03_Mar" />
