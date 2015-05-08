@@ -138,7 +138,9 @@ foreach my $hse_type (&array_order(values %{$hse_types})) {		#each house type
 # Delete old summary files
 #--------------------------------------------------------------------
 foreach my $file (<../summary_files/*>) { # Loop over the files
-	my $check = 'Site' . $set_name . '_';
+	my $check = 'SiteBal' . $set_name . '_';
+	if ($file =~ /$check/) {unlink $file;};
+    $check = 'SrcBal' . $set_name . '_';
 	if ($file =~ /$check/) {unlink $file;};
 };
 
