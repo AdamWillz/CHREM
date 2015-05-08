@@ -411,11 +411,11 @@ sub SiteBalanceRep {
     # pass the output
 	open (my $FILE, '>', $fileSiteBal) or die ("\n\nERROR: can't open $fileSiteBal\n");
     print $FILE @SiteBal;
-    close($fileSiteBal);
+    close($FILE);
     
     open ($FILE, '>', $fileSrcBal) or die ("\n\nERROR: can't open $fileSrcBal\n");
     print $FILE @SrcBal;
-    close($fileSrcBal);
+    close($FILE);
 
     return(1);
 };
