@@ -436,7 +436,7 @@ MAIN: {
             # --------------------------------------------------------------------
 
             # Only surfaces with construction type 'slop'
-            my $PVZoneCount=0; # Counter for the number of PV zones
+            # my $PVZoneCount=0; # Counter for the number of PV zones
             # Initialize HASH to hold PV geometry and data
             my $PVZones;
             foreach my $index (keys (%{$surf})) {
@@ -513,7 +513,7 @@ MAIN: {
                         #$hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'PV_area'}=sprintf("%4.3f",$NumColl*$PVdata->{'Area'});
                         #$hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Num_modules'}=sprintf("%d",$NumColl);
                         #$hseRepData->{$hse_name}->{$surf->{$index}->{'name'}}->{'Surf_Coverage'}=sprintf("%4.3f",$Coverage);
-                        $PVZoneCount++;
+                        #$PVZoneCount++;
                     };
                 };
             };
@@ -535,12 +535,37 @@ MAIN: {
                     };
                     if ($PVTotPower > $PVdata->{'Max_Array_P'}) { # Arrays for house exceed max allowable production, reduce number of panels
                         # Determine number of collectors to be reduced
-                        my $NumReduce = ceil(($PVTotPower-$PVdata->{'Max_Array_P'})/$PVdata->{'P_rated'});
-                        $PVZones->{$FindMax->{'name'}}->{'NumColl'} = $PVZones->{$FindMax->{'name'}}->{'NumColl'}-$NumReduce;
-                        
-                        if ($PVZones->{$FindMax->{'name'}}->{'NumColl'} <= 0) { # All collectors rem
-                            print "WARNING: All collectors removed from surface $FindMax->{'name'}, house $hse_name\n";
-                        };
+                        my $NumReduce = -1*ceil(($PVTotPower-$PVdata->{'Max_Array_P'})/$PVdata->{'P_rated'});
+
+                        #print "WARNING: All collectors removed from surface $FindMax->{'name'}, house $hse_name\n";
+                        PVREMOVE: {
+                            foreach my $index (keys (%{$PVZones})) {
+                                if ($PVZones->{$index}->{'NumColl'} > 0) { # Surface contains collectors
+                                    if ($PVZones->{$index}->{'Azimuth'} <= 135 || $PVZones->{$index}->{'Azimuth'} >= 225) { # Less than ideal, remove
+                                        $PVZones->{$index}->{'NumColl'} = $PVZones->{$index}->{'NumColl'}+$NumReduce;
+                                        if ($PVZones->{$index}->{'NumColl'} < 0) { # There is still too many collectors
+                                            $NumReduce = $PVZones->{$index}->{'NumColl'};
+                                        } else {
+                                            last PVREMOVE;
+                                        };
+                                    };
+                                };
+                            };
+                            # If this spot has been reached, there is still too many collectors
+                            FINALSWEEP: {
+                                foreach my $index (keys (%{$PVZones})) {
+                                    if ($PVZones->{$index}->{'NumColl'} > 0) { # Remove some collectors from this surface
+                                        $PVZones->{$index}->{'NumColl'} = $PVZones->{$index}->{'NumColl'}+$NumReduce;
+                                        if ($PVZones->{$index}->{'NumColl'} < 0) { # There is still too many collectors
+                                            $NumReduce = $PVZones->{$index}->{'NumColl'};
+                                        } else {
+                                            last FINALSWEEP;
+                                        };
+                                    }
+                                };
+                            
+                            } # END FINALSWEEP
+                        }; # END PVREMOVE
                     };
                 };
                 
@@ -592,6 +617,7 @@ MAIN: {
                 unlink $FILEpath;
             };
 
+            my $PVZoneCount = keys %{$PVZones};
             my $Num_new=$Num_zones+$PVZoneCount; # Update number of zones in cfg file
             &replace ($hse_file->{'cfg'}, "#ZONE_COUNT: no of zones", 1, 1, "%s\n", "$Num_new");
 

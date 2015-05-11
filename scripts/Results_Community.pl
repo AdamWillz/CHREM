@@ -95,17 +95,11 @@ foreach my $hse_type (&array_order(values %{$hse_types})) {		#each house type
 # 		print Dumper @dirs;
 		CHECK_FOLDER: foreach my $dir (@dirs) {
 			# cycle through the desired house names to see if this house matches. If so continue the house build
-			foreach my $desired (@houses_desired) {
-				# it matches, so set the flag
-				if ($dir =~ /\/$desired/) {
 					push (@folders, $dir);
 					next CHECK_FOLDER;
-				};
-			};
 		};
 	};
 };
-
 
 #--------------------------------------------------------------------
 # Delete old summary files
