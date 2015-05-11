@@ -237,7 +237,11 @@ sub collect_results_data {
                 my $src = $1;
                 push(@FF, $src);
                 unless ($src =~ /electricity/) {
-                    foreach my $period (@{&order($parameters->{$key}, [], [qw(units description)])}) {
+                    $Output->{"CHREM/Site_Bal/src/$src/energy"}->{'units'}=$parameters->{$key}->{'units'}->{'integrated'};
+                    my $ESite = 0;
+                    my $ESrc = 0;
+                    my $TGHG = 0;
+                    foreach my $period (@{&order($parameters->{$key}, [], [qw(units P00 description)])}) {
 
                         # Determine source energy factor (SEF) to use
                         my $SEF = 1;
@@ -249,9 +253,10 @@ sub collect_results_data {
 
                         # Store the source energy for this period
                         $Output->{"CHREM/Site_Bal/src/$src/energy"}->{$period}->{'site'}=$parameters->{$key}->{$period}->{'integrated'};
+                        $ESite += $Output->{"CHREM/Site_Bal/src/$src/energy"}->{$period}->{'site'};
                         $Output->{"CHREM/Site_Bal/src/$src/energy"}->{$period}->{'source'}=$parameters->{$key}->{$period}->{'integrated'}*$SEF;
-                        $Output->{"CHREM/Site_Bal/src/$src/energy"}->{'units'}=$parameters->{$key}->{'units'}->{'integrated'};
-                        
+                        $ESrc += $Output->{"CHREM/Site_Bal/src/$src/energy"}->{$period}->{'source'};
+
                         # Determine method to for GHG calculation
                         $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{'units'} = 'kg';
                         if ($mode < 2) { # Use the CHREM method
@@ -266,12 +271,19 @@ sub collect_results_data {
                         unless (defined($site_ghg->{$period})) {$site_ghg->{$period} = 0;};
                         # Update the site GHG
                         $site_ghg->{$period} = $site_ghg->{$period} + $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'source'};
+                        $TGHG += $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{$period}->{'source'};
                     };
+                    # Store annual values
+                    $Output->{"CHREM/Site_Bal/src/$src/energy"}->{'P00_Period'}->{'site'} = $ESite;
+                    $Output->{"CHREM/Site_Bal/src/$src/energy"}->{'P00_Period'}->{'source'} = $ESrc;
+                    $Output->{"CHREM/Site_Bal/src/$src/GHG"}->{'P00_Period'}->{'source'} = $TGHG;
                 };
             };
 		};
         # Pull the grid data
         my $per_sum = 0;
+        my $ESite = 0;
+        my $ESrc = 0;
         my $import = 'CHREM/Site_Bal/NodeBalance/V_node_1/net_import';
         $Output->{$import}->{'units'} = $parameters->{$import}->{'units'}->{'integrated'};
         $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{'units'} = 'kg';
@@ -279,6 +291,7 @@ sub collect_results_data {
 			my $mult;
             # Site electricity import
             $Output->{$import}->{$period}->{'site'} = $parameters->{$import}->{$period}->{'integrated'};
+            $ESite += $Output->{$import}->{$period}->{'site'};
             
             if ($mode < 2) {
                 if (defined($en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{$period}->{'GHGIFavg'})) {
@@ -293,6 +306,7 @@ sub collect_results_data {
                 } else {
                     $Output->{$import}->{$period}->{'source'} = $Output->{$import}->{$period}->{'site'};
                 }; 
+                $ESrc += $Output->{$import}->{$period}->{'source'};
                 
                 $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'} = $parameters->{$import}->{$period}->{'integrated'} / (1 - $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'trans_dist_loss'}) * $mult / 1000;
 
@@ -300,6 +314,7 @@ sub collect_results_data {
                 $mult = $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'NGHGIFavg'};
                 # Source energy
                 $Output->{$import}->{$period}->{'source'} = $Output->{$import}->{$period}->{'site'} * $en_srcs->{'electricity'}->{'province'}->{$XML->{'province'}}->{'period'}->{'P00_Period'}->{'NSource'};
+                $ESrc += $Output->{$import}->{$period}->{'source'};
                 
                 $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'} = $Output->{$import}->{$period}->{'source'} * $mult / 1000;
            };
@@ -309,15 +324,18 @@ sub collect_results_data {
            $per_sum = $per_sum + $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{$period}->{'source'};
 
 		};
+        # Gather the annual data
 		$Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{'P00_Period'}->{'source'} = $per_sum;
 		unless (defined($site_ghg->{'P00_Period'})) {$site_ghg->{'P00_Period'} = 0;};
 		$site_ghg->{'P00_Period'} = $site_ghg->{'P00_Period'} + $Output->{"CHREM/Site_Bal/src/electricity/GHG"}->{'P00_Period'}->{'source'};
         
+        $Output->{$import}->{'P00_Period'}->{'site'} = $ESite;
+        $Output->{$import}->{'P00_Period'}->{'source'} = $ESrc;
         
         # Pull the exported to grid data
         $import = 'CHREM/Site_Bal/NodeBalance/V_node_1/net_export';
         $Output->{$import}->{'units'} = $parameters->{$import}->{'units'}->{'integrated'};
-		foreach my $period (@{&order($parameters->{$import}, [], [qw(units P00 description)])}) {
+		foreach my $period (@{&order($parameters->{$import}, [], [qw(units description)])}) {
             $Output->{$import}->{$period}->{'site'} = $parameters->{$import}->{$period}->{'integrated'};
 		};
         
