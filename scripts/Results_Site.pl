@@ -142,6 +142,8 @@ foreach my $file (<../summary_files/*>) { # Loop over the files
 	if ($file =~ /$check/) {unlink $file;};
     $check = 'SrcBal' . $set_name . '_';
 	if ($file =~ /$check/) {unlink $file;};
+    $check = 'PCU' . $set_name . '_';
+	if ($file =~ /$check/) {unlink $file;};
 };
 
 
@@ -339,8 +341,35 @@ sub collect_results_data {
             $Output->{$import}->{$period}->{'site'} = $parameters->{$import}->{$period}->{'integrated'};
 		};
         
-	};
-	
+        # Grab PCU data
+        $results_all->{$hse_name}->{'PCU'} = {};
+        my $oPCU = $results_all->{$hse_name}->{'PCU'};
+        my $OrigXML = XMLin("$folder/$hse_name.xml.orig");
+        if ($OrigXML->{'CHREM'}->{'Site_Bal'}->{'PV_PCU'}) { # If there is PCU data, grab it
+            my $MapPer;
+            my $PCU = dclone($OrigXML->{'CHREM'}->{'Site_Bal'}->{'PV_PCU'}); # Create a reference to the XML PCU data
+            my @Mon = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+            
+            for (my $i = 0; $i <=11;$i++) {
+                my $j = $i+1;
+                my $ins = sprintf("%02s", $j);
+                $MapPer->{"$i"} = "P$ins" . "_$Mon[$i]";
+            }
+            foreach my $inverter (keys %{$PCU}) {
+                foreach my $param (keys %{$PCU->{$inverter}}) {
+                    $oPCU->{$inverter}->{$param}->{'units'} = $PCU->{$inverter}->{$param}->{'integrated_data'}->{'units'};
+                    $oPCU->{$inverter}->{$param}->{'description'} = $PCU->{$inverter}->{$param}->{'description'};
+                    foreach my $data (@{$PCU->{$inverter}->{$param}->{'integrated_data'}->{'bin'}}) {
+                        if ($data->{'type'} =~ /monthly/) {
+                            $oPCU->{$inverter}->{$param}->{$MapPer->{$data->{'number'}}} = $data->{'content'};
+                        } else {
+                            $oPCU->{$inverter}->{$param}->{'P00_Period'} = $data->{'content'};
+                        };
+                    };
+                };
+            };
+        };
+	}; # END of FOLDER
 	return ($results_all);
 };
 
@@ -358,9 +387,9 @@ sub SiteBalanceRep {
     my @SiteBal=();
     my $fileSrcBal = "../summary_files/SrcBal$set_name" . ".csv";
     my @SrcBal=();
-    
+    my $bPCU = 0; # Boolean to indicate presence of PCU results
+
     # Local strings
-    my $header = "house,type,province,";
     my @Mon = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
     my @Per = ();
     my $i=1;
@@ -393,6 +422,8 @@ sub SiteBalanceRep {
     
     # Begin looping through data
     foreach my $hse_name (keys %{$results_all}) {
+        if (defined $results_all->{$hse_name}->{'PCU'}) {$bPCU = 1;}
+        
         my $type = $results_all->{$hse_name}->{'hse_type'};
         my $region = $results_all->{$hse_name}->{'region'};
         my $parameter = $results_all->{$hse_name}->{'parameter'};
@@ -434,7 +465,40 @@ sub SiteBalanceRep {
     open ($FILE, '>', $fileSrcBal) or die ("\n\nERROR: can't open $fileSrcBal\n");
     print $FILE @SrcBal;
     close($FILE);
-
+    
+    # Consider PCU data
+    if ($bPCU > 0) {
+        my @PCUkeys=('power_in','power_out','PCU_losses');
+        my $filePCU = "../summary_files/PCU$set_name" . ".csv";
+        my @PCU=(",,,,power_in [GJ],,,,,,,,,,,,,power_out [GJ],,,,,,,,,,,,,power_loss [GJ],,,,,,,,,,,,,\n", "house,type,province,inverter,");
+        for (my $i=1;$i<=$#PCUkeys;$i++) {
+            foreach my $mark (@Mon) {
+                $PCU[1] = $PCU[1] . "$mark,";
+            };
+        };
+        $PCU[1] = $PCU[1] . "\n";
+        
+        foreach my $hse_name (keys %{$results_all}) {
+            my $type = $results_all->{$hse_name}->{'hse_type'};
+            my $region = $results_all->{$hse_name}->{'region'};
+            my $PCU = $results_all->{$hse_name}->{'PCU'};
+                foreach my $inv (keys %{$PCU}) {
+                    my $data = "$hse_name,$type,$region,$inv,";
+                    foreach my $keylog (@PCUkeys) {
+                        foreach my $period (@Per) {
+                            $data = $data . "$PCU->{$inv}->{$keylog}->{$period}" . ",";
+                        };
+                    };
+                    $data = $data . "\n";
+                    push(@PCU,$data);
+                };
+        };
+    
+        open ($FILE, '>', $filePCU) or die ("\n\nERROR: can't open $filePCU\n");
+        print $FILE @PCU;
+        close($FILE);
+    };
+    
     return(1);
 };
 
