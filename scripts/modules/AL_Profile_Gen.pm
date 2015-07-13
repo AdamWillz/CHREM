@@ -87,13 +87,14 @@ sub OccupancySimulation {
     my ($numOcc, $initial, $dayWeek) = @_;
     
     # Local variables
-    my @Occ = ($initial) x 6; # Array holding number of active occupants in dwelling 
+    my @Occ = ($initial) x 10; # Array holding number of active occupants in dwelling per minute
     my $bStart=1;
     my $dir = getcwd;
     
     YEAR: for (my $i=1; $i<=365; $i++) { # for each day of the year
         # Determine which transition matrix to use
         my $tDay; 
+        my @TRmat=();
         if ($dayWeek>7){$dayWeek=1};
         if ($dayWeek == 1 || $dayWeek == 7) {
             $tDay = 'we';
@@ -103,10 +104,13 @@ sub OccupancySimulation {
         # Load appropriate transition matrix
         my $file = $dir . "/tpm" . "$numOcc" . "_" . $tDay . ".csv";
         open my $fh, '<', $file or die "Cannot open $file: $!";
-        my @TRmat = <$fh>; # Slurp in the entire file (each line is an element in the array)
+        while (my $dat = <$fh>) {
+            chomp $dat;
+            push(@TRmat,$dat);
+        };
         @TRmat = @TRmat[ 1 .. $#TRmat ]; # Trim out header
         if ($bStart) { # first call, first 10 minutes don't matter
-            @TRmat = @TRmat[ 7 .. $#TRmat ]; # Trim out header
+            @TRmat = @TRmat[ 7 .. $#TRmat ];
             $bStart=0;
         };
         DAY: for (my $j=0; $j<=$#TRmat; $j=$j+7) { # Cycle through each period in the matrix
@@ -129,11 +133,13 @@ sub OccupancySimulation {
             }; # END TEN
             
             # Update the Occupancy array
-            for (my $m=0; $m<6; $m++) {
+            for (my $m=0; $m<10; $m++) { # This will be the occupancy for the next ten minutes
                 push(@Occ,$future);
             };
         }; # END DAY
         close $fh;
+        print Dumper @Occ;
+        sleep;
         $dayWeek++;
     }; # END YEAR 
 
@@ -144,13 +150,36 @@ sub OccupancySimulation {
 #  LOCAL SUBROUTINES
 # ====================================================================
 
-sub rand_range {
-    my ($x, $y) = @_;
-    return int(rand($y - $x)) + $x;
+# ====================================================================
+# GetMonteCarloNormalDistGuess
+#   This subroutine randomly selects a value from a normal distribution.
+#   Inputs are the mean and standard deviation
+# ====================================================================
+sub GetMonteCarloNormalDistGuess {
+    my ($dMean, $dSD) = @_;
+    my $iGuess=0;
+    my $bOk;
+    
+    if($dMean == 0) {
+        $bOk = 1;
+    } else {
+        $bOk = 0;
+    };
+    
+    while (!$bOK) {
+        $iGuess = (rand()*($dSD*8))-($dSD*4)+$dMean;
+        my $px = (1/($dSD * sqrt(2*3.14159))) * exp(-(($iGuess - $dMean) ** 2) / (2 * $dSD * $dSD));
+
+        if ($px >= rand()) {$bOK=1};
+
+    };
+
+    return $iGuess;
 };
 
 # Final return value of one to indicate that the perl module is successful
 1;
+
 # ====================================================================
 # setColdProfile
 #       This subroutine uses a top-down approach to generate high-resolution
