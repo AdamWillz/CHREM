@@ -58,8 +58,6 @@ use AL_Profile_Gen;
 my $hse_types;	# declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
 my $regions;	# declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
 my $set_name;   # Read in city name from command line
-my @folders;	#declare an array to store the path to each hse which will be simulated
-my @houses_desired = '.';
 
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+Hse_Gen_(.+)_Issues.txt/$1/, <../../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -93,6 +91,14 @@ my $NNoutput = &cross_ref_readin($NNresPath);
 # --------------------------------------------------------------------
 my $OccSTART = 'occ_start_states.xml';
 my $occ_strt = XMLin($OccSTART);
+
+my $LIGHT = 'lightsim_inputs.xml';
+my $light_calib = XMLin($LIGHT);
+
+# -----------------------------------------------
+# Read in the CWEC weather data crosslisting
+# -----------------------------------------------
+my $climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# create an climate reference crosslisting hash
 
 # --------------------------------------------------------------------
 # Begin multi-threading for regions and house types
@@ -131,6 +137,8 @@ MAIN: {
 		my $hse_type = $pass->{'hse_type'};	# house type number for the thread
 		my $region = $pass->{'region'};	# region number for the thread
         my $set_name = $pass->{'setname'};	# region number for the thread
+        my $return; # HASH to store issues
+        my $issue = 0; # Issue counter
 
         push (my @dirs, <../../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
         #print Dumper @dirs;
@@ -143,6 +151,7 @@ MAIN: {
             $hse_name =~ s{.*/}{};
             my $hse_occ; # Number of occupants in dwelling
             my @Occ; # Array to hold occupancy 
+            my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
             
             # --------------------------------------------------------------------
             # Find NN data
@@ -156,8 +165,10 @@ MAIN: {
                     last NN_IN;
                 }
             };
-            if (!$bFound) {# TODO: ERROR HANDLING
-                print "Didn't find input\n";
+            if (!$bFound) {
+                $issue++;
+                $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
+                next RECORD;
             };
 
             my $NNo;
@@ -170,8 +181,34 @@ MAIN: {
                 }
             };
             if (!$bFound) {# TODO: ERROR HANDLING
-                print "Didn't find output\n";
+                $issue++;
+                $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN output";
+                next RECORD;
             };
+            
+            # --------------------------------------------------------------------
+            # Find CSDDRD data
+            # --------------------------------------------------------------------
+            my $file = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
+            my $ext = '.csv';
+            my $CSDDRD_FILE;
+            my $bCSDDRD = 0;
+            open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
+            CSDDRD: while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD)) {
+                if ($CSDDRD->{'file_name'} =~ /^$hse_name/) {
+                    $bCSDDRD = 1;
+                    last CSDDRD;
+                };
+            }; # END CSDDRD
+            if (!$bCSDDRD) { # Could not find record
+                $issue++;
+                $return->{$hse_name}->{"$issue"} = "Error: Couldn't find CSDDRD data";
+                next RECORD;
+            };
+            close $CSDDRD_FILE;
+            
+            # Determine the climate for this house from the Climate Cross Reference
+			my $climate = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}};	# shorten the name for use this house
 
             # --------------------------------------------------------------------
             # Generate the occupancy profiles
@@ -180,20 +217,20 @@ MAIN: {
             my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine day of the week
             my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
             @Occ = @$Occ_ref;
-            open (my $RFILE, '>', 'dummy.csv') or die ("\n\nERROR: can't open\n");
-            foreach my $blah (@Occ) {
-                print $RFILE "$blah,\n"; 
-            };
-            close $RFILE;
-            print "Done, sleeping\n";
-            sleep;
             
+            # --------------------------------------------------------------------
+            # Generate Lighting Profile
+            # --------------------------------------------------------------------
+            my $fCalibrationScalar = $light_calib->{$region}->{$hse_type}->{'Calibration'};
+            my $MeanThresh = $light_calib->{'threshold'}->{'mean'};
+            my $STDThresh = $light_calib->{'threshold'}->{'std'};
+            my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,$climate->{'CWEC_FILE'},$NNdata,$fCalibrationScalar,$MeanThresh,$STDThresh);
 
         }; # END RECORD
         
     print "Thread for Timestep reports mode of $hse_type $region - Complete\n";
     
-    return (1);
+    return ($return);
     
     };  # END sub main
 };	# END MAIN

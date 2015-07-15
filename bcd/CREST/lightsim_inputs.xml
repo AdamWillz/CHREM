@@ -1,0 +1,28 @@
+<!--Author: Adam Wills, Carleton Univ., Jul 2015
+        Lighting Model parameter inputs-->
+<LIGHT>
+    <!--Mean value and standard deviation of dwelling turn on threshold-->
+    <threshold mean="60" std="10"/>
+    
+    <!--Calibration Data-->
+    <1-AT> 
+        <1-SD Calibration="0.008"/>
+        <2-DR Calibration="0.008"/>
+    </1-AT>
+    <2-QC> 
+        <1-SD Calibration="0.008"/>
+        <2-DR Calibration="0.008"/>
+    </2-QC>
+    <3-ON> 
+        <1-SD Calibration="0.008"/>
+        <2-DR Calibration="0.008"/>
+    </3-ON>
+    <4-PR> 
+        <1-SD Calibration="0.008"/>
+        <2-DR Calibration="0.008"/>
+    </4-PR>
+    <5-BC> 
+        <1-SD Calibration="0.008"/>
+        <2-DR Calibration="0.008"/>
+    </5-BC>
+</LIGHT>

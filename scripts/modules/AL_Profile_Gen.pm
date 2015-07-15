@@ -25,7 +25,7 @@ our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
 #our @EXPORT = qw( setDryerProfile setStoveProfile setOtherProfile setNewBCD);
-our @EXPORT = qw(setStartState OccupancySimulation);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -138,12 +138,79 @@ sub OccupancySimulation {
             };
         }; # END DAY
         close $fh;
-        print Dumper @Occ;
-        sleep;
         $dayWeek++;
     }; # END YEAR 
 
     return (\@Occ);
+};
+
+# ====================================================================
+# LightingSimulation
+#       This subroutine generates the annual occupancy profile at a 1 
+#       minute timestep.
+#
+# INPUT     ref_Occ: Annual dwelling occupancy at 1 min timestep
+#           climate: EPW weather file for house
+#           NNdata: NN input HASH
+#           fCalibrationScalar: Calibration scalar for lighting model
+#           MeanThresh: Mean threshold for light ON [W/m2]
+#           STDThresh: Std. dev for light ON [W/m2]
+# OUTPUT    Light: Annual lighting power at 1 min timestep [kW]
+#           AnnPow: Annual power consumption of dwelling for lighting [kWh]
+#
+# REFERENCES: - Richardson, Thomson, Infield, Delahunty "Domestic Lighting:
+#               A high-resolution energy demand model". Energy and Buildings, 
+#               41, 2009.
+#             
+# ====================================================================
+
+sub LightingSimulation {
+    # Read in inputs
+    my ($ref_Occ, $climate, $NNdata, $fCalibrationScalar,$MeanThresh,$STDThresh) = @_;
+    my @Occ = @$ref_Occ;
+    
+    # Set local variables
+    my $loc = $climate;
+    $loc =~ s{\.[^.]+$}{}; # Remove extension
+    $loc = $loc . '.out'; # Name of irradiance file
+    my @BulbTypes = qw(Fluorescent Halogen Incandescent); # Three types of bulbs in CSDDRD
+    my $dir = getcwd; # Location of current directory
+    my @Irr_T=(); # Temporary array to hold irradiance file data
+    my @Irr=(); # Array to hold global horizontal irradiance at 1 min timestep [W/m2]
+    my $Bulbs; # HASH to hold information on each light bulb
+    
+    # Declare output
+    my @Light=();
+    my $AnnPow;
+    
+    # Determine the irradiance threshold of this house
+    my $iIrradianceThreshold = GetMonteCarloNormalDistGuess($MeanThresh,$STDThresh);
+    
+    # Load the irradiance data
+    my $file = $dir . "/Global_Horiz/$loc";
+    open my $fh, '<', $file or die "Cannot open $file: $!";
+    while (my $dat = <$fh>) {
+        chomp $dat;
+        push(@Irr_T,$dat);
+    };
+    @Irr_T = @Irr_T[ 2 .. ($#Irr_T-1) ]; # Trim out headers and last timestep 
+    foreach my $data (@Irr_T) {
+        #my @temp  = split / /, $data;
+        my @temp = split /\t/, $data,2;
+        push(@Irr, $temp[1]); 
+    };
+    
+    # Set the Bulb data
+    foreach my $type (@BulbTypes) {
+    
+    };
+    
+    
+    
+    
+    
+    
+    return(\@Light, $AnnPow);
 };
 
 # ====================================================================
@@ -166,11 +233,11 @@ sub GetMonteCarloNormalDistGuess {
         $bOk = 0;
     };
     
-    while (!$bOK) {
+    while (!$bOk) {
         $iGuess = (rand()*($dSD*8))-($dSD*4)+$dMean;
         my $px = (1/($dSD * sqrt(2*3.14159))) * exp(-(($iGuess - $dMean) ** 2) / (2 * $dSD * $dSD));
 
-        if ($px >= rand()) {$bOK=1};
+        if ($px >= rand()) {$bOk=1};
 
     };
 
