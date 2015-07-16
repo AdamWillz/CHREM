@@ -25,7 +25,7 @@ our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
 #our @EXPORT = qw( setDryerProfile setStoveProfile setOtherProfile setNewBCD);
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -151,7 +151,7 @@ sub OccupancySimulation {
 #
 # INPUT     ref_Occ: Annual dwelling occupancy at 1 min timestep
 #           climate: EPW weather file for house
-#           NNdata: NN input HASH
+#           fBulbs: Array holding wattage for each lamp [W]
 #           fCalibrationScalar: Calibration scalar for lighting model
 #           MeanThresh: Mean threshold for light ON [W/m2]
 #           STDThresh: Std. dev for light ON [W/m2]
@@ -161,33 +161,108 @@ sub OccupancySimulation {
 # REFERENCES: - Richardson, Thomson, Infield, Delahunty "Domestic Lighting:
 #               A high-resolution energy demand model". Energy and Buildings, 
 #               41, 2009.
-#             
 # ====================================================================
 
 sub LightingSimulation {
     # Read in inputs
-    my ($ref_Occ, $climate, $NNdata, $fCalibrationScalar,$MeanThresh,$STDThresh) = @_;
+    my ($ref_Occ, $Irr_ref, $fBulbs_ref, $fCalibrationScalar,$MeanThresh,$STDThresh) = @_;
     my @Occ = @$ref_Occ;
+    my @Irr = @$Irr_ref;
+    my @fBulbs = @$fBulbs_ref;
+    
+    if ($#Occ != $#Irr) {die "Number of occupancy and irradiance timesteps do not match"};
     
     # Set local variables
-    my $loc = $climate;
-    $loc =~ s{\.[^.]+$}{}; # Remove extension
-    $loc = $loc . '.out'; # Name of irradiance file
-    my @BulbTypes = qw(Fluorescent Halogen Incandescent); # Three types of bulbs in CSDDRD
-    my $dir = getcwd; # Location of current directory
-    my @Irr_T=(); # Temporary array to hold irradiance file data
-    my @Irr=(); # Array to hold global horizontal irradiance at 1 min timestep [W/m2]
-    my $Bulbs; # HASH to hold information on each light bulb
+    my $iBulbs = scalar @fBulbs; # Number of bulbs/lamps in dwelling
+    my $Tsteps = scalar @Occ;
+    my $SMALL = 1.0e-20;
     
     # Declare output
-    my @Light=();
+    my @Light=(0) x $Tsteps;
     my $AnnPow;
     
     # Determine the irradiance threshold of this house
     my $iIrradianceThreshold = GetMonteCarloNormalDistGuess($MeanThresh,$STDThresh);
     
-    # Load the irradiance data
-    my $file = $dir . "/Global_Horiz/$loc";
+    # Assign weightings to each bulb
+    BULB: for (my $i=0;$i<=$#fBulbs;$i++) { # For each dwelling bulb
+        # Determine this bulb's relative usage weighting
+        my $fRand = rand();
+        if ($fRand < $SMALL) {$fRand = $SMALL}; # Avoid domain errors
+        my $fCalibRelUseW = -1*$fCalibrationScalar*log($fRand);
+    
+        # Calculate this bulb's usage for each timestep
+        my $iTime=0;
+        TIME: while ($iTime<=$#Occ) {
+            # Is this bulb switched on to start with?
+            # This concept is not implemented in this example.
+            # The simplified assumption is that all bulbs are off to start with.
+            
+            # Determine if the bulb switch-on condition is passed
+            # ie. Insuffient irradiance and at least one active occupant
+            # There is a 5% chance of switch on event if the irradiance is above the threshold
+            my $bLowIrradiance;
+            if (($Irr[$iTime] < $iIrradianceThreshold) || (rand() < 0.05)) {
+                $bLowIrradiance = 1;
+            } else {
+                $bLowIrradiance = 0;
+            };
+            
+            # Get the effective occupancy for this number of active occupants to allow for sharing
+            my $fEffectiveOccupancy = GetEffectiveOccupancy($Occ[$iTime]);
+            
+            # Check the probability of a switch on at this time
+            if ($bLowIrradiance && (rand() < ($fEffectiveOccupancy*$fCalibRelUseW))) { # This is a switch on event
+            
+                # Determine how long this bulb is on for
+                my $iLightDuration = GetLightDuration();
+                
+                DURATION: for (my $j=1;$j<=$iLightDuration;$j++) {
+                    # Range Check
+                    if ($iTime > $#Occ) {last TIME};
+                    
+                    # If there are no active occupants, turn off the light and increment the time
+                    if ($Occ[$iTime] <=0) {
+                        $iTime++;
+                        last DURATION;
+                    };
+                    
+                    # Store the demand
+                    $Light[$iTime] = $Light[$iTime]+$fBulbs[$i];
+                    
+                    # Increment the time
+                    $iTime++;
+                }; # END DURATION
+                
+            } else { # The bulb remains off
+                $iTime++;
+            };
+        }; # END TIME 
+    }; # END BULB
+    
+    # Integrate bulb usage to find annual consumption TODO
+    return(\@Light, $AnnPow);
+};
+
+# ====================================================================
+# GetIrradiance
+#       This subroutine loads the irradiance data and returns it 
+#
+# INPUT     file: path and file name of input
+# OUTPUT    Irr: Array holding the irradiance data [W/m2]
+#
+# ====================================================================
+
+sub GetIrradiance {
+    # Read in inputs
+    my ($file) = @_;
+    
+    # Set local variables
+    my @Irr_T=(); # Temporary array to hold irradiance file data
+    
+    # Declare output
+    my @Irr=();
+    
     open my $fh, '<', $file or die "Cannot open $file: $!";
     while (my $dat = <$fh>) {
         chomp $dat;
@@ -195,22 +270,11 @@ sub LightingSimulation {
     };
     @Irr_T = @Irr_T[ 2 .. ($#Irr_T-1) ]; # Trim out headers and last timestep 
     foreach my $data (@Irr_T) {
-        #my @temp  = split / /, $data;
         my @temp = split /\t/, $data,2;
         push(@Irr, $temp[1]); 
     };
-    
-    # Set the Bulb data
-    foreach my $type (@BulbTypes) {
-    
-    };
-    
-    
-    
-    
-    
-    
-    return(\@Light, $AnnPow);
+
+    return(\@Irr);
 };
 
 # ====================================================================
@@ -242,6 +306,97 @@ sub GetMonteCarloNormalDistGuess {
     };
 
     return $iGuess;
+};
+
+# ====================================================================
+# EffectiveOccupancy
+#   This subroutine determines the effective occupancy
+# ====================================================================
+sub GetEffectiveOccupancy {
+    my ($Occ) = @_; # Number of occupants active
+
+    my $EffOcc;
+    
+    if ($Occ==0) {
+        $EffOcc=0;
+    } elsif ($Occ==1) {
+        $EffOcc=1;
+    } elsif ($Occ==2) {
+        $EffOcc=1.528;
+    } elsif ($Occ==3) {
+        $EffOcc=1.694;
+    } elsif ($Occ==4) {
+        $EffOcc=1.983;
+    } elsif ($Occ==5) {
+        $EffOcc=2.094;
+    } else {
+        die "Number of occupants $Occ exceeds model limits";
+    };
+
+    return $EffOcc;
+};
+
+# ====================================================================
+# GetLightDuration
+#   Determines the lighting event duration
+#   REFERENCE: - Stokes, Rylatt, Lomas "A simple model of domestic lighting
+#                demand". Energy and Buildings, 36(2), 2004. 
+# ====================================================================
+sub GetLightDuration {
+
+    # Decalre the output
+    my $Duration;
+    
+    # Lighting event duration model data
+    my $cml;
+    $cml->{'1'}->{'lower'}=1;
+    $cml->{'1'}->{'upper'}=1;
+    $cml->{'1'}->{'cml'}=0.111111111;
+    
+    $cml->{'2'}->{'lower'}=2;
+    $cml->{'2'}->{'upper'}=2;
+    $cml->{'2'}->{'cml'}=0.222222222;
+    
+    $cml->{'3'}->{'lower'}=3;
+    $cml->{'3'}->{'upper'}=4;
+    $cml->{'3'}->{'cml'}=0.222222222;
+    
+    $cml->{'4'}->{'lower'}=5;
+    $cml->{'4'}->{'upper'}=8;
+    $cml->{'4'}->{'cml'}=0.333333333;
+    
+    $cml->{'5'}->{'lower'}=9;
+    $cml->{'5'}->{'upper'}=16;
+    $cml->{'5'}->{'cml'}=0.444444444;
+    
+    $cml->{'6'}->{'lower'}=17;
+    $cml->{'6'}->{'upper'}=27;
+    $cml->{'6'}->{'cml'}=0.555555556;
+    
+    $cml->{'7'}->{'lower'}=28;
+    $cml->{'7'}->{'upper'}=49;
+    $cml->{'7'}->{'cml'}=0.666666667;
+    
+    $cml->{'8'}->{'lower'}=50;
+    $cml->{'8'}->{'upper'}=91;
+    $cml->{'8'}->{'cml'}=0.888888889;
+    
+    $cml->{'8'}->{'lower'}=92;
+    $cml->{'8'}->{'upper'}=259;
+    $cml->{'8'}->{'cml'}=1.0;
+    
+    my $r_one = rand();
+    
+    RANGE: for (my $j=1;$j<=9;$j++) {
+        if ($r_one < $cml->{"$j"}->{'cml'}) {
+            my $r_two = rand();
+            $Duration = ($r_two * ($cml->{"$j"}->{'upper'}-$cml->{"$j"}->{'lower'}))+$cml->{"$j"}->{'lower'};
+            $Duration = sprintf "%.0f", $Duration; # Round to nearest integer
+            last RANGE;
+        };
+    }; # END RANGE
+
+    return $Duration;
 };
 
 # Final return value of one to indicate that the perl module is successful

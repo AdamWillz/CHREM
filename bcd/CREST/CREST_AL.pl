@@ -214,17 +214,35 @@ MAIN: {
             # Generate the occupancy profiles
             # --------------------------------------------------------------------
             $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
-            my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine day of the week
+            my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine 'we' or 'wd'
             my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
             @Occ = @$Occ_ref;
             
             # --------------------------------------------------------------------
             # Generate Lighting Profile
             # --------------------------------------------------------------------
+            # --- Irradiance data
+            my $loc = $climate->{'CWEC_FILE'};  # Determine climate for this dwelling
+            $loc =~ s{\.[^.]+$}{}; # Remove extension
+            $loc = $loc . '.out'; # Name of irradiance file
+            my $irradiance = "Global_Horiz/$loc";
+            my $Irr_ref = &GetIrradiance($irradiance); # Load the irradiance data
+            my @Irr = @$Irr_ref;
+
+            # --- Bulb data
+            my @fBulbs = (); # Array to hold wattage of each bulb in the dwelling
+            my $iBulbs=0; # Number of bulbs/lamps for dwelling 
+            my @BulbType = qw(Fluorescent Halogen Incandescent);
+            foreach my $bulb (@BulbType) { # Read number of bulbs from CHREM NN inputs
+                $iBulbs = $iBulbs + $NNdata->{$bulb};
+            };
+            
+            
+            # --- Call Lighting Simulation
             my $fCalibrationScalar = $light_calib->{$region}->{$hse_type}->{'Calibration'};
             my $MeanThresh = $light_calib->{'threshold'}->{'mean'};
             my $STDThresh = $light_calib->{'threshold'}->{'std'};
-            my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,$climate->{'CWEC_FILE'},$NNdata,$fCalibrationScalar,$MeanThresh,$STDThresh);
+            my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);
 
         }; # END RECORD
         
