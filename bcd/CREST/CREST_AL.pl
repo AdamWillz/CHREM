@@ -93,7 +93,7 @@ my $OccSTART = 'occ_start_states.xml';
 my $occ_strt = XMLin($OccSTART);
 
 my $LIGHT = 'lightsim_inputs.xml';
-my $light_calib = XMLin($LIGHT);
+my $light_sim = XMLin($LIGHT);
 
 # -----------------------------------------------
 # Read in the CWEC weather data crosslisting
@@ -217,7 +217,7 @@ MAIN: {
             my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine 'we' or 'wd'
             my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
             @Occ = @$Occ_ref;
-            
+
             # --------------------------------------------------------------------
             # Generate Lighting Profile
             # --------------------------------------------------------------------
@@ -239,14 +239,15 @@ MAIN: {
             
             
             # --- Call Lighting Simulation
-            my $fCalibrationScalar = $light_calib->{$region}->{$hse_type}->{'Calibration'};
-            my $MeanThresh = $light_calib->{'threshold'}->{'mean'};
-            my $STDThresh = $light_calib->{'threshold'}->{'std'};
+            my $fCalibrationScalar = $light_sim->{$region}->{$hse_type}->{'Calibration'};
+            my $MeanThresh = $light_sim->{'threshold'}->{'mean'};
+            my $STDThresh = $light_sim->{'threshold'}->{'std'};
             my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);
+            my @Light = @$light_ref;
 
         }; # END RECORD
         
-    print "Thread for Timestep reports mode of $hse_type $region - Complete\n";
+    print "AL profiles for $hse_type $region - Complete\n";
     
     return ($return);
     

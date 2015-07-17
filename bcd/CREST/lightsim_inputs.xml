@@ -1,28 +1,45 @@
 <!--Author: Adam Wills, Carleton Univ., Jul 2015
-        Lighting Model parameter inputs-->
+        Lighting Model parameter inputs
+        Bulb distribution data estimated from SHEU 2011-->
 <LIGHT>
     <!--Mean value and standard deviation of dwelling turn on threshold-->
     <threshold mean="60" std="10"/>
     
-    <!--Calibration Data-->
     <1-AT> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
+        <Shares Incandescent="0.41" CFL="0.36" Halogen="0.11" Tubes="0.13"/>
     </1-AT>
     <2-QC> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
+        <Incandescent Share="0.40"/>
+        <CFL Share="0.20"/>
+        <Halogen Share="0.26"/>
+        <Tubes Share="0.13"/>
     </2-QC>
-    <3-ON> 
+    <3-OT> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-    </3-ON>
+        <Incandescent Share="0.36"/>
+        <CFL Share="0.28"/>
+        <Halogen Share="0.22"/>
+        <Tubes Share="0.13"/>
+    </3-OT>
     <4-PR> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
+        <Incandescent Share="0.44"/>
+        <CFL Share="0.27"/>
+        <Halogen Share="0.17"/>
+        <Tubes Share="0.13"/>
     </4-PR>
     <5-BC> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
+        <Incandescent Share="0.39"/>
+        <CFL Share="0.29"/>
+        <Halogen Share="0.22"/>
+        <Tubes Share="0.10"/>
     </5-BC>
 </LIGHT>

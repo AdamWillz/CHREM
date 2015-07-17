@@ -121,10 +121,10 @@ sub OccupancySimulation {
             chomp $dist;
             my @data = split /,/, $dist;
             @data = @data[ 2 .. $#data ]; # Trim out the index values
-            my $fCumulativeP=0; # Cumulative probability for period 
+            my $fCumulativeP=0; # Cumulative probability for period
             my $fRand = rand();
             my $future=0; # future occupancy
-            TEN: while ($future<=$#data) {
+            TEN: while ($future < $numOcc) {
                 $fCumulativeP=$fCumulativeP+$data[$future];
                 if ($fRand < $fCumulativeP) {
                     last TEN;
@@ -180,17 +180,17 @@ sub LightingSimulation {
     # Declare output
     my @Light=(0) x $Tsteps;
     my $AnnPow;
-    
+
     # Determine the irradiance threshold of this house
     my $iIrradianceThreshold = GetMonteCarloNormalDistGuess($MeanThresh,$STDThresh);
-    
+
     # Assign weightings to each bulb
     BULB: for (my $i=0;$i<=$#fBulbs;$i++) { # For each dwelling bulb
         # Determine this bulb's relative usage weighting
         my $fRand = rand();
         if ($fRand < $SMALL) {$fRand = $SMALL}; # Avoid domain errors
         my $fCalibRelUseW = -1*$fCalibrationScalar*log($fRand);
-    
+
         # Calculate this bulb's usage for each timestep
         my $iTime=0;
         TIME: while ($iTime<=$#Occ) {
@@ -198,6 +198,11 @@ sub LightingSimulation {
             # This concept is not implemented in this example.
             # The simplified assumption is that all bulbs are off to start with.
             
+            # First determine if there are any occupants active for a switch-on event
+            if ($Occ[$iTime]==0) { # No occupants, jump to next period
+                $iTime++;
+                next TIME;
+            };
             # Determine if the bulb switch-on condition is passed
             # ie. Insuffient irradiance and at least one active occupant
             # There is a 5% chance of switch on event if the irradiance is above the threshold
@@ -210,10 +215,9 @@ sub LightingSimulation {
             
             # Get the effective occupancy for this number of active occupants to allow for sharing
             my $fEffectiveOccupancy = GetEffectiveOccupancy($Occ[$iTime]);
-            
+
             # Check the probability of a switch on at this time
             if ($bLowIrradiance && (rand() < ($fEffectiveOccupancy*$fCalibRelUseW))) { # This is a switch on event
-            
                 # Determine how long this bulb is on for
                 my $iLightDuration = GetLightDuration();
                 
@@ -224,11 +228,11 @@ sub LightingSimulation {
                     # If there are no active occupants, turn off the light and increment the time
                     if ($Occ[$iTime] <=0) {
                         $iTime++;
-                        last DURATION;
+                        next TIME;
                     };
                     
                     # Store the demand
-                    $Light[$iTime] = $Light[$iTime]+$fBulbs[$i];
+                    $Light[$iTime] = $Light[$iTime]+$fBulbs[$i]; # [W]
                     
                     # Increment the time
                     $iTime++;
@@ -240,7 +244,15 @@ sub LightingSimulation {
         }; # END TIME 
     }; # END BULB
     
-    # Integrate bulb usage to find annual consumption TODO
+    # Integrate bulb usage to find annual consumption, and scale to kW
+    for (my $k=0; $k<=$#Light; $k++) {
+        $AnnPow=$AnnPow+(($Light[$k]*60)/1000); # [kJ]
+        $Light[$k] = $Light[$k]/1000; # [kW]
+    };
+    
+    # Express annual consumption in kWh
+    $AnnPow=$AnnPow/3600;
+
     return(\@Light, $AnnPow);
 };
 
