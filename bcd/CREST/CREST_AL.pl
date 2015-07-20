@@ -233,9 +233,11 @@ MAIN: {
             my @fBulbs = (); # Array to hold wattage of each bulb in the dwelling
             my $iBulbs=0; # Number of bulbs/lamps for dwelling 
             my @BulbType = qw(Fluorescent Halogen Incandescent);
-            foreach my $bulb (@BulbType) { # Read number of bulbs from CHREM NN inputs
+            foreach my $bulb (@BulbType) { # Read number of bulbs in dwelling from CHREM NN inputs
                 $iBulbs = $iBulbs + $NNdata->{$bulb};
             };
+            # Assign wattage for each bulb
+            
             
             
             # --- Call Lighting Simulation

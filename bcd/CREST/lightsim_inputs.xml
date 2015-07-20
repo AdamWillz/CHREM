@@ -13,33 +13,28 @@
     <2-QC> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Incandescent Share="0.40"/>
-        <CFL Share="0.20"/>
-        <Halogen Share="0.26"/>
-        <Tubes Share="0.13"/>
+        <Shares Incandescent="0.40" CFL="0.20" Halogen="0.26" Tubes="0.13"/>
     </2-QC>
     <3-OT> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Incandescent Share="0.36"/>
-        <CFL Share="0.28"/>
-        <Halogen Share="0.22"/>
-        <Tubes Share="0.13"/>
+        <Shares Incandescent="0.36" CFL="0.28" Halogen="0.22" Tubes="0.13"/>
     </3-OT>
     <4-PR> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Incandescent Share="0.44"/>
-        <CFL Share="0.27"/>
-        <Halogen Share="0.17"/>
-        <Tubes Share="0.13"/>
+        <Shares Incandescent="0.44" CFL="0.27" Halogen="0.17" Tubes="0.13"/>
     </4-PR>
     <5-BC> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Incandescent Share="0.39"/>
-        <CFL Share="0.29"/>
-        <Halogen Share="0.22"/>
-        <Tubes Share="0.10"/>
+        <Shares Incandescent="0.39" CFL="0.29" Halogen="0.22" Tubes="0.10"/>
     </5-BC>
+    
+    <wattage>
+        <Incandescent />
+        <CFL />
+        <Halogen />
+        <Tubes />
+    </wattage>
 </LIGHT>
