@@ -142,14 +142,16 @@ MULTI_THREAD: {
     # Print out calibration scalars report
     my $ScalarFile = 'Calibration_Scalars.csv';
     open (my $CScakars, '>', $ScalarFile) or die ("Can't create $ScalarFile");
-    print $failure "hse_type,region,Calibration Scalar,True Absolute Error\n";
+    print $failure "hse_type,region,Calibration Scalar,True Absolute Error,Predicted Consumption, Message\n";
     foreach my $hse_type (&array_order(values %{$hse_types})) {	# return for each house type
 		foreach my $region (&array_order(values %{$regions})) {	# return for each region type
             foreach my $calib (keys (%{$thread_return->{$hse_type}->{$region}})) {	# Each house
                 if ($calib =~ m/Calibration_Scalar/) { # Then it's the calibration scalar
                     my $sc = $thread_return->{$hse_type}->{$region}->{$calib}->{'Value'};
                     my $TE = $thread_return->{$hse_type}->{$region}->{$calib}->{'Error'};
-                    print $failure "$hse_type,$region,$sc,$TE\n";
+                    my $pred = $thread_return->{$hse_type}->{$region}->{$calib}->{'Predicted'};
+                    my $msgs = $thread_return->{$hse_type}->{$region}->{$calib}->{'Msg'};
+                    print $failure "$hse_type,$region,$sc,$TE,$pred,$msgs\n";
                 };
             };
         };
@@ -196,7 +198,7 @@ MAIN: {
         my $iniDelta = $LCalib->{$region}->{$hse_type}->{'Initial_Guess'} + (($LCalib->{$region}->{$hse_type}->{'Initial_Guess'})*($LCalib->{'Perturb'}));
         my @Xs = ($LCalib->{$region}->{$hse_type}->{'Initial_Guess'},$iniDelta);
         my @FcnOuts = ();
-        my $TrueError;  # Absolute value for true error [kWh/yr]
+        my $TrueError;  # Relative value for true error [%]
         
         # --------------------------------------------------------------------
         # Determine the calibration scalar using the modified Secant Method
@@ -352,10 +354,11 @@ MAIN: {
                 $FcnOuts[$b] = $Target-$kWhAverage;
             
             }; # END ITERATION
-            print "$region $hse_type completed iteration $y\n";
+            my $datestring = localtime();
+            print "$region $hse_type completed iteration $y: $datestring\n";
             
-            # Determine the absolute true error
-            $TrueError = abs($FcnOuts[0]);
+            # Determine the relative true error
+            $TrueError = abs($FcnOuts[0]/$Target)*100;
             
             if ($TrueError <= $LCalib->{'Tol'}) { # Achieved convergence, exit
                 last SECANT;
@@ -369,14 +372,14 @@ MAIN: {
             $y++; # increment the iteration
         }; # END SECANT
 
-
+        $return->{'Calibration_Scalar'}->{'Value'} = $Xs[0];
+        $return->{'Calibration_Scalar'}->{'Error'} = $TrueError;
+        $return->{'Calibration_Scalar'}->{'Predicted'} = $FcnOuts[0];
+        
         if ($y == $LCalib->{'Max_iter'}) { # Did not converge
-            $return->{'Calibration_Scalar'}->{'Value'} = 'Did not converge';
-            $return->{'Calibration_Scalar'}->{'Error'} = 'NA';
-            
+            $return->{'Calibration_Scalar'}->{'Msg'} = 'Did not converge';
         } else { # Did converge
-            $$return->{'Calibration_Scalar'}->{'Value'} = $Xs[0];
-            $return->{'Calibration_Scalar'}->{'Error'} = $TrueError;
+            $return->{'Calibration_Scalar'}->{'Msg'} = 'Converged';
         };
     
     return ($return);
