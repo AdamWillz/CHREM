@@ -1,0 +1,30 @@
+<!--Author: Adam Wills, Carleton Univ., Jul 2015
+        Lighting Model Calibration inputs
+        Initial guess for calibration value
+        and Target average annual consumption [kWh/yr/dwelling]-->
+<LIGHT Max_iter="1000" Tol="0.0001" Perturb="0.0000001">
+    <!--Mean value and standard deviation of dwelling turn on threshold [W/m2]-->
+    <threshold mean="60" std="10"/>
+    
+    <1-AT> 
+        <1-SD Initial_Guess="0.008" Target="1254.9"/>
+        <2-DR Initial_Guess="0.008" Target="827.3"/>
+    </1-AT> 
+    <2-QC>  
+        <1-SD Initial_Guess="0.008" Target="1789.7"/>
+        <2-DR Initial_Guess="0.008" Target="1329.6"/>
+    </2-QC> 
+    <3-OT>  
+        <1-SD Initial_Guess="0.008" Target="1109.9"/>
+        <2-DR Initial_Guess="0.008" Target="766.5"/>
+    </3-OT> 
+    <4-PR>  
+        <1-SD Initial_Guess="0.008" Target="1848.4"/>
+        <2-DR Initial_Guess="0.008" Target="1103.3"/>
+    </4-PR> 
+    <5-BC>  
+        <1-SD Initial_Guess="0.008" Target="1876.6"/>
+        <2-DR Initial_Guess="0.008" Target="1230.0"/>
+    </5-BC>
+    
+</LIGHT>

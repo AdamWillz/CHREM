@@ -139,6 +139,10 @@ MAIN: {
         my $set_name = $pass->{'setname'};	# region number for the thread
         my $return; # HASH to store issues
         my $issue = 0; # Issue counter
+        my @BTypes=(); # Array to hold all bulb categories
+        foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
+            push(@BTypes,$blb);
+        };
 
         push (my @dirs, <../../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
         #print Dumper @dirs;
@@ -237,9 +241,33 @@ MAIN: {
                 $iBulbs = $iBulbs + $NNdata->{$bulb};
             };
             # Assign wattage for each bulb
-            
-            
-            
+            for (my $i=1;$i<=$iBulbs;$i++) { # Each bulb
+                my $r1 = rand();
+                my $cml=0;
+                my $category;
+                Category: foreach my $blb (@BTypes) { # Loop through each bulb category
+                    $cml=$cml+$light_sim->{'Types'}->{$blb}->{'Share'};
+                    if ($r1<$cml) {
+                        $category=$blb;
+                        last Category;
+                    };
+                }; # END Category
+
+                # Reset variables
+                $r1 = rand();
+                $cml=0;
+                my $BulbSubC;
+                BulbSub: foreach my $blb (keys (%{$light_sim->{'Types'}->{$category}->{'sub'}})) { # Loop through each bulb sub-category
+                    $cml=$cml+$light_sim->{'Types'}->{$category}->{'sub'}->{$blb}->{'Share'};
+                    if ($r1<$cml) {
+                        $BulbSubC=$blb;
+                        last BulbSub;
+                    };
+                }; # END BulbSub
+                # Store wattage of this bulb
+                push(@fBulbs, $light_sim->{'Types'}->{$category}->{'sub'}->{$BulbSubC}->{'Wattage'});
+            };
+
             # --- Call Lighting Simulation
             my $fCalibrationScalar = $light_sim->{$region}->{$hse_type}->{'Calibration'};
             my $MeanThresh = $light_sim->{'threshold'}->{'mean'};

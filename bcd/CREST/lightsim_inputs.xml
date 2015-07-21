@@ -8,33 +8,73 @@
     <1-AT> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Shares Incandescent="0.41" CFL="0.36" Halogen="0.11" Tubes="0.13"/>
+        <!--Shares Incandescent="0.41" CFL="0.36" Halogen="0.11" Tubes="0.13"/-->
     </1-AT>
     <2-QC> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Shares Incandescent="0.40" CFL="0.20" Halogen="0.26" Tubes="0.13"/>
+        <!--Shares Incandescent="0.40" CFL="0.20" Halogen="0.26" Tubes="0.13"/-->
     </2-QC>
     <3-OT> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Shares Incandescent="0.36" CFL="0.28" Halogen="0.22" Tubes="0.13"/>
+        <!--Shares Incandescent="0.36" CFL="0.28" Halogen="0.22" Tubes="0.13"/-->
     </3-OT>
     <4-PR> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Shares Incandescent="0.44" CFL="0.27" Halogen="0.17" Tubes="0.13"/>
+        <!--Shares Incandescent="0.44" CFL="0.27" Halogen="0.17" Tubes="0.13"/-->
     </4-PR>
     <5-BC> 
         <1-SD Calibration="0.008"/>
         <2-DR Calibration="0.008"/>
-        <Shares Incandescent="0.39" CFL="0.29" Halogen="0.22" Tubes="0.10"/>
+        <!--Shares Incandescent="0.39" CFL="0.29" Halogen="0.22" Tubes="0.10"/-->
     </5-BC>
     
-    <wattage>
-        <Incandescent />
-        <CFL />
-        <Halogen />
-        <Tubes />
-    </wattage>
+    <Types>
+        <Incandescent Share="0.62">
+            <sub>
+                <General_A Share="0.563" Wattage="64"/>
+                <General_Dec Share="0.272" Wattage="44"/>
+                <Reflector Share="0.12" Wattage="69"/>
+                <Misc Share="0.045" Wattage="45"/>
+            </sub>
+        </Incandescent>
+        <CFL Share="0.228">
+            <sub>
+                <Screw Share="0.848" Wattage="17"/>
+                <Pin Share="0.004" Wattage="22"/>
+                <Reflector Share="0.087" Wattage="17"/>
+                <Misc Share="0.061" Wattage="18"/>
+            </sub>
+        </CFL>
+        <Halogen Share="0.044">
+            <sub>
+                <General Share="0.104" Wattage="50"/>
+                <Reflector Share="0.657" Wattage="68"/>
+                <Low_Volt Share="0.075" Wattage="44"/>
+                <Misc Share="0.163" Wattage="18"/>
+            </sub>
+        </Halogen>
+        <Tubes Share="0.099">
+            <sub>
+                <T5 Share="0.006" Wattage="19"/>
+                <T8_Short Share="0.005" Wattage="16"/>
+                <T8_Long Share="0.112" Wattage="26"/>
+                <T8_VLong Share="0.002" Wattage="41"/>
+                <T12_Short Share="0.012" Wattage="16"/>
+                <T12_Long Share="0.579" Wattage="27"/>
+                <T12_VLong Share="0.05" Wattage="50"/>
+                <T8_U Share="0.002" Wattage="27"/>
+                <T12_U Share="0.001" Wattage="27"/>
+                <Misc Share="0.23" Wattage="16"/>
+            </sub>
+        </Tubes>
+        <Other Share="0.009">
+            <sub>
+                <LED Share="0.166" Wattage="11"/>
+                <Misc Share="0.834" Wattage="54"/>
+            </sub>
+        </Other>
+    </Types>
 </LIGHT>
