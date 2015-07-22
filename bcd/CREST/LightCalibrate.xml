@@ -2,7 +2,7 @@
         Lighting Model Calibration inputs
         Initial guess for calibration value
         and Target average annual consumption [kWh/yr/dwelling]-->
-<LIGHT Max_iter="1000" Tol="0.0001" Perturb="0.0000001">
+<LIGHT Max_iter="1000" Tol="0.1" Perturb="0.00001">
     <!--Mean value and standard deviation of dwelling turn on threshold [W/m2]-->
     <threshold mean="60" std="10"/>
     

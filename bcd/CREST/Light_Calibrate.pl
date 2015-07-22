@@ -177,20 +177,12 @@ MAIN: {
             push(@BTypes,$blb);
         };
 
-        # Load the names of all dwellings for this type and region
-        my @dirs=();
+        # Declare the specific CSDDRD file for this set
         my $record = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
         my $exten = '.csv';
-        my $LIST;
-        my $dummy;
-        open ($LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
-        while ($dummy = &one_data_line($LIST, $dummy)) {
-            my $rec = $dummy->{'file_name'};
-            $rec =~ s{\.[^.]+$}{};
-            push(@dirs,$rec);
-        };
-        close $LIST;
-        
+        my $LIST; # CSDDRD file handle
+        my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
+
         # --------------------------------------------------------------------
         # Get the calibration data for this hse_type and region
         # --------------------------------------------------------------------
@@ -208,67 +200,39 @@ MAIN: {
             ITERATION: for (my $b=0;$b<=1;$b++) { # Determine output for value and value plus delta
                 my @AggAnnual=(); # Aggregated annual consumptions
                 # --------------------------------------------------------------------
-                # Begin processing each house model
+                # Begin processing each house model for the region and house type
                 # --------------------------------------------------------------------
-                RECORD: foreach my $dir (@dirs) {
-                    my $hse_name = $dir;
+                open ($LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
+                RECORD: while ($CSDDRD = &one_data_line($LIST, $CSDDRD)) { # Each house in the CSDDRD record
+                    my $hse_name = $CSDDRD->{'file_name'};
+                    $hse_name =~ s{\.[^.]+$}{}; # Remove any extensions
                     my $hse_occ; # Number of occupants in dwelling
                     my @Occ; # Array to hold occupancy 
-                    my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
                     
                     # --------------------------------------------------------------------
                     # Find NN data
                     # --------------------------------------------------------------------
                     my $NNdata;
-                    my $bFound = 0;
-                    NN_IN: foreach my $data (keys (%{$NNinput->{'data'}})) {
-                        if ($data  =~ /^$hse_name/) {
-                            $NNdata = $NNinput->{'data'}->{$data};
-                            $bFound = 1;
-                            last NN_IN;
-                        }
-                    };
-                    if (!$bFound) {
+                    if (exists $NNinput->{'data'}->{"$hse_name.HDF"}) {
+                        $NNdata = $NNinput->{'data'}->{"$hse_name.HDF"};
+                    } elsif (exists $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
+                        $NNdata = $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"};
+                    } else {
                         $issue++;
                         $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
                         next RECORD;
                     };
         
                     my $NNo;
-                    $bFound = 0;
-                    NN_OUT: foreach my $data (keys (%{$NNoutput->{'data'}})) {
-                        if ($data  =~ /^$hse_name/) {
-                            $NNo = $NNoutput->{'data'}->{$data};
-                            $bFound = 1;
-                            last NN_OUT;
-                        }
-                    };
-                    if (!$bFound) {# TODO: ERROR HANDLING
+                    if (exists $NNoutput->{'data'}->{"$hse_name.HDF"}) {
+                        $NNo = $NNoutput->{'data'}->{"$hse_name.HDF"};
+                    } elsif (exists $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
+                        $NNo = $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"};
+                    } else {
                         $issue++;
                         $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN output";
                         next RECORD;
                     };
-                    
-                    # --------------------------------------------------------------------
-                    # Find CSDDRD data
-                    # --------------------------------------------------------------------
-                    my $file = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
-                    my $ext = '.csv';
-                    my $CSDDRD_FILE;
-                    my $bCSDDRD = 0;
-                    open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
-                    CSDDRD: while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD)) {
-                        if ($CSDDRD->{'file_name'} =~ /^$hse_name/) {
-                            $bCSDDRD = 1;
-                            last CSDDRD;
-                        };
-                    }; # END CSDDRD
-                    if (!$bCSDDRD) { # Could not find record
-                        $issue++;
-                        $return->{$hse_name}->{"$issue"} = "Error: Couldn't find CSDDRD data";
-                        next RECORD;
-                    };
-                    close $CSDDRD_FILE;
                     
                     # Determine the climate for this house from the Climate Cross Reference
                     my $climate = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}};	# shorten the name for use this house
@@ -327,7 +291,7 @@ MAIN: {
                             print "Category is $category\n";
                             print "Random Number is $r1\n";
                             print "Cumulative is $cml\n";
-                            sleep;
+                            die "Please check the distribution data";
                         };
                         # Store wattage of this bulb
                         push(@fBulbs, $light_sim->{'Types'}->{$category}->{'sub'}->{$BulbSubC}->{'Wattage'});
@@ -342,6 +306,8 @@ MAIN: {
         
                 }; # END RECORD
                 
+                close $LIST;
+
                 # --------------------------------------------------------------------
                 # determine the average per household
                 # --------------------------------------------------------------------

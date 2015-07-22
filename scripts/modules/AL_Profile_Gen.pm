@@ -91,24 +91,39 @@ sub OccupancySimulation {
     my $bStart=1;
     my $dir = getcwd;
     
+    # Load both transition matrices
+    my @TRmatWD=(); # Array to hold weekday transition matrix
+    my @TRmatWE=(); # Array to hold weekend transition matrix
+    
+    my $WDfile = $dir . "/tpm" . "$numOcc" . "_wd.csv";
+    open my $fh, '<', $WDfile or die "Cannot open $WDfile: $!";
+    while (my $dat = <$fh>) {
+        chomp $dat;
+        push(@TRmatWD,$dat);
+    };
+    @TRmatWD = @TRmatWD[ 1 .. $#TRmatWD ]; # Trim out header
+    close $fh;
+    
+    my $WEfile = $dir . "/tpm" . "$numOcc" . "_we.csv";
+    open my $fhdl, '<', $WEfile or die "Cannot open $WEfile: $!";
+    while (my $dat = <$fhdl>) {
+        chomp $dat;
+        push(@TRmatWE,$dat);
+    };
+    @TRmatWE = @TRmatWE[ 1 .. $#TRmatWE ]; # Trim out header
+    close $fhdl;
+    
     YEAR: for (my $i=1; $i<=365; $i++) { # for each day of the year
         # Determine which transition matrix to use
         my $tDay; 
-        my @TRmat=();
+        my @TRmat;
         if ($dayWeek>7){$dayWeek=1};
         if ($dayWeek == 1 || $dayWeek == 7) {
-            $tDay = 'we';
+            @TRmat = @TRmatWE;
         } else { 
-            $tDay = 'wd';
+            @TRmat = @TRmatWD;
         };
-        # Load appropriate transition matrix
-        my $file = $dir . "/tpm" . "$numOcc" . "_" . $tDay . ".csv";
-        open my $fh, '<', $file or die "Cannot open $file: $!";
-        while (my $dat = <$fh>) {
-            chomp $dat;
-            push(@TRmat,$dat);
-        };
-        @TRmat = @TRmat[ 1 .. $#TRmat ]; # Trim out header
+
         if ($bStart) { # first call, first 10 minutes don't matter
             @TRmat = @TRmat[ 7 .. $#TRmat ];
             $bStart=0;
@@ -137,7 +152,6 @@ sub OccupancySimulation {
                 push(@Occ,$future);
             };
         }; # END DAY
-        close $fh;
         $dayWeek++;
     }; # END YEAR 
 

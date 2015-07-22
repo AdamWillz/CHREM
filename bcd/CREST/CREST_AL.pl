@@ -161,35 +161,27 @@ MAIN: {
             # Find NN data
             # --------------------------------------------------------------------
             my $NNdata;
-            my $bFound = 0;
-            NN_IN: foreach my $data (keys (%{$NNinput->{'data'}})) {
-                if ($data  =~ /^$hse_name/) {
-                    $NNdata = $NNinput->{'data'}->{$data};
-                    $bFound = 1;
-                    last NN_IN;
-                }
-            };
-            if (!$bFound) {
+            if (exists $NNinput->{'data'}->{"$hse_name.HDF"}) {
+                $NNdata = $NNinput->{'data'}->{"$hse_name.HDF"};
+            } elsif (exists $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
+                $NNdata = $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"};
+            } else {
                 $issue++;
                 $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
                 next RECORD;
             };
 
             my $NNo;
-            $bFound = 0;
-            NN_OUT: foreach my $data (keys (%{$NNoutput->{'data'}})) {
-                if ($data  =~ /^$hse_name/) {
-                    $NNo = $NNoutput->{'data'}->{$data};
-                    $bFound = 1;
-                    last NN_OUT;
-                }
-            };
-            if (!$bFound) {# TODO: ERROR HANDLING
+            if (exists $NNoutput->{'data'}->{"$hse_name.HDF"}) {
+                $NNo = $NNoutput->{'data'}->{"$hse_name.HDF"};
+            } elsif (exists $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
+                $NNo = $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"};
+            } else {
                 $issue++;
                 $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN output";
                 next RECORD;
             };
-            
+
             # --------------------------------------------------------------------
             # Find CSDDRD data
             # --------------------------------------------------------------------
@@ -264,6 +256,12 @@ MAIN: {
                         last BulbSub;
                     };
                 }; # END BulbSub
+                if (not defined($BulbSubC)) {
+                    print "Category is $category\n";
+                    print "Random Number is $r1\n";
+                    print "Cumulative is $cml\n";
+                    die "Please check the distribution data";
+                };
                 # Store wattage of this bulb
                 push(@fBulbs, $light_sim->{'Types'}->{$category}->{'sub'}->{$BulbSubC}->{'Wattage'});
             };
