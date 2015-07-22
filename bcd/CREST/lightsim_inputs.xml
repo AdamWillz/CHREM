@@ -50,24 +50,24 @@
         </CFL>
         <Halogen Share="0.044">
             <sub>
-                <General Share="0.104" Wattage="50"/>
-                <Reflector Share="0.657" Wattage="68"/>
-                <Low_Volt Share="0.075" Wattage="44"/>
-                <Misc Share="0.163" Wattage="18"/>
+                <General Share="0.1042" Wattage="50"/>
+                <Reflector Share="0.6571" Wattage="68"/>
+                <Low_Volt Share="0.0753" Wattage="44"/>
+                <Misc Share="0.1634" Wattage="18"/>
             </sub>
         </Halogen>
         <Tubes Share="0.099">
             <sub>
-                <T5 Share="0.006" Wattage="19"/>
-                <T8_Short Share="0.005" Wattage="16"/>
-                <T8_Long Share="0.112" Wattage="26"/>
-                <T8_VLong Share="0.002" Wattage="41"/>
-                <T12_Short Share="0.012" Wattage="16"/>
-                <T12_Long Share="0.579" Wattage="27"/>
-                <T12_VLong Share="0.05" Wattage="50"/>
+                <T5 Share="0.0063" Wattage="19"/>
+                <T8_Short Share="0.0053" Wattage="16"/>
+                <T8_Long Share="0.1118" Wattage="26"/>
+                <T8_VLong Share="0.0024" Wattage="41"/>
+                <T12_Short Share="0.0123" Wattage="16"/>
+                <T12_Long Share="0.5791" Wattage="27"/>
+                <T12_VLong Share="0.0501" Wattage="50"/>
                 <T8_U Share="0.002" Wattage="27"/>
-                <T12_U Share="0.001" Wattage="27"/>
-                <Misc Share="0.23" Wattage="16"/>
+                <T12_U Share="0.0006" Wattage="27"/>
+                <Misc Share="0.2302" Wattage="16"/>
             </sub>
         </Tubes>
         <Other Share="0.009">
