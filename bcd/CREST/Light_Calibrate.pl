@@ -81,11 +81,15 @@ my $NNoutput = &cross_ref_readin($NNresPath);
 # --------------------------------------------------------------------
 # Load in CREST Databases
 # --------------------------------------------------------------------
+print "Reading in the occupant start state XML - ";
 my $OccSTART = 'occ_start_states.xml';
 my $occ_strt = XMLin($OccSTART);
+print "Complete\n";
 
+print "Reading in the light simulation parameters XML - ";
 my $LIGHT = 'lightsim_inputs.xml';
 my $light_sim = XMLin($LIGHT);
+print "Complete\n";
 
 # --------------------------------------------------------------------
 # Load in calibration data
@@ -172,6 +176,7 @@ MAIN: {
 		my $region = $pass->{'region'};	# region number for the thread
         my $return; # HASH to store issues
         my $issue = 0; # Issue counter
+        my @Occ_keys=qw(one two three four five six);
         my @BTypes=(); # Array to hold all bulb categories
         foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
             push(@BTypes,$blb);
@@ -186,9 +191,13 @@ MAIN: {
         # --------------------------------------------------------------------
         # Get the calibration data for this hse_type and region
         # --------------------------------------------------------------------
-        my $Target = $LCalib->{$region}->{$hse_type}->{'Target'};
-        my $iniDelta = $LCalib->{$region}->{$hse_type}->{'Initial_Guess'} + (($LCalib->{$region}->{$hse_type}->{'Initial_Guess'})*($LCalib->{'Perturb'}));
-        my @Xs = ($LCalib->{$region}->{$hse_type}->{'Initial_Guess'},$iniDelta);
+        my ($region_key) = $region =~ /(\-[^-]+)/;
+        $region_key =~ s/-//;
+        my ($hse_type_key) = $hse_type =~ /(\-[^-]+)/;
+        $hse_type_key =~ s/-//;
+        my $Target = $LCalib->{$region_key}->{$hse_type_key}->{'Target'};
+        my $iniDelta = $LCalib->{$region_key}->{$hse_type_key}->{'Initial_Guess'} + (($LCalib->{$region_key}->{$hse_type_key}->{'Initial_Guess'})*($LCalib->{'Perturb'}));
+        my @Xs = ($LCalib->{$region_key}->{$hse_type_key}->{'Initial_Guess'},$iniDelta);
         my @FcnOuts = ();
         my $TrueError;  # Relative value for true error [%]
         
@@ -249,7 +258,7 @@ MAIN: {
                         print "For $hse_type $region $hse_name, number of occupants $hse_occ exceeds model limit 5. Setting to 5\n";
                         $hse_occ=5;
                     };
-                    my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine 'we' or 'wd'
+                    my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
                     my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
                     @Occ = @$Occ_ref;
         

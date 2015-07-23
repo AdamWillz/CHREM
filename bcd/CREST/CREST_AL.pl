@@ -139,10 +139,15 @@ MAIN: {
         my $set_name = $pass->{'setname'};	# region number for the thread
         my $return; # HASH to store issues
         my $issue = 0; # Issue counter
+        my @Occ_keys=qw(one two three four five six);
         my @BTypes=(); # Array to hold all bulb categories
         foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
             push(@BTypes,$blb);
         };
+        my ($region_key) = $region =~ /(\-[^-]+)/;
+        $region_key =~ s/-//;
+        my ($hse_type_key) = $hse_type =~ /(\-[^-]+)/;
+        $hse_type_key =~ s/-//;
 
         push (my @dirs, <../../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
         #print Dumper @dirs;
@@ -214,7 +219,7 @@ MAIN: {
                 print "For $hse_type $region $hse_name, number of occupants $hse_occ exceeds model limit 5. Setting to 5\n";
                 $hse_occ=5;
             };
-            my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine 'we' or 'wd'
+            my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
             my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
             @Occ = @$Occ_ref;
 
@@ -271,7 +276,7 @@ MAIN: {
             };
 
             # --- Call Lighting Simulation
-            my $fCalibrationScalar = $light_sim->{$region}->{$hse_type}->{'Calibration'};
+            my $fCalibrationScalar = $light_sim->{$region_key}->{$hse_type_key}->{'Calibration'};
             my $MeanThresh = $light_sim->{'threshold'}->{'mean'};
             my $STDThresh = $light_sim->{'threshold'}->{'std'};
             my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);

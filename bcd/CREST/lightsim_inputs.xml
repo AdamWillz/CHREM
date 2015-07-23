@@ -5,31 +5,31 @@
     <!--Mean value and standard deviation of dwelling turn on threshold-->
     <threshold mean="60" std="10"/>
     
-    <1-AT> 
-        <1-SD Calibration="0.008"/>
-        <2-DR Calibration="0.008"/>
+    <AT> 
+        <SD Calibration="0.008"/>
+        <DR Calibration="0.008"/>
         <!--Shares Incandescent="0.41" CFL="0.36" Halogen="0.11" Tubes="0.13"/-->
-    </1-AT>
-    <2-QC> 
-        <1-SD Calibration="0.008"/>
-        <2-DR Calibration="0.008"/>
+    </AT>
+    <QC> 
+        <SD Calibration="0.008"/>
+        <DR Calibration="0.008"/>
         <!--Shares Incandescent="0.40" CFL="0.20" Halogen="0.26" Tubes="0.13"/-->
-    </2-QC>
-    <3-OT> 
-        <1-SD Calibration="0.008"/>
-        <2-DR Calibration="0.008"/>
+    </QC>
+    <OT> 
+        <SD Calibration="0.008"/>
+        <DR Calibration="0.008"/>
         <!--Shares Incandescent="0.36" CFL="0.28" Halogen="0.22" Tubes="0.13"/-->
-    </3-OT>
-    <4-PR> 
-        <1-SD Calibration="0.008"/>
-        <2-DR Calibration="0.008"/>
+    </OT>
+    <PR> 
+        <SD Calibration="0.008"/>
+        <DR Calibration="0.008"/>
         <!--Shares Incandescent="0.44" CFL="0.27" Halogen="0.17" Tubes="0.13"/-->
-    </4-PR>
-    <5-BC> 
-        <1-SD Calibration="0.008"/>
-        <2-DR Calibration="0.008"/>
+    </PR>
+    <BC> 
+        <SD Calibration="0.008"/>
+        <DR Calibration="0.008"/>
         <!--Shares Incandescent="0.39" CFL="0.29" Halogen="0.22" Tubes="0.10"/-->
-    </5-BC>
+    </BC>
     
     <Types>
         <Incandescent Share="0.62">
