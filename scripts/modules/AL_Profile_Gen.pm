@@ -91,6 +91,12 @@ sub OccupancySimulation {
     my $bStart=1;
     my $dir = getcwd;
     
+    # Check to see if occupancy exceeds model limits
+    if ($numOcc>5) { # Reduce the number of occupants to 5
+        $numOcc=5;
+        # TODO: WARN THE USER
+    };
+    
     # Load both transition matrices
     my @TRmatWD=(); # Array to hold weekday transition matrix
     my @TRmatWE=(); # Array to hold weekend transition matrix

@@ -210,6 +210,10 @@ MAIN: {
             # Generate the occupancy profiles
             # --------------------------------------------------------------------
             $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
+            if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
+                print "For $hse_type $region $hse_name, number of occupants $hse_occ exceeds model limit 5. Setting to 5\n";
+                $hse_occ=5;
+            };
             my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine 'we' or 'wd'
             my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
             @Occ = @$Occ_ref;

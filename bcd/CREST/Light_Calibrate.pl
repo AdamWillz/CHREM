@@ -199,9 +199,13 @@ MAIN: {
         SECANT: while ($y < $LCalib->{'Max_iter'}) {
             ITERATION: for (my $b=0;$b<=1;$b++) { # Determine output for value and value plus delta
                 my @AggAnnual=(); # Aggregated annual consumptions
+                my $getTime = localtime();
+                if ($b==0) {print "$hse_type subset $region:Determining output value, $getTime\n"};
+                if ($b==1) {print "$hse_type subset $region:Determining output plus delta value, $getTime\n"};
                 # --------------------------------------------------------------------
                 # Begin processing each house model for the region and house type
                 # --------------------------------------------------------------------
+                undef $CSDDRD; # Clear the HASH
                 open ($LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
                 RECORD: while ($CSDDRD = &one_data_line($LIST, $CSDDRD)) { # Each house in the CSDDRD record
                     my $hse_name = $CSDDRD->{'file_name'};
@@ -241,6 +245,10 @@ MAIN: {
                     # Generate the occupancy profiles
                     # --------------------------------------------------------------------
                     $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
+                    if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
+                        print "For $hse_type $region $hse_name, number of occupants $hse_occ exceeds model limit 5. Setting to 5\n";
+                        $hse_occ=5;
+                    };
                     my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$hse_occ"}); # TODO: Determine 'we' or 'wd'
                     my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
                     @Occ = @$Occ_ref;
