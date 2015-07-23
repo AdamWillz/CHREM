@@ -208,9 +208,6 @@ MAIN: {
         SECANT: while ($y < $LCalib->{'Max_iter'}) {
             ITERATION: for (my $b=0;$b<=1;$b++) { # Determine output for value and value plus delta
                 my @AggAnnual=(); # Aggregated annual consumptions
-                my $getTime = localtime();
-                if ($b==0) {print "$hse_type subset $region:Determining output value, $getTime\n"};
-                if ($b==1) {print "$hse_type subset $region:Determining output plus delta value, $getTime\n"};
                 # --------------------------------------------------------------------
                 # Begin processing each house model for the region and house type
                 # --------------------------------------------------------------------
@@ -337,11 +334,13 @@ MAIN: {
                 $FcnOuts[$b] = $Target-$kWhAverage;
             
             }; # END ITERATION
-            my $datestring = localtime();
-            print "$region $hse_type completed iteration $y: $datestring\n";
-            
+
             # Determine the relative true error
             $TrueError = abs($FcnOuts[0]/$Target)*100;
+            
+            my $datestring = localtime();
+            print "$region $hse_type completed iteration $y: $datestring\n";
+            print "Target: $Target, Difference: $FcnOuts[0], Scalar: $Xs[0]\n";
             
             if ($TrueError <= $LCalib->{'Tol'}) { # Achieved convergence, exit
                 last SECANT;
