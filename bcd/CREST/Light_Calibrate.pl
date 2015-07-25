@@ -266,7 +266,7 @@ MAIN: {
 
 POST: {
     my $POST;
-    open($POST, '>', "$fCalibrationScalar" . "out") or die ("Can't open datafile: $fCalibrationScalar.out");	# open readable file
+    open($POST, '>', "$fCalibrationScalar" . ".out") or die ("Can't open datafile: $fCalibrationScalar.out");	# open readable file
     print $POST "True Error = $TrueError\n";
     print $POST "Predicted = $kWhAverage\n";
     print $POST "Scalar = $fCalibrationScalar\n";
@@ -276,10 +276,10 @@ POST: {
 
 LOG: {
     my $LOG;
-    open($LOG, '>', "$fCalibrationScalar" . "log") or die ("Can't open datafile: $fCalibrationScalar.log");	# open readable file
+    open($LOG, '>', "$fCalibrationScalar" . ".log") or die ("Can't open datafile: $fCalibrationScalar.log");	# open readable file
     foreach my $probhse (keys (%{$return})) {
         foreach my $issewe (keys (%{$return->{$probhse}})) {
-            my $msg = $return->{$probhse}->$issewe;
+            my $msg = $return->{$probhse}->{$issewe};
             print $LOG "$msg :: $probhse\n";
         };
     };

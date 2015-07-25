@@ -16,14 +16,14 @@ Vary{
 OptimizationSettings{
   MaxIte = 500;
   WriteStepNumber = false;
-  UnitsOfExecution = 6;     // Number of simulations permitted to run in parallel 
+  UnitsOfExecution = 3;     // Number of simulations permitted to run in parallel 
 }
 
 Algorithm{
  Main = PSOCC;
  NeighborhoodTopology = gbest;
- NeighborhoodSize = 5; // 0 < NeighborhoodSize
- NumberOfParticle = 5;
+ NeighborhoodSize = 6; // 0 < NeighborhoodSize
+ NumberOfParticle = 6;
  NumberOfGeneration = 500;
  Seed = 4;
  CognitiveAcceleration = 2.8; // 0 < CognitiveAcceleration
