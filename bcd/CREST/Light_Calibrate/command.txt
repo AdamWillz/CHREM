@@ -7,28 +7,28 @@ Vary{
    Parameter{    // X-position
      Name    =   Calib;
      Ini     =   0.0008;
-     Step    =   0.00001;
-     Min     =   0.0000001;
-     Max     =   1.000;
+     Step    =   0.000001;
+     Min     =   0.000001;
+     Max     =   0.0090;
    }     
   }
 
 OptimizationSettings{
   MaxIte = 500;
   WriteStepNumber = false;
-  UnitsOfExecution = 3;     // Number of simulations permitted to run in parallel 
+  UnitsOfExecution = 5;     // Number of simulations permitted to run in parallel 
 }
 
 Algorithm{
  Main = PSOCC;
  NeighborhoodTopology = gbest;
- NeighborhoodSize = 6; // 0 < NeighborhoodSize
- NumberOfParticle = 6;
- NumberOfGeneration = 500;
- Seed = 4;
+ NeighborhoodSize = 5; // 0 < NeighborhoodSize
+ NumberOfParticle = 5;
+ NumberOfGeneration = 30;
+ Seed = 5;
  CognitiveAcceleration = 2.8; // 0 < CognitiveAcceleration
  SocialAcceleration = 1.3; // 0 < SocialAcceleration
- MaxVelocityGainContinuous = 0;
- MaxVelocityDiscrete = 4; // 0 < MaxVelocityDiscrete
- ConstrictionGain = 1; // 0 < ConstrictionGain <= 1
+ MaxVelocityGainContinuous = 0.5;
+ MaxVelocityDiscrete = 4.0; // 0 < MaxVelocityDiscrete
+ ConstrictionGain = 0.5; 
 }

@@ -23,6 +23,7 @@ my $CaliPath = "C:/cygwin/home/Adam/New_CHREM/bcd/CREST";
 $CMDfile = shift(@ARGV);
 open(my $CMD, '<', $CMDfile) or die ("Can't open datafile: $CMDfile");	# open readable file
 my $DataStr = <$CMD>;
+chomp $DataStr;
 close $CMD;
 
 # Parse out the input items
@@ -44,8 +45,10 @@ system ("perl Light_Calibrate.pl $hse_type $region $Target $fCalibrationScalar")
 
 # Copy the output
 copy("$fCalibrationScalar.out","$CurDir/Output.out") or die "Copy failed: $!";
+unlink "$fCalibrationScalar.out";
 # Copy the log
 copy("$fCalibrationScalar.log","$CurDir/Output.log") or die "Copy failed: $!";
+unlink "$fCalibrationScalar.log";
 
 # return to original folder and exit
 chdir($CurDir);

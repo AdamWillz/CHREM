@@ -193,13 +193,12 @@ sub LightingSimulation {
     if ($#Occ != $#Irr) {die "Number of occupancy and irradiance timesteps do not match"};
     
     # Set local variables
-    my $iBulbs = scalar @fBulbs; # Number of bulbs/lamps in dwelling
     my $Tsteps = scalar @Occ;
     my $SMALL = 1.0e-20;
     
     # Declare output
     my @Light=(0) x $Tsteps;
-    my $AnnPow;
+    my $AnnPow=0;
 
     # Determine the irradiance threshold of this house
     my $iIrradianceThreshold = GetMonteCarloNormalDistGuess($MeanThresh,$STDThresh);
@@ -252,7 +251,7 @@ sub LightingSimulation {
                     };
                     
                     # Store the demand
-                    $Light[$iTime] = $Light[$iTime]+$fBulbs[$i]; # [W]
+                    $Light[$iTime] = $Light[$iTime]+($fBulbs[$i]/1000); # [kW]
                     
                     # Increment the time
                     $iTime++;
@@ -267,7 +266,6 @@ sub LightingSimulation {
     # Integrate bulb usage to find annual consumption, and scale to kW
     for (my $k=0; $k<=$#Light; $k++) {
         $AnnPow=$AnnPow+(($Light[$k]*60)/1000); # [kJ]
-        $Light[$k] = $Light[$k]/1000; # [kW]
     };
     
     # Express annual consumption in kWh
@@ -289,22 +287,23 @@ sub GetIrradiance {
     # Read in inputs
     my ($file) = @_;
     
-    # Set local variables
-    my @Irr_T=(); # Temporary array to hold irradiance file data
-    
     # Declare output
     my @Irr=();
     
     open my $fh, '<', $file or die "Cannot open $file: $!";
-    while (my $dat = <$fh>) {
-        chomp $dat;
-        push(@Irr_T,$dat);
-    };
-    @Irr_T = @Irr_T[ 2 .. ($#Irr_T-1) ]; # Trim out headers and last timestep 
-    foreach my $data (@Irr_T) {
-        my @temp = split /\t/, $data,2;
-        push(@Irr, $temp[1]); 
-    };
+    my $i=0;
+    RAD: while (my $dat = <$fh>) {
+            if ($i<2) { # Header data, skip
+                $i++;
+                next RAD;
+            };
+            chomp $dat;
+            my @temp = split /\t/, $dat,2;
+            push(@Irr, $temp[1]); 
+    }; # END RAD
+    close $fh;
+    
+    pop(@Irr); # Trim out last timestep
 
     return(\@Irr);
 };
