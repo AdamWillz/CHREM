@@ -265,7 +265,7 @@ sub LightingSimulation {
     
     # Integrate bulb usage to find annual consumption, and scale to kW
     for (my $k=0; $k<=$#Light; $k++) {
-        $AnnPow=$AnnPow+(($Light[$k]*60)/1000); # [kJ]
+        $AnnPow=$AnnPow+($Light[$k]*60); # [kJ]
     };
     
     # Express annual consumption in kWh
@@ -299,6 +299,7 @@ sub GetIrradiance {
             };
             chomp $dat;
             my @temp = split /\t/, $dat,2;
+            $temp[1] = sprintf("%.10g", $temp[1]);
             push(@Irr, $temp[1]); 
     }; # END RAD
     close $fh;

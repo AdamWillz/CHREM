@@ -43,6 +43,8 @@ use File::Copy;
 use Storable  qw(dclone);
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
+use threads;
+use threads::shared;
 
 use lib qw(../../scripts/modules);
 use General;
@@ -53,24 +55,35 @@ use AL_Profile_Gen;
 # Declare the global variables
 # --------------------------------------------------------------------
 
-my $hse_types;	# declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
-my $regions;	# declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
-my $hse_type;
-my $region;
-my $Target;     # Target average annual lighting consumption for region and hse_type [kWh/yr/hsehld]
-my $fCalibrationScalar; # Calibration scalar [-]
-my $calibration='LightCalibrate.xml';   # Calibration data input
-my $Results;    # HASH to hold calibration results
-my $TrueError;  # Relative value for true error [%]
-my $return; # HASH to store issues
-my $kWhAverage; 
-my @AggAnnual=(); # Aggregated annual consumptions [kWh/yr/hsehld]
+my ($hse_type) : shared;   
+my ($region) : shared;
+my ($Target) : shared;          # Target average annual lighting consumption for region and hse_type [kWh/yr/hsehld]
+my (@BTypes) : shared;          # Array to hold all bulb categories
+my $NNinput;                    # HASH holding the CHREM NN input data
+my $occ_strt;                   # HASH holding the active occupants at first timestep pdf
+my $light_sim;                  # HASH holding lighting sim data
+my $climate_ref;                # HASH to hold the dwelling climate references
+my $phi = 1.61803398874989;     # Golden ratio
+
+# --------------------------------------------------------------------
+# Declare the local variables
+# --------------------------------------------------------------------
+
+my $hse_types;	    # declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
+my $regions;	    # declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
+my $Results;        # HASH to hold calibration results
+my $xlow;
+my $xu;
+my $thread;	# Declare threads for each type and region
+my $thread_return;	# Declare a return array for collation of returning thread data
+my $MAXTOL = 0.0001;# Maximum error estimate [%]
+my $MaxIter = 20;   # Maximum iterations
 
 # --------------------------------------------------------------------
 # Read the command line input arguments
 # --------------------------------------------------------------------
 
-if (@ARGV < 4) {die "Four arguments are required: house_type region Target scalar_calibration\n";};	# check for proper argument count
+if (@ARGV < 5) {die "Four arguments are required: house_type region Target low high\n";};	# check for proper argument count
 
 # Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
 ($hse_types, $regions) = &hse_types_and_regions_and_set_name(shift(@ARGV), shift(@ARGV));
@@ -89,46 +102,172 @@ foreach my $stuff (keys (%{$regions})) {
 $Target = shift (@ARGV);
 if ($Target <=0) {die "Invalid energy consumption target $Target. Must be positive"};
 
-$fCalibrationScalar = shift (@ARGV);
-if ($fCalibrationScalar <=0) {die "Invalid calibration scalar $fCalibrationScalar. Must be positive"};
+$xlow = shift (@ARGV);
+if ($xlow <=0) {die "Invalid lower calibration scalar $xlow. Must be positive"};
+
+$xu = shift (@ARGV);
+if ($xu <=0 || $xu < $xlow) {die "Invalid higher calibration scalar $xu. Must be positive and greater than $xlow"};
 
 # --------------------------------------------------------------------
 # Load in CHREM NN data
 # --------------------------------------------------------------------
 my $NNinPath = '../../NN/NN_model/ALC-Inputs-V2.csv';
-my $NNinput = &cross_ref_readin($NNinPath);
-my $NNresPath = '../../NN/NN_model/ALC-Results.csv';
-my $NNoutput = &cross_ref_readin($NNresPath);
+$NNinput = &cross_ref_readin($NNinPath);
 
 # --------------------------------------------------------------------
 # Load in CREST Databases
 # --------------------------------------------------------------------
 print "Reading in the occupant start state XML - ";
 my $OccSTART = 'Occ_Lighting/occ_start_states.xml';
-my $occ_strt = XMLin($OccSTART);
+$occ_strt = XMLin($OccSTART);
 print "Complete\n";
 
 print "Reading in the light simulation parameters XML - ";
 my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
-my $light_sim = XMLin($LIGHT);
+$light_sim = XMLin($LIGHT);
 print "Complete\n";
+
+foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
+    push(@BTypes,$blb);
+};
 
 # -----------------------------------------------
 # Read in the CWEC weather data crosslisting
 # -----------------------------------------------
-my $climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# create an climate reference crosslisting hash
+$climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# create an climate reference crosslisting hash
 
 # --------------------------------------------------------------------
-# Main light simulation 
+# Use Golden-Section Search to determine the minimum (Function is never negative)
 # --------------------------------------------------------------------
-
-MAIN: {
-    my $issue = 0; # Issue counter
-    my @Occ_keys=qw(one two three four five six);
-    my @BTypes=(); # Array to hold all bulb categories
-    foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
-        push(@BTypes,$blb);
+GOLDEN: {
+    my $f1;
+    my $f2;
+    # Generate interior points
+    my $d = 0.61803*($xu-$xlow);
+    my $x1 = $xlow + $d;
+    my $x2 = $xu - $d;
+    
+    # Evaluate the interior points
+    foreach my $points ($x1,$x2) {
+        $thread->{"$points"} = threads->new(\&main,$points);
     };
+    
+    foreach my $points ($x1,$x2) {
+        $thread_return->{"$points"} = $thread->{"$points"}->join();
+    };
+    
+    # If there was any issues, log them
+    LOG: {
+        my $LOG;
+        my $LogName = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".log";
+        open($LOG, '>', $LogName) or die ("Can't generate log file");	# open readable file
+        foreach my $probhse (keys (%{$thread_return->{'issues'}})) {
+            foreach my $issewe (keys (%{$thread_return->{'issues'}->{$probhse}})) {
+                my $msg = $thread_return->{'issues'}->{$probhse}->{$issewe};
+                print $LOG "$msg :: $probhse\n";
+            };
+        };
+        close $LOG;
+    }; # END LOG
+    
+    $f1 = $thread_return->{"$x1"}->{'AbsDiff'};
+    $f2 = $thread_return->{"$x2"}->{'AbsDiff'};
+    
+    # Loop until convergence or max. iterations
+    my $count = 1;
+    my $ea;  # Error estimation
+    my $xmin;
+    my $fmin;
+    ITERATOR: while ($count <= $MaxIter) {
+        if ($f1 < $f2) { # x1 most likely candidate for minimum
+            # Check for convergence
+            $ea = (2-$phi)*abs(($xu-$xlow)/$x1)*100; # Error estimate [%]
+            print "Minimum: $f1, Scalar: $x1, Error:$ea\n";
+            if ($ea <= $MAXTOL) {
+                $xmin = $x1;
+                $fmin = $f1;
+                last ITERATOR;
+            };
+            
+            # Update the domain
+            $xlow=$x2;
+            $x2=$x1;
+            $f2=$f1;
+
+            # Evaluate the new interior point
+            $d = 0.61803*($xu-$xlow);
+            $x1=$xlow + $d;
+            $thread->{"$x1"} = threads->new(\&main,$x1);
+            $thread_return->{"$x1"} = $thread->{"$x1"}->join();
+            $f1 = $thread_return->{"$x1"}->{'AbsDiff'};
+            
+        } else { # x2 most likely candidate for minimum
+            # Check for convergence
+            $ea = (2-$phi)*abs(($xu-$xlow)/$x2)*100; # Error estimate [%]
+            print "Minimum: $f2, Scalar: $x2, Error:$ea\n";
+            if ($ea <= $MAXTOL) {
+                $xmin = $x2;
+                $fmin = $f2;
+                last ITERATOR;
+            };
+
+            # Update the domain
+            $xu=$x1;
+            $x1=$x2;
+            $f1=$f2;
+            # Evaluate the new interior point
+            $d = 0.61803*($xu-$xlow);
+            $x2 = $xu - $d;
+            $thread->{"$x2"} = threads->new(\&main,$x2);
+            $thread_return->{"$x2"} = $thread->{"$x2"}->join();
+            $f2 = $thread_return->{"$x2"}->{'AbsDiff'};
+
+        };
+        $count++;
+    }; # END ITERATOR
+
+    my $bNonconverge = 0;
+    if ($count>$MaxIter) {$bNonconverge = 1};
+    
+    RESOUT: { # Print out results
+        if ($bNonconverge) { # Non-convergence
+            if ($f1 < $f2) {
+                $fmin = $f1;
+                $xmin = $x1;
+            } else {
+                $fmin = $f2;
+                $xmin = $x2;
+            };
+        };
+        
+        my $ResFile = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".res";
+        open (my $RESfh, '>', $ResFile) or die "Cannot print output file $ResFile";
+        print $RESfh "Minimum target difference of $fmin\n";
+        print $RESfh "for scalar $xmin\n";
+        if($bNonconverge){print $RESfh "WARNING: max iterations of $MaxIter reached\n"};
+        
+        close $RESfh;
+
+    }; # END RESOUT
+
+}; # END GOLDEN 
+
+
+
+
+
+# --------------------------------------------------------------------
+# Main calculation subroutine
+# --------------------------------------------------------------------
+sub main {
+    my $fCalibrationScalar = shift;
+    
+    my $kWhAverage; 
+    my @AggAnnual=();
+    my $TrueError;      # Relative value for true error [%]
+    my $issue = 0;      # Issue counter
+    my @Occ_keys=qw(zero one two three four five six);
+    my $return;         # HASH to store issues and return values
 
     # Declare the specific CSDDRD file for this set
     my $record = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
@@ -156,18 +295,7 @@ MAIN: {
             $NNdata = $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"};
         } else {
             $issue++;
-            $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
-            next RECORD;
-        };
-    
-        my $NNo;
-        if (exists $NNoutput->{'data'}->{"$hse_name.HDF"}) {
-            $NNo = $NNoutput->{'data'}->{"$hse_name.HDF"};
-        } elsif (exists $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
-            $NNo = $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"};
-        } else {
-            $issue++;
-            $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN output";
+            $return->{'issues'}->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
             next RECORD;
         };
         
@@ -180,7 +308,7 @@ MAIN: {
         $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
         if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
             $issue++;
-            $return->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
+            $return->{'issues'}->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
             $hse_occ=5;
         };
         my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
@@ -245,7 +373,7 @@ MAIN: {
         my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);
         my @Light = @$light_ref;
         push(@AggAnnual,$AnnPow);
-    
+
     }; # END RECORD
     close $LIST;
 
@@ -261,27 +389,10 @@ MAIN: {
 
     # Determine the absolute true error
     $TrueError = abs($Target-$kWhAverage);
+    
+    $return->{'Prediced'}=$kWhAverage;
+    $return->{'AbsDiff'}=$TrueError;
+    
+    return($return);
 
-};	# END MAIN
-
-POST: {
-    my $POST;
-    open($POST, '>', "$fCalibrationScalar" . ".out") or die ("Can't open datafile: $fCalibrationScalar.out");	# open readable file
-    print $POST "True Error = $TrueError\n";
-    print $POST "Predicted = $kWhAverage\n";
-    print $POST "Scalar = $fCalibrationScalar\n";
-    print $POST "Target = $Target";
-    close $POST;
-};
-
-LOG: {
-    my $LOG;
-    open($LOG, '>', "$fCalibrationScalar" . ".log") or die ("Can't open datafile: $fCalibrationScalar.log");	# open readable file
-    foreach my $probhse (keys (%{$return})) {
-        foreach my $issewe (keys (%{$return->{$probhse}})) {
-            my $msg = $return->{$probhse}->{$issewe};
-            print $LOG "$msg :: $probhse\n";
-        };
-    };
-    close $LOG;
-};
+}; # END sub main 
