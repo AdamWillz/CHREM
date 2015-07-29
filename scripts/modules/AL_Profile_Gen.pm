@@ -101,7 +101,7 @@ sub OccupancySimulation {
     my @TRmatWD=(); # Array to hold weekday transition matrix
     my @TRmatWE=(); # Array to hold weekend transition matrix
     
-    my $WDfile = $dir . "/tpm" . "$numOcc" . "_wd.csv";
+    my $WDfile = $dir . "/Occ_Lighting/tpm" . "$numOcc" . "_wd.csv";
     open my $fh, '<', $WDfile or die "Cannot open $WDfile: $!";
     while (my $dat = <$fh>) {
         chomp $dat;
@@ -110,7 +110,7 @@ sub OccupancySimulation {
     @TRmatWD = @TRmatWD[ 1 .. $#TRmatWD ]; # Trim out header
     close $fh;
     
-    my $WEfile = $dir . "/tpm" . "$numOcc" . "_we.csv";
+    my $WEfile = $dir . "/Occ_Lighting/tpm" . "$numOcc" . "_we.csv";
     open my $fhdl, '<', $WEfile or die "Cannot open $WEfile: $!";
     while (my $dat = <$fhdl>) {
         chomp $dat;

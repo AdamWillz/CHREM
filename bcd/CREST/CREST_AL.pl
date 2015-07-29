@@ -89,10 +89,10 @@ my $NNoutput = &cross_ref_readin($NNresPath);
 # --------------------------------------------------------------------
 # Load in CREST Databases
 # --------------------------------------------------------------------
-my $OccSTART = 'occ_start_states.xml';
+my $OccSTART = 'Occ_Lighting/occ_start_states.xml';
 my $occ_strt = XMLin($OccSTART);
 
-my $LIGHT = 'lightsim_inputs.xml';
+my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
 my $light_sim = XMLin($LIGHT);
 
 # -----------------------------------------------

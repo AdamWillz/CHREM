@@ -104,12 +104,12 @@ my $NNoutput = &cross_ref_readin($NNresPath);
 # Load in CREST Databases
 # --------------------------------------------------------------------
 print "Reading in the occupant start state XML - ";
-my $OccSTART = 'occ_start_states.xml';
+my $OccSTART = 'Occ_Lighting/occ_start_states.xml';
 my $occ_strt = XMLin($OccSTART);
 print "Complete\n";
 
 print "Reading in the light simulation parameters XML - ";
-my $LIGHT = 'lightsim_inputs.xml';
+my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
 my $light_sim = XMLin($LIGHT);
 print "Complete\n";
 
