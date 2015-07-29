@@ -63,6 +63,20 @@ make
 make install
 cd ..
 
+tar -xf XML-SAX-0.99.tar.gz
+cd XML-SAX-0.99
+perl Makefile.PL
+make
+make install
+cd ..
+
+tar -xf Switch-2.16.tar.gz
+cd Switch-2.16
+perl Makefile.PL
+make
+make install
+cd ..
+
 tar -xf Math-Polygon-1.02.tar.gz
 cd Math-Polygon-1.02
 perl Makefile.PL
