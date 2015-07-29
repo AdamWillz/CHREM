@@ -139,7 +139,7 @@ MAIN: {
         my $set_name = $pass->{'setname'};	# region number for the thread
         my $return; # HASH to store issues
         my $issue = 0; # Issue counter
-        my @Occ_keys=qw(one two three four five six);
+        my @Occ_keys=qw(zero one two three four five six);
         my @BTypes=(); # Array to hold all bulb categories
         foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
             push(@BTypes,$blb);
