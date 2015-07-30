@@ -50,6 +50,7 @@ use lib qw(../../scripts/modules);
 use General;
 use Cross_reference;
 use AL_Profile_Gen;
+use Upgrade;
 
 # --------------------------------------------------------------------
 # Declare the global variables
@@ -74,10 +75,12 @@ my $regions;	    # declare an hash array to store the regions to be modeled (e.g
 my $Results;        # HASH to hold calibration results
 my $xlow;
 my $xu;
-my $thread;	# Declare threads for each type and region
+my @hse_TOT;        # Array to hold the list of all houses for region and type
+my @hse_list;       # Array to hold the list of houses to simulate
+my $thread;	        # Declare threads for each type and region
 my $thread_return;	# Declare a return array for collation of returning thread data
 my $MAXTOL = 0.0001;# Maximum error estimate [%]
-my $MaxIter = 20;   # Maximum iterations
+my $MaxIter = 30;   # Maximum iterations
 
 # --------------------------------------------------------------------
 # Read the command line input arguments
@@ -107,6 +110,27 @@ if ($xlow <=0) {die "Invalid lower calibration scalar $xlow. Must be positive"};
 
 $xu = shift (@ARGV);
 if ($xu <=0 || $xu < $xlow) {die "Invalid higher calibration scalar $xu. Must be positive and greater than $xlow"};
+
+# --------------------------------------------------------------------
+# Load list of records for this region and house type
+# --------------------------------------------------------------------
+CSDDRD_READ: {
+    # Declare the specific CSDDRD file for this set
+    my $record = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
+    my $exten = '.csv';
+    my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
+    open (my $LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
+    while ($CSDDRD = &one_data_line($LIST, $CSDDRD)) { # Each house in the CSDDRD record
+        my $hse_name = $CSDDRD->{'file_name'};
+        $hse_name =~ s{\.[^.]+$}{}; # Remove any extensions
+        push(@hse_TOT,$hse_name);
+    };
+    close $LIST;
+    # Randomly select 100 houses from the set
+    my ($houses_refer, $dupl) = &random_hse_shuffle(\@hse_TOT,100);
+    # Use array references to update arrays here
+    @hse_list = @$houses_refer;
+};
 
 # --------------------------------------------------------------------
 # Load in CHREM NN data
@@ -139,6 +163,8 @@ $climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# 
 # --------------------------------------------------------------------
 # Use Golden-Section Search to determine the minimum (Function is never negative)
 # --------------------------------------------------------------------
+my $datestring = localtime();
+print "Starting the search at $datestring\n";
 GOLDEN: {
     my $f1;
     my $f2;
@@ -149,26 +175,12 @@ GOLDEN: {
     
     # Evaluate the interior points
     foreach my $points ($x1,$x2) {
-        $thread->{"$points"} = threads->new(\&main,$points);
+        $thread->{"$points"} = threads->new(\&main,\@hse_list,$points);
     };
     
     foreach my $points ($x1,$x2) {
         $thread_return->{"$points"} = $thread->{"$points"}->join();
     };
-    
-    # If there was any issues, log them
-    LOG: {
-        my $LOG;
-        my $LogName = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".log";
-        open($LOG, '>', $LogName) or die ("Can't generate log file");	# open readable file
-        foreach my $probhse (keys (%{$thread_return->{'issues'}})) {
-            foreach my $issewe (keys (%{$thread_return->{'issues'}->{$probhse}})) {
-                my $msg = $thread_return->{'issues'}->{$probhse}->{$issewe};
-                print $LOG "$msg :: $probhse\n";
-            };
-        };
-        close $LOG;
-    }; # END LOG
     
     $f1 = $thread_return->{"$x1"}->{'AbsDiff'};
     $f2 = $thread_return->{"$x2"}->{'AbsDiff'};
@@ -182,7 +194,8 @@ GOLDEN: {
         if ($f1 < $f2) { # x1 most likely candidate for minimum
             # Check for convergence
             $ea = (2-$phi)*abs(($xu-$xlow)/$x1)*100; # Error estimate [%]
-            print "Minimum: $f1, Scalar: $x1, Error:$ea\n";
+            $datestring = localtime();
+            print "$datestring: Minimum: $f1, Scalar: $x1, Error:$ea\n";
             if ($ea <= $MAXTOL) {
                 $xmin = $x1;
                 $fmin = $f1;
@@ -197,14 +210,15 @@ GOLDEN: {
             # Evaluate the new interior point
             $d = 0.61803*($xu-$xlow);
             $x1=$xlow + $d;
-            $thread->{"$x1"} = threads->new(\&main,$x1);
+            $thread->{"$x1"} = threads->new(\&main,\@hse_list,$x1);
             $thread_return->{"$x1"} = $thread->{"$x1"}->join();
             $f1 = $thread_return->{"$x1"}->{'AbsDiff'};
             
         } else { # x2 most likely candidate for minimum
             # Check for convergence
             $ea = (2-$phi)*abs(($xu-$xlow)/$x2)*100; # Error estimate [%]
-            print "Minimum: $f2, Scalar: $x2, Error:$ea\n";
+            $datestring = localtime();
+            print "$datestring: Minimum: $f2, Scalar: $x2, Error:$ea\n";
             if ($ea <= $MAXTOL) {
                 $xmin = $x2;
                 $fmin = $f2;
@@ -218,7 +232,7 @@ GOLDEN: {
             # Evaluate the new interior point
             $d = 0.61803*($xu-$xlow);
             $x2 = $xu - $d;
-            $thread->{"$x2"} = threads->new(\&main,$x2);
+            $thread->{"$x2"} = threads->new(\&main,\@hse_list,$x2);
             $thread_return->{"$x2"} = $thread->{"$x2"}->join();
             $f2 = $thread_return->{"$x2"}->{'AbsDiff'};
 
@@ -228,22 +242,53 @@ GOLDEN: {
 
     my $bNonconverge = 0;
     if ($count>$MaxIter) {$bNonconverge = 1};
+    if ($bNonconverge) { # Non-convergence
+        if ($f1 < $f2) {
+            $fmin = $f1;
+            $xmin = $x1;
+        } else {
+            $fmin = $f2;
+            $xmin = $x2;
+        };
+    };
     
-    RESOUT: { # Print out results
-        if ($bNonconverge) { # Non-convergence
-            if ($f1 < $f2) {
-                $fmin = $f1;
-                $xmin = $x1;
-            } else {
-                $fmin = $f2;
-                $xmin = $x2;
+    $datestring = localtime();
+    print "Finished iterating at $datestring\n";
+    print "Minimum scalar $xmin with absolute true difference of $fmin\n\n";
+    
+    # -----------------------------------------------
+    # Run the validation
+    # -----------------------------------------------
+    print "Starting the validation\n";
+    $thread->{"$xmin"} = threads->new(\&main,\@hse_TOT,$xmin);
+    $thread_return->{"$xmin"} = $thread->{"$xmin"}->join();
+    my $ValDiff = $thread_return->{"$xmin"}->{'AbsDiff'};
+    
+    $datestring = localtime();
+    print "Finished validation at $datestring\n";
+    
+    # If there was any issues, log them
+    LOG: {
+        my $LOG;
+        my $LogName = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".log";
+        open($LOG, '>', $LogName) or die ("Can't generate log file");	# open readable file
+        foreach my $probhse (keys (%{$thread_return->{'issues'}})) {
+            foreach my $issewe (keys (%{$thread_return->{'issues'}->{$probhse}})) {
+                my $msg = $thread_return->{'issues'}->{$probhse}->{$issewe};
+                print $LOG "$msg :: $probhse\n";
             };
         };
-        
+        close $LOG;
+    }; # END LOG
+
+    RESOUT: { # Print out results
+
         my $ResFile = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".res";
         open (my $RESfh, '>', $ResFile) or die "Cannot print output file $ResFile";
+
         print $RESfh "Minimum target difference of $fmin\n";
         print $RESfh "for scalar $xmin\n";
+        print $RESfh "Validation: absolute difference of $ValDiff\n";
         if($bNonconverge){print $RESfh "WARNING: max iterations of $MaxIter reached\n"};
         
         close $RESfh;
@@ -260,7 +305,10 @@ GOLDEN: {
 # Main calculation subroutine
 # --------------------------------------------------------------------
 sub main {
+
+    my $list_ref = shift;
     my $fCalibrationScalar = shift;
+    my @houses = @$list_ref;
     
     my $kWhAverage; 
     my @AggAnnual=();
@@ -273,17 +321,32 @@ sub main {
     my $record = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
     my $exten = '.csv';
     my $LIST; # CSDDRD file handle
-    my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
+    my $CSD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
 
     # --------------------------------------------------------------------
     # Begin processing each house model for the region and house type
     # --------------------------------------------------------------------
-    open ($LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
-    RECORD: while ($CSDDRD = &one_data_line($LIST, $CSDDRD)) { # Each house in the CSDDRD record
-        my $hse_name = $CSDDRD->{'file_name'};
-        $hse_name =~ s{\.[^.]+$}{}; # Remove any extensions
+    RECORD: foreach my $hse_name (@houses) {
         my $hse_occ; # Number of occupants in dwelling
         my @Occ; # Array to hold occupancy 
+        
+        # --------------------------------------------------------------------
+        # Find CSDDRD data
+        # --------------------------------------------------------------------
+        open ($LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
+        READ_DAT: while ($CSD = &one_data_line($LIST, $CSD)) { # Each house in the CSDDRD record
+            if ($CSD->{'file_name'} =~ /^$hse_name/) {
+                # Found corresponding record, stop reading records and jump out of loop
+                last READ_DAT;
+            };
+        }; # END READ_DAT
+        close $LIST;
+        
+        if ($CSD->{'file_name'} !~ /^$hse_name/) { # Record not found
+            $issue++;
+            $return->{'issues'}->{$hse_name}->{"$issue"} = "Error: Couldn't find CSDDRD record";
+            next RECORD;
+        };
         
         # --------------------------------------------------------------------
         # Find NN data
@@ -300,7 +363,9 @@ sub main {
         };
         
         # Determine the climate for this house from the Climate Cross Reference
-        my $climate = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}};	# shorten the name for use this house
+        my $climate = $climate_ref->{'data'}->{$CSD->{'HOT2XP_CITY'}};	# shorten the name for use this house
+        # Done with CSDDRD data
+        undef $CSD;
     
         # --------------------------------------------------------------------
         # Generate the occupancy profiles

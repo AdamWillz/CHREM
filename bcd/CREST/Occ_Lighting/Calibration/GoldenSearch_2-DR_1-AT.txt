@@ -1,0 +1,3 @@
+Minimum target difference of 0.557252068127241
+for scalar 0.0109267103941842
+WARNING: max iterations of 20 reached
