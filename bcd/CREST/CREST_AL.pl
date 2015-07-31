@@ -45,11 +45,33 @@ use Storable  qw(dclone);
 use POSIX qw(ceil floor);
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
+use Hash::Merge qw(merge);
 
 use lib qw(../../scripts/modules);
 use General;
 use Cross_reference;
 use AL_Profile_Gen;
+
+Hash::Merge::specify_behavior(
+	{
+		'SCALAR' => {
+			'SCALAR' => sub {$_[0] + $_[1]},
+			'ARRAY'  => sub {[$_[0], @{$_[1]}]},
+			'HASH'   => sub {$_[1]->{$_[0]} = undef},
+		},
+		'ARRAY' => {
+			'SCALAR' => sub {[@{$_[0]}, $_[1]]},
+			'ARRAY'  => sub {[@{$_[0]}, @{$_[1]}]},
+			'HASH'   => sub {[@{$_[0]}, $_[1]]},
+		},
+		'HASH' => {
+			'SCALAR' => sub {$_[0]->{$_[1]} = undef},
+			'ARRAY'  => sub {[@{$_[1]}, $_[0]]},
+			'HASH'   => sub {Hash::Merge::_merge_hashes($_[0], $_[1])},
+		},
+	}, 
+	'Merge where scalars are added, and items are (pre)|(ap)pended to arrays', 
+);
 
 # --------------------------------------------------------------------
 # Declare the global variables
@@ -58,6 +80,7 @@ use AL_Profile_Gen;
 my $hse_types;	# declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
 my $regions;	# declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
 my $set_name;   # Read in city name from command line
+my $ColdApp;    # HASH to hold the cold appliance data
 
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+Hse_Gen_(.+)_Issues.txt/$1/, <../../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -94,6 +117,19 @@ my $occ_strt = XMLin($OccSTART);
 
 my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
 my $light_sim = XMLin($LIGHT);
+
+# --------------------------------------------------------------------
+# Load in cold appliance data
+# --------------------------------------------------------------------
+my $ColdFile = 'Appliance/Cold/Refrigerator_dist.xml';
+$ColdApp->{'Refrigerator'}->{'dist'}=XMLin($ColdFile);
+$ColdFile = 'Appliance/Cold/Refrigerator_eff.xml';
+$ColdApp->{'Refrigerator'}->{'eff'}=XMLin($ColdFile);
+
+$ColdFile = 'Appliance/Cold/Freezer_dist.xml';
+$ColdApp->{'Freezer'}->{'dist'}=XMLin($ColdFile);
+$ColdFile = 'Appliance/Cold/Freezer_eff.xml';
+$ColdApp->{'Freezer'}->{'eff'}=XMLin($ColdFile);
 
 # -----------------------------------------------
 # Read in the CWEC weather data crosslisting
@@ -160,6 +196,7 @@ MAIN: {
             $hse_name =~ s{.*/}{};
             my $hse_occ; # Number of occupants in dwelling
             my @Occ; # Array to hold occupancy 
+            my @Light; # Array to hold the lighting power draw at every minute [kW]
             my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
             
             # --------------------------------------------------------------------
@@ -210,77 +247,135 @@ MAIN: {
             
             # Determine the climate for this house from the Climate Cross Reference
 			my $climate = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}};	# shorten the name for use this house
+            undef $CSDDRD; # Don't need this anymore
 
             # --------------------------------------------------------------------
             # Generate the occupancy profiles
             # --------------------------------------------------------------------
-            $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
-            if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
-                print "For $hse_type $region $hse_name, number of occupants $hse_occ exceeds model limit 5. Setting to 5\n";
-                $hse_occ=5;
+            OCC: {
+                $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
+                if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
+                    print "For $hse_type $region $hse_name, number of occupants $hse_occ exceeds model limit 5. Setting to 5\n";
+                    $hse_occ=5;
+                };
+                my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
+                my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
+                @Occ = @$Occ_ref;
             };
-            my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
-            my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
-            @Occ = @$Occ_ref;
-
             # --------------------------------------------------------------------
             # Generate Lighting Profile
             # --------------------------------------------------------------------
-            # --- Irradiance data
-            my $loc = $climate->{'CWEC_FILE'};  # Determine climate for this dwelling
-            $loc =~ s{\.[^.]+$}{}; # Remove extension
-            $loc = $loc . '.out'; # Name of irradiance file
-            my $irradiance = "Global_Horiz/$loc";
-            my $Irr_ref = &GetIrradiance($irradiance); # Load the irradiance data
-            my @Irr = @$Irr_ref;
+            #LIGHTING: {
+            #    # --- Irradiance data
+            #    my $loc = $climate->{'CWEC_FILE'};  # Determine climate for this dwelling
+            #    $loc =~ s{\.[^.]+$}{}; # Remove extension
+            #    $loc = $loc . '.out'; # Name of irradiance file
+            #    my $irradiance = "Global_Horiz/$loc";
+            #    my $Irr_ref = &GetIrradiance($irradiance); # Load the irradiance data
+            #    my @Irr = @$Irr_ref;
+            #
+            #    # --- Bulb data
+            #    my @fBulbs = (); # Array to hold wattage of each bulb in the dwelling
+            #    my $iBulbs=0; # Number of bulbs/lamps for dwelling 
+            #    my @BulbType = qw(Fluorescent Halogen Incandescent);
+            #    foreach my $bulb (@BulbType) { # Read number of bulbs in dwelling from CHREM NN inputs
+            #        $iBulbs = $iBulbs + $NNdata->{$bulb};
+            #    };
+            #    # Assign wattage for each bulb
+            #    for (my $i=1;$i<=$iBulbs;$i++) { # Each bulb
+            #        my $r1 = rand();
+            #        my $cml=0;
+            #        my $category;
+            #        Category: foreach my $blb (@BTypes) { # Loop through each bulb category
+            #            $cml=$cml+$light_sim->{'Types'}->{$blb}->{'Share'};
+            #            if ($r1<$cml) {
+            #                $category=$blb;
+            #                last Category;
+            #            };
+            #        }; # END Category
+            #
+            #        # Reset variables
+            #        $r1 = rand();
+            #        $cml=0;
+            #        my $BulbSubC;
+            #        BulbSub: foreach my $blb (keys (%{$light_sim->{'Types'}->{$category}->{'sub'}})) { # Loop through each bulb sub-category
+            #            $cml=$cml+$light_sim->{'Types'}->{$category}->{'sub'}->{$blb}->{'Share'};
+            #            if ($r1<$cml) {
+            #                $BulbSubC=$blb;
+            #                last BulbSub;
+            #            };
+            #        }; # END BulbSub
+            #        if (not defined($BulbSubC)) {
+            #            print "Category is $category\n";
+            #            print "Random Number is $r1\n";
+            #            print "Cumulative is $cml\n";
+            #            die "Please check the distribution data";
+            #        };
+            #        # Store wattage of this bulb
+            #        push(@fBulbs, $light_sim->{'Types'}->{$category}->{'sub'}->{$BulbSubC}->{'Wattage'});
+            #    };
+            #
+            #    # --- Call Lighting Simulation
+            #    my $fCalibrationScalar = $light_sim->{$region_key}->{$hse_type_key}->{'Calibration'};
+            #    my $MeanThresh = $light_sim->{'threshold'}->{'mean'};
+            #    my $STDThresh = $light_sim->{'threshold'}->{'std'};
+            #    my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);
+            #    @Light = @$light_ref;
+            #}; # END LIGHTING
+            
+            # --------------------------------------------------------------------
+            # Generate Cold appliance profiles
+            # --------------------------------------------------------------------
+            COLD: {
+                my @Cold_key = qw(Main_Refrigerator Secondary_Refrigerator Main_Freezer Secondary_Freezer); # Keys for each type of cold appliance in NN inputs
+                foreach my $cold (@Cold_key) { # Determine what cold appliances this dwelling has
+                    if ($NNdata->{"$cold"} > 0) { # Dwelling has this type of cold appliance
+                        my $ColdSize = $NNdata->{"$cold"}/28.316847; # Convert size to cu. ft
+                        # Determine if fridge or freezer
+                        my ($ColdType) = $cold =~ m/_(.*)/;
+                        my ($Colduse) = $cold =~ m/(.*)_/;
+                        my $ColdRef = $ColdApp->{"$ColdType"}; # Create a hash reference to the data
+                        
+                        # Randomly select appliance vintage from distribution
+                        my $NumVint = $ColdRef->{'dist'}->{'Periods'}->{'intervals'}; # Number of vintage intervals
+                        my $InterVint=1; # Index the vintage interval
+                        my $fCumulativeP = 0;
+                        my $fRand = rand();
+                        COLD_VINT: while ($InterVint<=$NumVint) {
+                            $fCumulativeP = $fCumulativeP +  $ColdRef->{'dist'}->{$Colduse}->{$region_key}->{"$InterVint"};
+                            if ($fRand < $fCumulativeP) {last COLD_VINT};
+                            $InterVint++;
+                        }; # END COLD_VINT
+                        my $vintage = rand_range($ColdRef->{'dist'}->{'Periods'}->{"$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"$InterVint"}->{'max'});
+                        
+                        # Determine the corresponding UEC for this vintage
+                        my $UEC = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
+                        
+                        print Dumper $UEC;
+                        sleep;
+                        
+#    # Determine cycle lengths TOn and TOff
+#    # TODO: find better values. For now, fridge cycle time from Armstrong et al. 2009
+#    $TOn = 35;
+#    $TOff = 35;
+#    my $T = $TOn+$TOff; # Period of cycle [min]
+#    
+#    # Number of cycles per year
+#    $Ncyc = 525600/$T;
+#    # Energy consumption per cycle
+#    $Ecyc = $AnnE/$Ncyc;
+#    
+#    # Power draw for appliance 'ON'
+#    $QOn = $Ecyc/($TOn/60);
+                        
+                        
+                        
+                        
+                        
 
-            # --- Bulb data
-            my @fBulbs = (); # Array to hold wattage of each bulb in the dwelling
-            my $iBulbs=0; # Number of bulbs/lamps for dwelling 
-            my @BulbType = qw(Fluorescent Halogen Incandescent);
-            foreach my $bulb (@BulbType) { # Read number of bulbs in dwelling from CHREM NN inputs
-                $iBulbs = $iBulbs + $NNdata->{$bulb};
-            };
-            # Assign wattage for each bulb
-            for (my $i=1;$i<=$iBulbs;$i++) { # Each bulb
-                my $r1 = rand();
-                my $cml=0;
-                my $category;
-                Category: foreach my $blb (@BTypes) { # Loop through each bulb category
-                    $cml=$cml+$light_sim->{'Types'}->{$blb}->{'Share'};
-                    if ($r1<$cml) {
-                        $category=$blb;
-                        last Category;
                     };
-                }; # END Category
-
-                # Reset variables
-                $r1 = rand();
-                $cml=0;
-                my $BulbSubC;
-                BulbSub: foreach my $blb (keys (%{$light_sim->{'Types'}->{$category}->{'sub'}})) { # Loop through each bulb sub-category
-                    $cml=$cml+$light_sim->{'Types'}->{$category}->{'sub'}->{$blb}->{'Share'};
-                    if ($r1<$cml) {
-                        $BulbSubC=$blb;
-                        last BulbSub;
-                    };
-                }; # END BulbSub
-                if (not defined($BulbSubC)) {
-                    print "Category is $category\n";
-                    print "Random Number is $r1\n";
-                    print "Cumulative is $cml\n";
-                    die "Please check the distribution data";
                 };
-                # Store wattage of this bulb
-                push(@fBulbs, $light_sim->{'Types'}->{$category}->{'sub'}->{$BulbSubC}->{'Wattage'});
-            };
-
-            # --- Call Lighting Simulation
-            my $fCalibrationScalar = $light_sim->{$region_key}->{$hse_type_key}->{'Calibration'};
-            my $MeanThresh = $light_sim->{'threshold'}->{'mean'};
-            my $STDThresh = $light_sim->{'threshold'}->{'std'};
-            my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);
-            my @Light = @$light_ref;
+            }; # END COLD
 
         }; # END RECORD
         
@@ -294,8 +389,11 @@ MAIN: {
 # -----------------------------------------------
 # Subroutines
 # -----------------------------------------------
-#SUBROUTINES: {
-#
+SUBROUTINES: {
+    sub rand_range {
+        my ($x, $y) = @_;
+    return int(rand($y - $x)) + $x;
+    };
 #    sub clean_up_dir {
 #        my $set_name = shift;
 #        my $file = shift;
@@ -311,5 +409,5 @@ MAIN: {
 #    
 #    	return (1);
 #	};
-#
-#};
+
+};

@@ -6,6 +6,9 @@ Ref: Energy consumption of Major Household Appliances Shipped in Canada:
         
 <FREEZER>
 
+    <!--Inputs based on the defaults from the CREST model for 'Refrigerator'-->
+    <Inputs iMeanCycleLength="18" iRestartDelay="36" iBaseCyclesYear="6116"/>
+
     <!--National Distribution of freezer types by year [%]. Table A.17 -->
     <types MaxYear = "2012" MinYear = "1991">
         <1991 8="11.8" 9="0.4"  10="81.2" 16="0.0" 18="6.7"/>
