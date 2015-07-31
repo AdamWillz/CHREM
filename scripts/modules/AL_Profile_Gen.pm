@@ -25,7 +25,7 @@ our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
 #our @EXPORT = qw( setDryerProfile setStoveProfile setOtherProfile setNewBCD);
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -310,6 +310,145 @@ sub GetIrradiance {
 };
 
 # ====================================================================
+# GetUEC
+#   This subroutine determines the UEC of cold appliances of specified
+#   type, vintage, and size. Fridge data is read directly from the HASH.
+#   Freezers are not sorted by size but type. The type is randomly selected
+#   from the distribution, and the associated UEC is selected.
+#
+#   INPUTS:     type: Type of cold appliance (Refrigerator or Freezer)
+#               vintage: Year of fridge manufacture
+#               size: Size of the cold appliance [cu. ft.]
+#               ColdHash: Hash holding the efficiency data
+#   OUTPUTS     UEC: Unit energy consumption [kWh/yr]
+#           cType: String indicating appliance type (Refrigerator Upright_Freezer Chest_Freezer)
+# ====================================================================
+sub GetUEC {
+    # Read in the inputs
+    my $type = shift;
+    my $vintage = shift;
+    my $size = shift;
+    my $ColdHash = shift;
+    
+    # Declare the outputs
+    my $UEC;
+    my $cType;
+    
+    # Determine the type of cold appliance
+    if ($type =~ m/Refrigerator/) { # Fridge
+        my $sizeInd = $ColdHash->{'Sizes'}->{'intervals'};
+        if ($size > $ColdHash->{'Sizes'}->{"_$sizeInd"}->{'max'}) {
+            $size = $ColdHash->{'Sizes'}->{"_$sizeInd"}->{'max'};
+        };
+        my $i = 1;
+        while ($ColdHash->{'Sizes'}->{"_$i"}->{'max'} < $size) { # Find consumption data for appliance size
+            $i++;
+        };
+        
+        $UEC = $ColdHash->{'Eff'}->{"_$vintage"}->{"_$i"};
+        $cType = 'Refrigerator';
+        
+    } elsif ($type =~ m/Freezer/) { # Freezer
+        # Select a freezer type using distribution for particular vintage
+        my $U = rand(100);
+        my $j=0;
+        my $fType;
+        
+        foreach my $Ind (keys (%{$ColdHash->{'types'}->{"_$vintage"}})) {
+            $j=$j+$ColdHash->{'types'}->{"_$vintage"}->{"_$Ind"};
+            if ($j > $U) {
+                $fType = $Ind;
+                last;
+            };
+        };
+        
+        $UEC = $ColdHash->{'Eff'}->{"_$vintage"}->{"_$fType"};
+        
+        if (($fType == 10) || ($fType == 18)) {
+            $cType = 'Chest_Freezer';
+        } else {
+            $cType = 'Upright_Freezer';
+        };
+    
+    } else { # Error
+        die "Invalid cold appliance type\n";
+    };
+    
+    return ($UEC,$cType);
+};
+
+# ====================================================================
+# setColdProfile
+#       This subroutine uses a top-down approach to generate high-resolution
+#       power draw profiles for cold appliances. The approach is similar to the 
+#       cyclic load patterns found in Widen & Wackelgard 2010, although the ON/OFF
+#       periods are assigned constant values for simplicity. 
+#
+# INPUT     UEC: Unit energy consumption [kWh/yr]
+#           iCyclesPerYear: number of cycles per year
+#           iMeanCycleLength: mean cycle length [min]
+#           iRestartDelay: delay restart after cycle [min]
+# OUTPUT    Cold: Annual electrical consumption profile of cold appliance [kW]
+# ====================================================================
+
+sub setColdProfile {
+    # Declare inputs
+    my $UEC = shift;
+    my $iCyclesPerYear = shift;
+    my $iMeanCycleLength = shift;
+    my $iRestartDelay = shift;
+    
+    # Local variables
+    my $fPower; # Power draw when cycle is on [kW]
+    my $dCalibrate; # Calibration value to determine switch-on events
+    my $iRestartDelayTimeLeft; # Counter to hold time left in the delay restart
+    
+    # Declare outputs
+    my @Cold=(0) x 525600;
+    my $cType;
+    
+    # Determine time appliance is running in a year [min]
+    my $Trunning=$iCyclesPerYear*$iMeanCycleLength;
+    
+    # Determine the minutes in a year when an event can occur
+    my $Ms = 525600-($Trunning+($iCyclesPerYear*$iRestartDelay));
+    
+    # Determine the mean time between start events [min]
+    my $MT=$Ms/$iCyclesPerYear;
+    $dCalibrate=1/$MT;
+    
+    # Estimate the cycle power [kW]
+    $fPower=$UEC/($Trunning/60);
+    
+    # ====================================================================
+    # Begin generating profile
+    # ====================================================================
+    # Randomly delay the start of appliances that have a restart delay (e.g. cold appliances with more regular intervals)
+    $iRestartDelayTimeLeft = int(rand()*$iRestartDelay*2); # Weighting is 2 just to provide some diversity
+    my $iCycleTimeLeft = 0;
+    my $iMinute = 0;
+    
+    MINUTE: while ($iMinute < 525600) { # For each minute of the year
+        if ($iCycleTimeLeft <= 0 && $iRestartDelayTimeLeft > 0) { # If this appliance is off having completed a cycle (ie. a restart delay)
+            # Decrement the cycle time left
+            $iRestartDelayTimeLeft--;
+        } elsif ($iCycleTimeLeft <= 0) { # Else if this appliance is off
+            if (rand() < $dCalibrate) { # Start Appliance
+                $Cold[$iMinute] = $fPower;
+                $iRestartDelayTimeLeft = $iRestartDelay;
+                $iCycleTimeLeft = $iMeanCycleLength-1;
+            };
+        } else { # The appliance is on
+            $Cold[$iMinute] = $fPower;
+            $iCycleTimeLeft--;
+        };
+        $iMinute++;
+    }; # END MINUTE
+    
+    return(\@Cold);
+};
+
+# ====================================================================
 #  LOCAL SUBROUTINES
 # ====================================================================
 
@@ -429,134 +568,6 @@ sub GetLightDuration {
     }; # END RANGE
 
     return $Duration;
-};
-
-# ====================================================================
-# GetUEC
-#   This subroutine determines the UEC of cold appliances of specified
-#   type, vintage, and size. Fridge data is read directly from the HASH.
-#   Freezers are not sorted by size but type. The type is randomly selected
-#   from the distribution, and the associated UEC is selected.
-#
-#   INPUTS:     type: Type of cold appliance (Refrigerator or Freezer)
-#               vintage: Year of fridge manufacture
-#               size: Size of the cold appliance [cu. ft.]
-#               ColdHash: Hash holding the efficiency data
-#   OUTPUTS     UEC: Unit energy consumption [kWh/yr]
-# ====================================================================
-sub GetUEC {
-    # Read in the inputs
-    my $type = shift;
-    my $vintage = shift;
-    my $size = shift;
-    my $ColdHash = shift;
-    
-    # Declare the outputs
-    my $UEC;
-    
-    # Determine the type of cold appliance
-    if ($type =~ m/Refrigerator/) { # Fridge
-        if ($size > $ColdHash->{'Sizes'}->{$ColdHash->{'Sizes'}->{'intervals'}}->{'max'}) {
-            $size = $ColdHash->{'Sizes'}->{$ColdHash->{'Sizes'}->{'intervals'}}->{'max'};
-        };
-        my $i = 1;
-        while ($ColdHash->{'Sizes'}->{"$i"}->{'max'} < $size) { # Find consumption data for appliance size
-            $i++;
-        };
-        
-        $UEC = $ColdHash->{'Eff'}->{"$vintage"}->{"$i"};
-        
-    } elsif ($type =~ m/Freezer/) { # Freezer
-        # Select a freezer type using distribution for particular vintage
-        my $U = rand(100);
-        my $j=0;
-        my $fType;
-        
-        foreach my $Ind (keys (%{$ColdHash->{'types'}->{"$vintage"}})) {
-            $j=$j+$ColdHash->{'types'}->{"$vintage"}->{"$Ind"};
-            if ($j > $U) {
-                $fType = $Ind;
-                last;
-            };
-        };
-        
-        $UEC = $ColdHash->{'Eff'}->{"$vintage"}->{"$fType"};
-    
-    } else { # Error
-        die "Invalid cold appliance type\n";
-    };
-    
-    return $UEC;
-};
-
-# ====================================================================
-# setColdProfile
-#       This subroutine uses a top-down approach to generate high-resolution
-#       power draw profiles for cold appliances. The approach is similar to the 
-#       cyclic load patterns found in Widen & Wackelgard 2010, although the ON/OFF
-#       periods are assigned constant values for simplicity. 
-#
-# INPUT     UEC: Unit energy consumption [kWh/yr]
-#           iCyclesPerYear: number of cycles per year
-#           iMeanCycleLength: mean cycle length [min]
-#           iRestartDelay: delay restart after cycle [min]
-# OUTPUT    Cold: Annual electrical consumption profile of cold appliance [kW]
-# ====================================================================
-
-sub setColdProfile {
-    # Declare inputs
-    my $UEC = shift;
-    my $iCyclesPerYear = shift;
-    my $iMeanCycleLength = shift;
-    my $iRestartDelay = shift;
-    
-    # Local variables
-    my $fPower; # Power draw when cycle is on [kW]
-    my $dCalibrate; # Calibration value to determine switch-on events
-    my $iRestartDelayTimeLeft; # Counter to hold time left in the delay restart
-    
-    # Declare outputs
-    my @Cold=(0) x 525600; 
-    
-    # Determine time appliance is running in a year [min]
-    my $Trunning=$iCyclesPerYear*$iMeanCycleLength;
-    
-    # Determine the minutes in a year when an event can occur
-    my $Ms = 525600-($Trunning+($iCyclesPerYear*$iRestartDelay));
-    
-    # Determine the mean time between start events [min]
-    my $MT=$Ms/$iCyclesPerYear;
-    $dCalibrate=1/$MT;
-    
-    # Estimate the cycle power [kW]
-    $fPower=$UEC/($Trunning/60);
-    
-    # ====================================================================
-    # Begin generating profile
-    # ====================================================================
-    # Randomly delay the start of appliances that have a restart delay (e.g. cold appliances with more regular intervals)
-    $iRestartDelayTimeLeft = int(rand()*$iRestartDelay*2); # Weighting is 2 just to provide some diversity
-    my $iCycleTimeLeft = 0;
-    my $iMinute = 0;
-    
-    MINUTE: while ($iMinute < 525600) { # For each minute of the year
-        if ($iCycleTimeLeft <= 0 && $iRestartDelayTimeLeft > 0) { # If this appliance is off having completed a cycle (ie. a restart delay)
-            # Decrement the cycle time left
-            $iRestartDelayTimeLeft--;
-        } elsif ($iCycleTimeLeft <= 0) { # Else if this appliance is off
-            if (rand() < $dCalibration) { # Start Appliance
-                $Cold[$iMinute] = $fPower;
-                $iRestartDelayTimeLeft = $iRestartDelay;
-                $iCycleTimeLeft = $iMeanCycleLength-1;
-            };
-        } else { # The appliance is on
-            $Cold[$iMinute] = $fPower;
-            $iCycleTimeLeft--;
-        };
-        $iMinute++;
-    }; # END MINUTE
-    
-    return(\@Cold);
 };
 
 # Final return value of one to indicate that the perl module is successful

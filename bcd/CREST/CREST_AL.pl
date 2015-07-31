@@ -45,33 +45,11 @@ use Storable  qw(dclone);
 use POSIX qw(ceil floor);
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
-use Hash::Merge qw(merge);
 
 use lib qw(../../scripts/modules);
 use General;
 use Cross_reference;
 use AL_Profile_Gen;
-
-Hash::Merge::specify_behavior(
-	{
-		'SCALAR' => {
-			'SCALAR' => sub {$_[0] + $_[1]},
-			'ARRAY'  => sub {[$_[0], @{$_[1]}]},
-			'HASH'   => sub {$_[1]->{$_[0]} = undef},
-		},
-		'ARRAY' => {
-			'SCALAR' => sub {[@{$_[0]}, $_[1]]},
-			'ARRAY'  => sub {[@{$_[0]}, @{$_[1]}]},
-			'HASH'   => sub {[@{$_[0]}, $_[1]]},
-		},
-		'HASH' => {
-			'SCALAR' => sub {$_[0]->{$_[1]} = undef},
-			'ARRAY'  => sub {[@{$_[1]}, $_[0]]},
-			'HASH'   => sub {Hash::Merge::_merge_hashes($_[0], $_[1])},
-		},
-	}, 
-	'Merge where scalars are added, and items are (pre)|(ap)pended to arrays', 
-);
 
 # --------------------------------------------------------------------
 # Declare the global variables
@@ -117,6 +95,12 @@ my $occ_strt = XMLin($OccSTART);
 
 my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
 my $light_sim = XMLin($LIGHT);
+
+# --------------------------------------------------------------------
+# Load in general appliance data
+# --------------------------------------------------------------------
+my $AppFiles =  'Appliance/Appliance_inputs.xml';
+my $App = XMLin($AppFiles);
 
 # --------------------------------------------------------------------
 # Load in cold appliance data
@@ -180,10 +164,6 @@ MAIN: {
         foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
             push(@BTypes,$blb);
         };
-        my ($region_key) = $region =~ /(\-[^-]+)/;
-        $region_key =~ s/-//;
-        my ($hse_type_key) = $hse_type =~ /(\-[^-]+)/;
-        $hse_type_key =~ s/-//;
 
         push (my @dirs, <../../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
         #print Dumper @dirs;
@@ -197,6 +177,7 @@ MAIN: {
             my $hse_occ; # Number of occupants in dwelling
             my @Occ; # Array to hold occupancy 
             my @Light; # Array to hold the lighting power draw at every minute [kW]
+            my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [kW]
             my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
             
             # --------------------------------------------------------------------
@@ -316,7 +297,7 @@ MAIN: {
             #    };
             #
             #    # --- Call Lighting Simulation
-            #    my $fCalibrationScalar = $light_sim->{$region_key}->{$hse_type_key}->{'Calibration'};
+            #    my $fCalibrationScalar = $light_sim->{"_$region"}->{"_$hse_type"}->{'Calibration'};
             #    my $MeanThresh = $light_sim->{'threshold'}->{'mean'};
             #    my $STDThresh = $light_sim->{'threshold'}->{'std'};
             #    my ($light_ref,$AnnPow) = &LightingSimulation(\@Occ,\@Irr,\@fBulbs,$fCalibrationScalar,$MeanThresh,$STDThresh);
@@ -326,56 +307,47 @@ MAIN: {
             # --------------------------------------------------------------------
             # Generate Cold appliance profiles
             # --------------------------------------------------------------------
-            COLD: {
-                my @Cold_key = qw(Main_Refrigerator Secondary_Refrigerator Main_Freezer Secondary_Freezer); # Keys for each type of cold appliance in NN inputs
-                foreach my $cold (@Cold_key) { # Determine what cold appliances this dwelling has
-                    if ($NNdata->{"$cold"} > 0) { # Dwelling has this type of cold appliance
-                        my $ColdSize = $NNdata->{"$cold"}/28.316847; # Convert size to cu. ft
-                        # Determine if fridge or freezer
-                        my ($ColdType) = $cold =~ m/_(.*)/;
-                        my ($Colduse) = $cold =~ m/(.*)_/;
-                        my $ColdRef = $ColdApp->{"$ColdType"}; # Create a hash reference to the data
-                        
-                        # Randomly select appliance vintage from distribution
-                        my $NumVint = $ColdRef->{'dist'}->{'Periods'}->{'intervals'}; # Number of vintage intervals
-                        my $InterVint=1; # Index the vintage interval
-                        my $fCumulativeP = 0;
-                        my $fRand = rand();
-                        COLD_VINT: while ($InterVint<=$NumVint) {
-                            $fCumulativeP = $fCumulativeP +  $ColdRef->{'dist'}->{$Colduse}->{$region_key}->{"$InterVint"};
-                            if ($fRand < $fCumulativeP) {last COLD_VINT};
-                            $InterVint++;
-                        }; # END COLD_VINT
-                        my $vintage = rand_range($ColdRef->{'dist'}->{'Periods'}->{"$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"$InterVint"}->{'max'});
-                        
-                        # Determine the corresponding UEC for this vintage
-                        my $UEC = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
-                        
-                        print Dumper $UEC;
-                        sleep;
-                        
-#    # Determine cycle lengths TOn and TOff
-#    # TODO: find better values. For now, fridge cycle time from Armstrong et al. 2009
-#    $TOn = 35;
-#    $TOff = 35;
-#    my $T = $TOn+$TOff; # Period of cycle [min]
-#    
-#    # Number of cycles per year
-#    $Ncyc = 525600/$T;
-#    # Energy consumption per cycle
-#    $Ecyc = $AnnE/$Ncyc;
-#    
-#    # Power draw for appliance 'ON'
-#    $QOn = $Ecyc/($TOn/60);
-                        
-                        
-                        
-                        
-                        
-
-                    };
-                };
-            }; # END COLD
+            #COLD: {
+            #    my @Cold_key = qw(Main_Refrigerator Secondary_Refrigerator Main_Freezer Secondary_Freezer); # Keys for each type of cold appliance in NN inputs
+            #    foreach my $cold (@Cold_key) { # Determine what cold appliances this dwelling has
+            #        if ($NNdata->{"$cold"} > 0) { # Dwelling has this type of cold appliance
+            #            my $ColdSize = $NNdata->{"$cold"}/28.316847; # Convert size to cu. ft
+            #            # Determine if fridge or freezer
+            #            my ($ColdType) = $cold =~ m/_(.*)/;
+            #            my ($Colduse) = $cold =~ m/(.*)_/;
+            #            my $ColdRef = $ColdApp->{"$ColdType"}; # Create a hash reference to the data
+            #            
+            #            # Randomly select appliance vintage from distribution
+            #            my $NumVint = $ColdRef->{'dist'}->{'Periods'}->{'intervals'}; # Number of vintage intervals
+            #            my $InterVint=1; # Index the vintage interval
+            #            my $fCumulativeP = 0;
+            #            my $fRand = rand();
+            #            COLD_VINT: while ($InterVint<=$NumVint) {
+            #                $fCumulativeP = $fCumulativeP +  $ColdRef->{'dist'}->{$Colduse}->{"_$region"}->{"_$InterVint"};
+            #                if ($fRand < $fCumulativeP) {last COLD_VINT};
+            #                $InterVint++;
+            #            }; # END COLD_VINT
+            #            my $vintage = rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
+            #            
+            #            # Determine the corresponding UEC for this vintage and appliance type (Refrigerator,Chest_Freezer,Upright_Freezer)
+            #            my ($UEC,$cType) = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
+            #            
+            #            # Generate the annual appliance profile for this appliance
+            #            my $CalibCyc = $App->{'Calibration'}->{"_$region"}*$App->{'Types'}->{$cType}->{'Base_cycles'}; # Calibrated mean cycles per year
+            #            my $Cold_Ref = &setColdProfile($UEC,$CalibCyc,$App->{'Types'}->{$cType}->{'Mean_cycle_L'},$App->{'Types'}->{$cType}->{'Restart_Delay'});
+            #            my @ThisCold = @$Cold_Ref;
+            #            
+            #            # Update the total cold appliance power draw [kW]
+            #            for (my $k=0; $k<=$#ThisCold;$k++) {
+            #                $TotalCold[$k]=$TotalCold[$k]+$ThisCold[$k];
+            #            };
+            #        };
+            #    };
+            #}; # END COLD
+            
+            # --------------------------------------------------------------------
+            # Generate the profiles of all other appliances
+            # --------------------------------------------------------------------
 
         }; # END RECORD
         
@@ -394,20 +366,5 @@ SUBROUTINES: {
         my ($x, $y) = @_;
     return int(rand($y - $x)) + $x;
     };
-#    sub clean_up_dir {
-#        my $set_name = shift;
-#        my $file = shift;
-#    
-#        # Find all the "orig" files for the model and reinstate them
-#        my @files = glob "$file/*.orig";
-#        for (0..$#files){
-#            my $To_Del = $files[$_];
-#            $To_Del =~ s/\.orig$//; # Name of new file to be removed
-#            unlink $To_Del;
-#            rename $files[$_],$To_Del;
-#        };
-#    
-#    	return (1);
-#	};
 
 };

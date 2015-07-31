@@ -1,0 +1,12 @@
+<!--Author: Adam Wills, Carleton Univ., Jul 2015
+        Probability distributions of the number of active occupants in a 
+        house between 00:00 and 00:10 Data taken from the CREST Domestic electricity demand model-->
+<Appliance>
+    <Calibration _1-AT="1.00" _2-QC="1.00" _3-OT="1.00" _4-PR="1.00" _5-BC="1.00"/>
+    <Types>
+        <Refrigerator Base_cycles="6116" Mean_cycle_L="18" Restart_Delay="36"/>
+        <Upright_Freezer Base_cycles="6116" Mean_cycle_L="20" Restart_Delay="40"/>
+        <Chest_Freezer Base_cycles="6116" Mean_cycle_L="14" Restart_Delay="56"/>
+    </Types>   
+    
+</Appliance>
