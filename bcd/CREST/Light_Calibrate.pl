@@ -43,8 +43,6 @@ use File::Copy;
 use Storable  qw(dclone);
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
-use threads;
-use threads::shared;
 
 use lib qw(../../scripts/modules);
 use General;
@@ -56,15 +54,14 @@ use Upgrade;
 # Declare the global variables
 # --------------------------------------------------------------------
 
-my ($hse_type) : shared;   
-my ($region) : shared;
-my ($Target) : shared;          # Target average annual lighting consumption for region and hse_type [kWh/yr/hsehld]
-my (@BTypes) : shared;          # Array to hold all bulb categories
-my $NNinput;                    # HASH holding the CHREM NN input data
-my $occ_strt;                   # HASH holding the active occupants at first timestep pdf
-my $light_sim;                  # HASH holding lighting sim data
-my $climate_ref;                # HASH to hold the dwelling climate references
-my $phi = 1.61803398874989;     # Golden ratio
+our $hse_type;   
+our $region;
+our $Target;                 # Target average annual lighting consumption for region and hse_type [kWh/yr/hsehld]
+our @BTypes;                 # Array to hold all bulb categories
+our $occ_strt;               # HASH holding the active occupants at first timestep pdf
+our $light_sim;              # HASH holding lighting sim data
+our $CREST;                  # HASH holding CREST input data
+my $phi = 1.61803398874989;  # Golden ratio
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -72,15 +69,13 @@ my $phi = 1.61803398874989;     # Golden ratio
 
 my $hse_types;	    # declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
 my $regions;	    # declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
-my $Results;        # HASH to hold calibration results
 my $xlow;
 my $xu;
 my @hse_TOT;        # Array to hold the list of all houses for region and type
-my @hse_list;       # Array to hold the list of houses to simulate
-my $thread;	        # Declare threads for each type and region
-my $thread_return;	# Declare a return array for collation of returning thread data
-my $MAXTOL = 0.0001;# Maximum error estimate [%]
-my $MaxIter = 30;   # Maximum iterations
+my @hse_list;        # Array to hold the subset of houses for this region and type
+my $MAXTOL = 0.001; # Maximum error estimate [%]
+my $MaxIter = 35;   # Maximum iterations
+my $SubSet = 377;   # Number of houses to run each iteration
 
 # --------------------------------------------------------------------
 # Read the command line input arguments
@@ -112,31 +107,109 @@ $xu = shift (@ARGV);
 if ($xu <=0 || $xu < $xlow) {die "Invalid higher calibration scalar $xu. Must be positive and greater than $xlow"};
 
 # --------------------------------------------------------------------
-# Load list of records for this region and house type
+# Set the CREST input data
 # --------------------------------------------------------------------
-CSDDRD_READ: {
-    # Declare the specific CSDDRD file for this set
+my $LogFile = "GoldenSection_" . $hse_type . "_" . "$region.log";
+open(my $LogFH, '>', $LogFile) or die ("Can't open datafile: $LogFile");
+SET_CREST: {
+    my @CHREMBulbs = qw(Fluorescent Halogen Incandescent);
+    # --------------------------------------------------------------------
+    # Create an climate reference crosslisting hash
+    # --------------------------------------------------------------------
+    my $climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');
+
+    # --------------------------------------------------------------------
+    # Load in CHREM NN data
+    # --------------------------------------------------------------------
+    my $NNinPath = '../../NN/NN_model/ALC-Inputs-V2.csv';
+    my $NNinput = &cross_ref_readin($NNinPath);
+    print "Loading Irradiance data\n";
+    
+    # --------------------------------------------------------------------
+    # Load in the irradiance data
+    # --------------------------------------------------------------------
+    my $IrrDir = "Global_Horiz/$region";
+    opendir (DIR, $IrrDir) or die $!;
+    while (my $file = readdir(DIR)) {
+        if ($file =~ m/out$/) {
+            my $irradiance = "Global_Horiz/$region/$file";
+            my $Irr_ref = &GetIrradiance($irradiance); # Load the irradiance data
+            my @Irr = @$Irr_ref;
+            $CREST->{'Irradiance'}->{$file}=\@Irr;
+        };
+    };
+    closedir(DIR);
+    print "Done\n";
+
+    # --------------------------------------------------------------------
+    # Scan the CSDDRD
+    # --------------------------------------------------------------------
     my $record = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
     my $exten = '.csv';
     my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
     open (my $LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
-    while ($CSDDRD = &one_data_line($LIST, $CSDDRD)) { # Each house in the CSDDRD record
+    REC: while ($CSDDRD = &one_data_line($LIST, $CSDDRD)) { # Each house in the CSDDRD record
         my $hse_name = $CSDDRD->{'file_name'};
+        my $hse_occ; # Number of occupants in dwelling
+        
+        # Get the name of the dwelling
         $hse_name =~ s{\.[^.]+$}{}; # Remove any extensions
+        
+        # --------------------------------------------------------------------
+        # Find NN data
+        # --------------------------------------------------------------------
+        my $NNdata;
+        if (exists $NNinput->{'data'}->{"$hse_name.HDF"}) {
+            $NNdata = $NNinput->{'data'}->{"$hse_name.HDF"};
+        } elsif (exists $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
+            $NNdata = $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"};
+        } else {
+            #$issue++;
+            #$return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
+            #next RECORD;
+            print $LogFH "Error: Couldn't find NN record for $hse_name\n";
+            next REC;
+        };
+        # --------------------------------------------------------------------
+        # Determine number of occupants
+        # --------------------------------------------------------------------
+        $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
+        if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
+            #$issue++;
+            #$return->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
+            #$hse_occ=5;
+            print $LogFH "Warning: Occupants $hse_occ exceeded 5 for $hse_name\n";
+        };
+        
+        # --------------------------------------------------------------------
+        # Determine number of bulbs/lamps in dwelling
+        # --------------------------------------------------------------------
+        my $iBulbs=0; # Number of bulbs/lamps for dwelling 
+        foreach my $bulb (@CHREMBulbs) { # Read number of bulbs in dwelling from CHREM NN inputs
+            $iBulbs = $iBulbs + $NNdata->{$bulb};
+        };
+        
+        # --------------------------------------------------------------------
+        # Get climate file for this house
+        # --------------------------------------------------------------------
+        my $loc = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}}->{'CWEC_FILE'};  # Determine climate for this dwelling
+        $loc =~ s{\.[^.]+$}{}; # Remove extension
+        $loc = $loc . '.out'; # Name of irradiance file
+        
+        # --------------------------------------------------------------------
+        # Update the list and CREST inputs for the house
+        # --------------------------------------------------------------------
         push(@hse_TOT,$hse_name);
-    };
+        $CREST->{$hse_name}->{'Irrad_file'} = $loc;
+        $CREST->{$hse_name}->{'Num_Occ'} = $hse_occ;
+        $CREST->{$hse_name}->{'Num_Bulbs'} = $iBulbs;
+    }; # END REC
     close $LIST;
-    # Randomly select 100 houses from the set
-    my ($houses_refer, $dupl) = &random_hse_shuffle(\@hse_TOT,100);
-    # Use array references to update arrays here
-    @hse_list = @$houses_refer;
-};
+}; # END CSDDRD_READ
+close $LogFH;
 
-# --------------------------------------------------------------------
-# Load in CHREM NN data
-# --------------------------------------------------------------------
-my $NNinPath = '../../NN/NN_model/ALC-Inputs-V2.csv';
-$NNinput = &cross_ref_readin($NNinPath);
+my($new_ref,$dummy)=&random_hse_shuffle(\@hse_TOT,$SubSet);
+@hse_list = @$new_ref;
 
 # --------------------------------------------------------------------
 # Load in CREST Databases
@@ -155,11 +228,6 @@ foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb cat
     push(@BTypes,$blb);
 };
 
-# -----------------------------------------------
-# Read in the CWEC weather data crosslisting
-# -----------------------------------------------
-$climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# create an climate reference crosslisting hash
-
 # --------------------------------------------------------------------
 # Use Golden-Section Search to determine the minimum (Function is never negative)
 # --------------------------------------------------------------------
@@ -168,22 +236,16 @@ print "Starting the search at $datestring\n";
 GOLDEN: {
     my $f1;
     my $f2;
+    my $pred1;
+    my $pred2;
     # Generate interior points
     my $d = 0.61803*($xu-$xlow);
     my $x1 = $xlow + $d;
     my $x2 = $xu - $d;
     
     # Evaluate the interior points
-    foreach my $points ($x1,$x2) {
-        $thread->{"$points"} = threads->new(\&main,\@hse_list,$points);
-    };
-    
-    foreach my $points ($x1,$x2) {
-        $thread_return->{"$points"} = $thread->{"$points"}->join();
-    };
-    
-    $f1 = $thread_return->{"$x1"}->{'AbsDiff'};
-    $f2 = $thread_return->{"$x2"}->{'AbsDiff'};
+    ($f1,$pred1) = main(\@hse_list,$x1);
+    ($f2,$pred2) = main(\@hse_list,$x2);
     
     # Loop until convergence or max. iterations
     my $count = 1;
@@ -210,9 +272,7 @@ GOLDEN: {
             # Evaluate the new interior point
             $d = 0.61803*($xu-$xlow);
             $x1=$xlow + $d;
-            $thread->{"$x1"} = threads->new(\&main,\@hse_list,$x1);
-            $thread_return->{"$x1"} = $thread->{"$x1"}->join();
-            $f1 = $thread_return->{"$x1"}->{'AbsDiff'};
+            ($f1,$pred1) = main(\@hse_list,$x1);
             
         } else { # x2 most likely candidate for minimum
             # Check for convergence
@@ -232,10 +292,7 @@ GOLDEN: {
             # Evaluate the new interior point
             $d = 0.61803*($xu-$xlow);
             $x2 = $xu - $d;
-            $thread->{"$x2"} = threads->new(\&main,\@hse_list,$x2);
-            $thread_return->{"$x2"} = $thread->{"$x2"}->join();
-            $f2 = $thread_return->{"$x2"}->{'AbsDiff'};
-
+            ($f2,$pred2) = main(\@hse_list,$x2);
         };
         $count++;
     }; # END ITERATOR
@@ -255,40 +312,15 @@ GOLDEN: {
     $datestring = localtime();
     print "Finished iterating at $datestring\n";
     print "Minimum scalar $xmin with absolute true difference of $fmin\n\n";
-    
-    # -----------------------------------------------
-    # Run the validation
-    # -----------------------------------------------
-    print "Starting the validation\n";
-    $thread->{"$xmin"} = threads->new(\&main,\@hse_TOT,$xmin);
-    $thread_return->{"$xmin"} = $thread->{"$xmin"}->join();
-    my $ValDiff = $thread_return->{"$xmin"}->{'AbsDiff'};
-    
-    $datestring = localtime();
-    print "Finished validation at $datestring\n";
-    
-    # If there was any issues, log them
-    LOG: {
-        my $LOG;
-        my $LogName = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".log";
-        open($LOG, '>', $LogName) or die ("Can't generate log file");	# open readable file
-        foreach my $probhse (keys (%{$thread_return->{'issues'}})) {
-            foreach my $issewe (keys (%{$thread_return->{'issues'}->{$probhse}})) {
-                my $msg = $thread_return->{'issues'}->{$probhse}->{$issewe};
-                print $LOG "$msg :: $probhse\n";
-            };
-        };
-        close $LOG;
-    }; # END LOG
 
     RESOUT: { # Print out results
 
         my $ResFile = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".res";
         open (my $RESfh, '>', $ResFile) or die "Cannot print output file $ResFile";
-
+        
+        print $RESfh "Target was $Target\n";
         print $RESfh "Minimum target difference of $fmin\n";
         print $RESfh "for scalar $xmin\n";
-        print $RESfh "Validation: absolute difference of $ValDiff\n";
         if($bNonconverge){print $RESfh "WARNING: max iterations of $MaxIter reached\n"};
         
         close $RESfh;
@@ -296,10 +328,6 @@ GOLDEN: {
     }; # END RESOUT
 
 }; # END GOLDEN 
-
-
-
-
 
 # --------------------------------------------------------------------
 # Main calculation subroutine
@@ -313,69 +341,23 @@ sub main {
     my $kWhAverage; 
     my @AggAnnual=();
     my $TrueError;      # Relative value for true error [%]
-    my $issue = 0;      # Issue counter
     my @Occ_keys=qw(zero one two three four five six);
-    my $return;         # HASH to store issues and return values
-
-    # Declare the specific CSDDRD file for this set
-    my $record = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
-    my $exten = '.csv';
-    my $LIST; # CSDDRD file handle
-    my $CSD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
 
     # --------------------------------------------------------------------
     # Begin processing each house model for the region and house type
     # --------------------------------------------------------------------
     RECORD: foreach my $hse_name (@houses) {
-        my $hse_occ; # Number of occupants in dwelling
-        my @Occ; # Array to hold occupancy 
-        
-        # --------------------------------------------------------------------
-        # Find CSDDRD data
-        # --------------------------------------------------------------------
-        open ($LIST, '<', $record . $exten) or die ("Can't open datafile: $record$exten");	# open readable file
-        READ_DAT: while ($CSD = &one_data_line($LIST, $CSD)) { # Each house in the CSDDRD record
-            if ($CSD->{'file_name'} =~ /^$hse_name/) {
-                # Found corresponding record, stop reading records and jump out of loop
-                last READ_DAT;
-            };
-        }; # END READ_DAT
-        close $LIST;
-        
-        if ($CSD->{'file_name'} !~ /^$hse_name/) { # Record not found
-            $issue++;
-            $return->{'issues'}->{$hse_name}->{"$issue"} = "Error: Couldn't find CSDDRD record";
-            next RECORD;
-        };
-        
-        # --------------------------------------------------------------------
-        # Find NN data
-        # --------------------------------------------------------------------
-        my $NNdata;
-        if (exists $NNinput->{'data'}->{"$hse_name.HDF"}) {
-            $NNdata = $NNinput->{'data'}->{"$hse_name.HDF"};
-        } elsif (exists $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
-            $NNdata = $NNinput->{'data'}->{"$hse_name.HDF.No-Dryer"};
-        } else {
-            $issue++;
-            $return->{'issues'}->{$hse_name}->{"$issue"} = "Error: Couldn't find NN record";
-            next RECORD;
-        };
-        
-        # Determine the climate for this house from the Climate Cross Reference
-        my $climate = $climate_ref->{'data'}->{$CSD->{'HOT2XP_CITY'}};	# shorten the name for use this house
-        # Done with CSDDRD data
-        undef $CSD;
-    
+        my @Occ; # Array to hold occupancy
+        my $issue = 0;      # Issue counter
+        my $hse_occ = $CREST->{$hse_name}->{'Num_Occ'};
+        my $iBulbs = $CREST->{$hse_name}->{'Num_Bulbs'};
+        my $loc = $CREST->{$hse_name}->{'Irrad_file'};
+        my $Irr_ref = $CREST->{'Irradiance'}->{$loc};
+        my @Irr = @$Irr_ref;
+
         # --------------------------------------------------------------------
         # Generate the occupancy profiles
         # --------------------------------------------------------------------
-        $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
-        if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
-            $issue++;
-            $return->{'issues'}->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
-            $hse_occ=5;
-        };
         my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
         my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
         @Occ = @$Occ_ref;
@@ -383,21 +365,8 @@ sub main {
         # --------------------------------------------------------------------
         # Generate Lighting Profile
         # --------------------------------------------------------------------
-        # --- Irradiance data
-        my $loc = $climate->{'CWEC_FILE'};  # Determine climate for this dwelling
-        $loc =~ s{\.[^.]+$}{}; # Remove extension
-        $loc = $loc . '.out'; # Name of irradiance file
-        my $irradiance = "Global_Horiz/$loc";
-        my $Irr_ref = &GetIrradiance($irradiance); # Load the irradiance data
-        my @Irr = @$Irr_ref;
-    
         # --- Bulb data
         my @fBulbs = (); # Array to hold wattage of each bulb in the dwelling
-        my $iBulbs=0; # Number of bulbs/lamps for dwelling 
-        my @BulbType = qw(Fluorescent Halogen Incandescent);
-        foreach my $bulb (@BulbType) { # Read number of bulbs in dwelling from CHREM NN inputs
-            $iBulbs = $iBulbs + $NNdata->{$bulb};
-        };
         # Assign wattage for each bulb
         for (my $i=1;$i<=$iBulbs;$i++) { # Each bulb
             my $r1 = rand();
@@ -440,7 +409,6 @@ sub main {
         push(@AggAnnual,$AnnPow);
 
     }; # END RECORD
-    close $LIST;
 
     # --------------------------------------------------------------------
     # determine the average per household
@@ -455,9 +423,6 @@ sub main {
     # Determine the absolute true error
     $TrueError = abs($Target-$kWhAverage);
     
-    $return->{'Prediced'}=$kWhAverage;
-    $return->{'AbsDiff'}=$TrueError;
-    
-    return($return);
+    return($TrueError,$kWhAverage);
 
 }; # END sub main 
