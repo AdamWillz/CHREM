@@ -312,6 +312,10 @@ GOLDEN: {
     $datestring = localtime();
     print "Finished iterating at $datestring\n";
     print "Minimum scalar $xmin with absolute true difference of $fmin\n\n";
+    
+    print "Starting validation\n";
+    my ($fValid,$pVaild) = main(\@hse_TOT,$xmin);
+    print "Validation complete\n";
 
     RESOUT: { # Print out results
 
@@ -321,6 +325,7 @@ GOLDEN: {
         print $RESfh "Target was $Target\n";
         print $RESfh "Minimum target difference of $fmin\n";
         print $RESfh "for scalar $xmin\n";
+        print $RESfh "Validation: Difference=$fValid and Average=$pVaild\n";
         if($bNonconverge){print $RESfh "WARNING: max iterations of $MaxIter reached\n"};
         
         close $RESfh;
