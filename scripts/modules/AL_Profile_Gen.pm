@@ -25,7 +25,7 @@ our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
 #our @EXPORT = qw( setDryerProfile setStoveProfile setOtherProfile setNewBCD);
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -446,6 +446,46 @@ sub setColdProfile {
     }; # END MINUTE
     
     return(\@Cold);
+};
+
+# ====================================================================
+# ActiveStatParser
+#       This subroutine uses a top-down approach to generate high-resolution
+#       power draw profiles for cold appliances. The approach is similar to the 
+#       cyclic load patterns found in Widen & Wackelgard 2010, although the ON/OFF
+#       periods are assigned constant values for simplicity. 
+#
+# INPUT     path: String, path to the activity stats file
+# OUTPUT    Activity: HASH holding the activity data
+# ====================================================================
+
+sub ActiveStatParser {
+    # Declare inputs
+    my $path = shift;
+    
+    # Local variables
+    my $fh;     # File handle
+    my $day='wd';    # String to hold weekend or weekday
+    my $NOcc;        # Number of occupants
+    my $Act;         # String, activity type
+
+    # Declare outputs
+    my $Activity;
+    
+    
+    open($fh,'<',$path) or die "Could not open file '$path' $!";
+    # Read data line by line
+    while (my $row = <$fh>) {
+        chomp $row;
+        my @data = split /,/, $row;
+        if ($data[0]>0) {$day='we'};
+        $NOcc = $data[1]; # Get active occupant count
+        $Act = $data[2];  # Get the activity name
+        @data = @data[ 3 .. $#data ]; # trim out the above data
+        $Activity->{$day}->{"$NOcc"}->{$Act} = \@data; # Store the statistics
+    };
+
+    return($Activity);
 };
 
 # ====================================================================

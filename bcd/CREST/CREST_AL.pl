@@ -58,7 +58,17 @@ use AL_Profile_Gen;
 my $hse_types;	# declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
 my $regions;	# declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
 my $set_name;   # Read in city name from command line
+my $occ_strt;   # HASH for occupancy initial condition PDF
+my $NNinput;    # HASH for NN Input Data
+#my $NNoutput;   # HASH for NN Output Data
+my $light_sim;  # HASH holding light simulation data
+my $App;        # HASH holding general appliance data
 my $ColdApp;    # HASH to hold the cold appliance data
+my $Climate;    # HASH to hold each dwellings climate file
+my $Irradiance; # HASH to hold irradiance data
+my $Activity;   # HASH holding the activity statistics
+
+
 
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+Hse_Gen_(.+)_Issues.txt/$1/, <../../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -79,47 +89,95 @@ if (@ARGV < 3) {die "Three arguments are required: house_types regions set_name\
 #else { # An inappropriate set_name was provided so die and leave a message
 #	die "Set_name \"$set_name\" was not found\nPossible set_names are: @possible_set_names_print\n";
 #};
-# --------------------------------------------------------------------
-# Load in CHREM NN data
-# --------------------------------------------------------------------
-my $NNinPath = '../../NN/NN_model/ALC-Inputs-V2.csv';
-my $NNinput = &cross_ref_readin($NNinPath);
-my $NNresPath = '../../NN/NN_model/ALC-Results.csv';
-my $NNoutput = &cross_ref_readin($NNresPath);
+LOAD_EXT: {
+    # --------------------------------------------------------------------
+    # Load in CHREM NN data
+    # --------------------------------------------------------------------
+    my $NNinPath = '../../NN/NN_model/ALC-Inputs-V2.csv';
+    $NNinput = &cross_ref_readin($NNinPath);
+    #my $NNresPath = '../../NN/NN_model/ALC-Results.csv';
+    #$NNoutput = &cross_ref_readin($NNresPath);
+    
+    # --------------------------------------------------------------------
+    # Load in CREST Databases
+    # --------------------------------------------------------------------
+    my $OccSTART = 'Occ_Lighting/occ_start_states.xml';
+    $occ_strt = XMLin($OccSTART);
+    
+    my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
+    $light_sim = XMLin($LIGHT);
+    
+    # --------------------------------------------------------------------
+    # Load in general appliance data
+    # --------------------------------------------------------------------
+    my $AppFiles =  'Appliance/Appliance_inputs.xml';
+    $App = XMLin($AppFiles);
+    
+    # --------------------------------------------------------------------
+    # Load in cold appliance data
+    # --------------------------------------------------------------------
+    my $ColdFile = 'Appliance/Cold/Refrigerator_dist.xml';
+    $ColdApp->{'Refrigerator'}->{'dist'}=XMLin($ColdFile);
+    $ColdFile = 'Appliance/Cold/Refrigerator_eff.xml';
+    $ColdApp->{'Refrigerator'}->{'eff'}=XMLin($ColdFile);
+    
+    $ColdFile = 'Appliance/Cold/Freezer_dist.xml';
+    $ColdApp->{'Freezer'}->{'dist'}=XMLin($ColdFile);
+    $ColdFile = 'Appliance/Cold/Freezer_eff.xml';
+    $ColdApp->{'Freezer'}->{'eff'}=XMLin($ColdFile);
+    
+    # -----------------------------------------------
+    # Store the associated climate for each dwelling
+    # -----------------------------------------------
+    print 'Loading the climate data for each region and house type';
+    
+    my $climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# create an climate reference crosslisting hash
+    
+    foreach my $region (values (%{$regions})) {
+		foreach my $hse_type (values (%{$hse_types})) {
+            my $file = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
+            my $ext = '.csv';
+            my $CSDDRD_FILE;
+            open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
+            CSDDRD: while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD)) {
+                my $hse_name = $CSDDRD->{'file_name'};
+                $hse_name =~ s{\.[^.]+$}{}; # Remove any extensions
+                # --------------------------------------------------------------------
+                # Get climate file for this house
+                # --------------------------------------------------------------------
+                my $loc = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}}->{'CWEC_FILE'};  # Determine climate for this dwelling
+                $loc =~ s{\.[^.]+$}{}; # Remove extension
+                $loc = $loc . '.out'; # Name of irradiance file
+                $Climate->{$hse_name}=$loc;
+            }; # END CSDDRD
+            close $CSDDRD_FILE;
+        };
+        
+        # --------------------------------------------------------------------
+        # Load in the irradiance data for this region
+        # --------------------------------------------------------------------
+        my $IrrDir = "Global_Horiz/$region";
+        opendir (DIR, $IrrDir) or die $!;
+        while (my $file = readdir(DIR)) {
+            if ($file =~ m/out$/) {
+                my $Rad = "Global_Horiz/$region/$file";
+                my $Irr_ref = &GetIrradiance($Rad); # Load the irradiance data
+                my @Irr = @$Irr_ref;
+                $Irradiance->{$file}=\@Irr;
+            };
+        };
+        closedir(DIR);
+    };
+    print " - Complete\n";
 
-# --------------------------------------------------------------------
-# Load in CREST Databases
-# --------------------------------------------------------------------
-my $OccSTART = 'Occ_Lighting/occ_start_states.xml';
-my $occ_strt = XMLin($OccSTART);
-
-my $LIGHT = 'Occ_Lighting/lightsim_inputs.xml';
-my $light_sim = XMLin($LIGHT);
-
-# --------------------------------------------------------------------
-# Load in general appliance data
-# --------------------------------------------------------------------
-my $AppFiles =  'Appliance/Appliance_inputs.xml';
-my $App = XMLin($AppFiles);
-
-# --------------------------------------------------------------------
-# Load in cold appliance data
-# --------------------------------------------------------------------
-my $ColdFile = 'Appliance/Cold/Refrigerator_dist.xml';
-$ColdApp->{'Refrigerator'}->{'dist'}=XMLin($ColdFile);
-$ColdFile = 'Appliance/Cold/Refrigerator_eff.xml';
-$ColdApp->{'Refrigerator'}->{'eff'}=XMLin($ColdFile);
-
-$ColdFile = 'Appliance/Cold/Freezer_dist.xml';
-$ColdApp->{'Freezer'}->{'dist'}=XMLin($ColdFile);
-$ColdFile = 'Appliance/Cold/Freezer_eff.xml';
-$ColdApp->{'Freezer'}->{'eff'}=XMLin($ColdFile);
-
-# -----------------------------------------------
-# Read in the CWEC weather data crosslisting
-# -----------------------------------------------
-my $climate_ref = &cross_ref_readin('../../climate/Weather_HOT2XP_to_CWEC.csv');	# create an climate reference crosslisting hash
-
+    # -----------------------------------------------
+    # Store the associated climate for each dwelling
+    # -----------------------------------------------
+    print 'Loading the activity statistics';
+    my $ActStatpth = 'Appliance/activity_stats.csv';
+    $Activity = &ActiveStatParser($ActStatpth);
+    print " - Complete\n";
+}; # END LOAD_EXT
 # --------------------------------------------------------------------
 # Begin multi-threading for regions and house types
 # --------------------------------------------------------------------
@@ -178,7 +236,10 @@ MAIN: {
             my @Occ; # Array to hold occupancy 
             my @Light; # Array to hold the lighting power draw at every minute [kW]
             my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [kW]
-            my $CSDDRD; # declare a hash reference to store the CSDDRD data. This will only store one house at a time and the header data
+            my @TotalOther=(0) x 525600; # Array to hold the total power draw of all other appliances [kW]
+            my $loc = $Climate->{$hse_name}; # Name of climate file for this house
+            my $Irr_ref = $Irradiance->{$loc}; # Irradiance data for this climate [W/m2]
+            my @Irr = @$Irr_ref;
             
             # --------------------------------------------------------------------
             # Find NN data
@@ -194,41 +255,16 @@ MAIN: {
                 next RECORD;
             };
 
-            my $NNo;
-            if (exists $NNoutput->{'data'}->{"$hse_name.HDF"}) {
-                $NNo = $NNoutput->{'data'}->{"$hse_name.HDF"};
-            } elsif (exists $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
-                $NNo = $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"};
-            } else {
-                $issue++;
-                $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN output";
-                next RECORD;
-            };
-
-            # --------------------------------------------------------------------
-            # Find CSDDRD data
-            # --------------------------------------------------------------------
-            my $file = '../../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region;
-            my $ext = '.csv';
-            my $CSDDRD_FILE;
-            my $bCSDDRD = 0;
-            open ($CSDDRD_FILE, '<', $file . $ext) or die ("Can't open datafile: $file$ext");	# open readable file
-            CSDDRD: while ($CSDDRD = &one_data_line($CSDDRD_FILE, $CSDDRD)) {
-                if ($CSDDRD->{'file_name'} =~ /^$hse_name/) {
-                    $bCSDDRD = 1;
-                    last CSDDRD;
-                };
-            }; # END CSDDRD
-            if (!$bCSDDRD) { # Could not find record
-                $issue++;
-                $return->{$hse_name}->{"$issue"} = "Error: Couldn't find CSDDRD data";
-                next RECORD;
-            };
-            close $CSDDRD_FILE;
-            
-            # Determine the climate for this house from the Climate Cross Reference
-			my $climate = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}};	# shorten the name for use this house
-            undef $CSDDRD; # Don't need this anymore
+            #my $NNo;
+            #if (exists $NNoutput->{'data'}->{"$hse_name.HDF"}) {
+            #    $NNo = $NNoutput->{'data'}->{"$hse_name.HDF"};
+            #} elsif (exists $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"}) {
+            #    $NNo = $NNoutput->{'data'}->{"$hse_name.HDF.No-Dryer"};
+            #} else {
+            #    $issue++;
+            #    $return->{$hse_name}->{"$issue"} = "Error: Couldn't find NN output";
+            #    next RECORD;
+            #};
 
             # --------------------------------------------------------------------
             # Generate the occupancy profiles
@@ -247,14 +283,6 @@ MAIN: {
             # Generate Lighting Profile
             # --------------------------------------------------------------------
             #LIGHTING: {
-            #    # --- Irradiance data
-            #    my $loc = $climate->{'CWEC_FILE'};  # Determine climate for this dwelling
-            #    $loc =~ s{\.[^.]+$}{}; # Remove extension
-            #    $loc = $loc . '.out'; # Name of irradiance file
-            #    my $irradiance = "Global_Horiz/$loc";
-            #    my $Irr_ref = &GetIrradiance($irradiance); # Load the irradiance data
-            #    my @Irr = @$Irr_ref;
-            #
             #    # --- Bulb data
             #    my @fBulbs = (); # Array to hold wattage of each bulb in the dwelling
             #    my $iBulbs=0; # Number of bulbs/lamps for dwelling 
@@ -333,8 +361,8 @@ MAIN: {
             #            my ($UEC,$cType) = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
             #            
             #            # Generate the annual appliance profile for this appliance
-            #            my $CalibCyc = $App->{'Calibration'}->{"_$region"}*$App->{'Types'}->{$cType}->{'Base_cycles'}; # Calibrated mean cycles per year
-            #            my $Cold_Ref = &setColdProfile($UEC,$CalibCyc,$App->{'Types'}->{$cType}->{'Mean_cycle_L'},$App->{'Types'}->{$cType}->{'Restart_Delay'});
+            #            my $CalibCyc = $App->{'Calibration'}->{"_$region"}*$App->{'Types_Cold'}->{$cType}->{'Base_cycles'}; # Calibrated mean cycles per year
+            #            my $Cold_Ref = &setColdProfile($UEC,$CalibCyc,$App->{'Types_Cold'}->{$cType}->{'Mean_cycle_L'},$App->{'Types_Cold'}->{$cType}->{'Restart_Delay'});
             #            my @ThisCold = @$Cold_Ref;
             #            
             #            # Update the total cold appliance power draw [kW]
@@ -348,6 +376,18 @@ MAIN: {
             # --------------------------------------------------------------------
             # Generate the profiles of all other appliances
             # --------------------------------------------------------------------
+            # TODO: Determine the appliance stock of this dwelling
+            my @AppStock=();
+            foreach my $item (@AppStock) { # For each appliance in the dwelling
+                # Load the appropriate appliance data
+                
+                # Call the appliance simulation
+                
+                # Update the TotalOther array
+            
+            };
+            
+            
 
         }; # END RECORD
         

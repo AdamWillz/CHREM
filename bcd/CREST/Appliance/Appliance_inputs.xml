@@ -1,12 +1,57 @@
-<!--Author: Adam Wills, Carleton Univ., Jul 2015
-        Probability distributions of the number of active occupants in a 
-        house between 00:00 and 00:10 Data taken from the CREST Domestic electricity demand model-->
-<Appliance>
+<!--Author: Adam Wills, Carleton Univ., Aug 2015
+        Input data for CREST appliance model
+        DESCRIPTIONS
+        ===============
+        Mean_cycle_L: Mean cycle length [min]
+        Base_cycles: Base (uncalibrated) number of cycles per year
+        Standby: Standby power consumption [W]
+        Mean_Pow_Cyc: Mean cycle length [W]
+        Restart_Delay: Delay restart after cycle [min]
+        Avg_Act_Prob: Average activity probability [-]
+        Act_Occ_Dep: Active occupant dependant ["YES"/"NO"]-->
+<Appliance Mean_Act_Occ="0.459">
     <Calibration _1-AT="1.00" _2-QC="1.00" _3-OT="1.00" _4-PR="1.00" _5-BC="1.00"/>
-    <Types>
+
+    <Types_Cold>
         <Refrigerator Base_cycles="6116" Mean_cycle_L="18" Restart_Delay="36"/>
         <Upright_Freezer Base_cycles="6116" Mean_cycle_L="20" Restart_Delay="40"/>
         <Chest_Freezer Base_cycles="6116" Mean_cycle_L="14" Restart_Delay="56"/>
-    </Types>   
+    </Types_Cold>
+
+    <Types_Other>
+    <!--START: CHREM Appliances-->
+        <!--Dehumidifier Use_Profile=""/-->
+        <!--Portable_Fan Use_Profile=""/-->
+        <!--Car_Warmer Use_Profile=""/-->
+        <!--Water_Softener Use_Profile=""/-->
+        <!--Car_Block Use_Profile=""/-->
+        <!--Ceiling_Fan Use_Profile=""/-->
+        <!--Electric_Blanket Use_Profile=""/-->
+        <!--Sump_Pump Use_Profile=""/-->
+        <!--Water_Cooler Use_Profile=""/-->
+        <Microwave Use_Profile="Act_Cooking" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Stove Use_Profile="Act_Cooking" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Clothes_Dryer Use_Profile="Act_Laundry" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Dishwasher Use_Profile="Act_Cooking" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Color_TV Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Computer Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Fish_Tank Use_Profile="Level" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <VCR Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Clothes_Washer Use_Profile="Act_Laundry" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <BW_TV Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <CD_Player Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Sauna Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Stereo Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Jacuzzi Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Central_Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <!--END: CHREM Appliances-->
+        <!--START: CREST Appliances-->
+        <Iron Use_Profile="Act_Iron" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Printer Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <TV_Reciever_box Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Kettle Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <!--END: CREST Appliances-->
+    </Types_Other>
     
 </Appliance>
