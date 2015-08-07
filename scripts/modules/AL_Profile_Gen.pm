@@ -24,8 +24,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-#our @EXPORT = qw( setDryerProfile setStoveProfile setOtherProfile setNewBCD);
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -489,6 +488,174 @@ sub ActiveStatParser {
 };
 
 # ====================================================================
+# GetApplianceStock
+#       This subroutine uses a top-down approach to generate high-resolution
+#       power draw profiles for cold appliances. The approach is similar to the 
+#       cyclic load patterns found in Widen & Wackelgard 2010, although the ON/OFF
+#       periods are assigned constant values for simplicity. 
+#
+# INPUT     NN: HASH containing the NN inputs from the CHREM
+# OUTPUT    stock: Array of strings containing the appliance stock for this dwelling
+# ====================================================================
+
+sub GetApplianceStock {
+    # Declare inputs
+    my $NN = shift;
+    
+    # Local variables
+
+    # Declare outputs
+    my @stock=();
+    
+    # Determine appliances from CHREM NN inputs
+    if($NN->{'Stove'} > 0) {push(@stock,'Stove')};
+    if($NN->{'Microwave'} > 0) {push(@stock,'Microwave')};
+    if($NN->{'Clothes_Dryer'} > 0) {push(@stock,'Clothes_Dryer')};
+    if($NN->{'Dishwasher'} > 0) {push(@stock,'Dishwasher')};
+    if($NN->{'Color_TV'} > 0) {push(@stock,'Color_TV')};
+    if($NN->{'Computer'} > 0) {push(@stock,'Computer')};
+    if($NN->{'Fish_Tank'} > 0) {push(@stock,'Fish_Tank')};
+    if($NN->{'VCR'} > 0) {push(@stock,'VCR')};
+    if($NN->{'Clothes_Washer'} > 0) {push(@stock,'Clothes_Washer')};
+    if($NN->{'BW_TV'} > 0) {push(@stock,'BW_TV')};
+    if($NN->{'CD_Player'} > 0) {push(@stock,'CD_Player')};
+    if($NN->{'Sauna'} > 0) {push(@stock,'Sauna')};
+    if($NN->{'Stereo'} > 0) {push(@stock,'Stereo')};
+    if($NN->{'Jacuzzi'} > 0) {push(@stock,'Jacuzzi')};
+    if($NN->{'Central_Vacuum'} > 0) {push(@stock,'Central_Vacuum')};
+    
+    # TODO: Randomly distribute the CREST appliances
+
+    return(\@stock);
+};
+
+# ====================================================================
+# GetApplianceProfile
+#       This subroutine uses generates the 
+#       power draw profiles for cold appliances. The approach is similar to the 
+#       cyclic load patterns found in Widen & Wackelgard 2010, although the ON/OFF
+#       periods are assigned constant values for simplicity. 
+#
+# INPUT     Occ_ref: Reference to array holding annual occupancy data
+#           item: String, name of the appliance
+#           sUseProfile: String indicating the usage type
+#           iMeanCycleLength: Mean length of each cycle [min]
+#           iCyclesPerYear: Calibrated number of cycles per year
+#           iStandbyPower: Standby power [W]
+#           iRatedPower: Rated power during cycles [W]
+#           iRestartDelay: Delay prior to starting a cycle [min]
+#           fAppCalib: Calibration scalar [-]
+#           ActStat: HASH holding the activity statistics
+#           dayWeek: day of the week [1=Sunday, 7=Saturday]
+# OUTPUT    Profile: The power consumption for this appliance at a 1-minute timestep [kW]
+# ====================================================================
+
+sub GetApplianceProfile {
+    # Declare inputs
+    my $Occ_ref = shift;
+    my @Occ = @$Occ_ref;
+    my $item = shift;
+    my $sUseProfile = shift;
+    my $iMeanCycleLength = shift;
+    my $iCyclesPerYear = shift;
+    my $iStandbyPower = shift;
+    my $iRatedPower = shift;
+    my $iRestartDelay = shift;
+    my $fAppCalib = shift;
+    my $ActStat = shift;
+    my $dayWeek = shift;
+    
+    # Local variables
+    my $iCycleTimeLeft = 0;
+    my $sDay;   # String to indicate weekday or weekend
+    my $iYear=0; # Counter for minute of the year
+    my $iRestartDelayTimeLeft = rand()*$iRestartDelay*2; # Randomly delay the start of appliances that have a restart delay
+    my $bDayDep=1; # Flag indicating if appliance is dependent on weekend/weekday (default is true)
+    my @PDF=(); # Array to hold the ten minute interval usage statistics for the appliance
+    
+    # Declare outputs
+    my @Profile=(0) x 525600;
+    
+    # Make the rated power variable over a normal distribution to provide some variation
+    $iRatedPower = GetMonteCarloNormalDistGuess($iRatedPower,($iRatedPower/10));
+    
+    # Determine if appliance operation is weekday/weekend dependent
+    if($sUseProfile =~ m/Active_Occ/ || $sUseProfile =~ m/Level/) {$bDayDep=0};
+    
+    # Start looping through each day of the year
+    DAY: for(my $iDay=1;$iDay<=365;$iDay++) {
+        my $DayStat; # HASH reference for current day
+        
+        # If this appliance depends on day type, get the relevant activity statistics
+        if($bDayDep) { 
+            if($dayWeek>7){$dayWeek=1};
+            if($dayWeek == 1 || $dayWeek == 7) { # Weekend
+                $sDay = 'we';
+            } else { # Weekday
+                $sDay = 'wd';
+            };
+            $DayStat=$ActStat->{$sDay};
+        };
+        
+        # For each 10 minute period of the day
+        TEN_MIN: for(my $iTenMin=0;$iTenMin<144;$iTenMin++) {
+            # For each minute of the day
+            MINUTE: for(my $iMin=0;$iMin<10;$iMin++) {
+                # Default the power draw to standby
+                $Profile[$iYear]=$iStandbyPower;
+                
+                # If this appliance is off having completed a cycle (ie. a restart delay)
+                if ($iCycleTimeLeft <= 0 && $iRestartDelayTimeLeft > 0) {
+                    $iRestartDelayTimeLeft--; # Decrement the cycle time left
+                    
+                # Else if this appliance is off    
+                } elsif ($iCycleTimeLeft <= 0) {
+                    # There must be active occupants, or the profile must not depend on occupancy for a start event to occur
+                    if ($Occ[$iYear] > 0 || $sUseProfile =~ m/Level/) {
+                        # Variable to store the event probability (default to 1)
+                        my $dActivityProbability = 1;
+                        
+                        # For appliances that depend on activity profiles
+                        if ($sUseProfile !~ m/Level/ && $sUseProfile !~ m/Active_Occ/) {
+                            # Get the probability for this activity profile for this time step
+                            my $CurrOcc = $Occ[$iYear]; # Current occupancy this timestep
+                            my $Prob_ref = $DayStat->{"$CurrOcc"}->{$sUseProfile};
+                            my @Prob=@$Prob_ref;
+                            $dActivityProbability = $Prob[$iTenMin];
+                        };
+                        
+                        # Check the probability of a start event
+                        if (rand() < ($fAppCalib*$dActivityProbability) {
+                            ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay);
+
+                        };
+                    };
+
+                # The appliance is on - if the occupants become inactive, switch off the appliance
+                } else {
+                    if (($Occ[$iYear] == 0) && ($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Act_Laundry/) && ($item !~ m/Dishwasher/)) {
+                        # Do nothing. The activity will be completed upon the return of the active occupancy.
+                        # Note that LEVEL means that the appliance use is not related to active occupancy.
+                        # Note also that laundry appliances do not switch off upon a transition to inactive occupancy.
+                        # The original CREST model was modified to include dishwashers here as well
+                    } else { 
+                        # Set the power
+                        $Profile[$iYear]=GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength);
+                        
+                        # Decrement the cycle time left
+                        $iCycleTimeLeft--;
+                    };
+                };
+
+                $iYear++; # Increment the minute of the year
+            }; # END MINUTE
+        }; # END TEN_MIN
+        $dayWeek++; # Increment the day of the week
+    }; # END DAY
+
+    return(\@Profile);
+};
+# ====================================================================
 #  LOCAL SUBROUTINES
 # ====================================================================
 
@@ -608,6 +775,78 @@ sub GetLightDuration {
     }; # END RANGE
 
     return $Duration;
+};
+
+# ====================================================================
+# StartAppliance
+#   Start a cycle for the current appliance
+# ====================================================================
+sub StartAppliance {
+    
+    # Declare inputs
+    my $item = shift;
+    my $iRatedPower = shift;
+    my $iMeanCycleLength = shift;
+    my $iRestartDelay=shift;
+
+    # Declare outputs
+    my $iCycleTimeLeft = CycleLength($item,$iMeanCycleLength);
+    my $iRestartDelayTimeLeft=$iRestartDelay;
+    my $iPower = GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength);
+    
+    $iCycleTimeLeft--;
+
+    return($iCycleTimeLeft,$iRestartDelayTimeLeft,$iPower);
+};
+
+# ====================================================================
+# CycleLength
+#   Determine the cycle length of the appliance
+# ====================================================================
+sub CycleLength {
+    
+    # Declare inputs
+    my $item = shift;
+    my $iMeanCycleLength = shift;
+
+    # Declare outputs
+    my $CycleLen=$iMeanCycleLength;
+    
+    if($item =~ m/TV/) { # If the appliance is a television
+        # The cycle length is approximated by the following function
+        # Average time Canadians spend watching TV is 2.2 hrs (Stats Can: General 
+        # social survey (GSS), average time spent on various activities for the 
+        # population aged 15 years and over, by sex and main activity. Table 113-0001)
+        $CycleLen=int(132 * ((0 - log(1 - rand())) ** 1.1));
+    };
+
+    return($CycleLen);
+};
+
+# ====================================================================
+# GetPowerUsage
+#   Some appliances have a custom (variable) power profile depending on the time left
+# ====================================================================
+sub GetPowerUsage {
+    
+    # Declare inputs
+    my $item = shift;
+    my $iRatedPower = shift;
+    my $iCycleTimeLeft = shift;
+    my $iTotalCycleTime = shift;
+
+    # Declare outputs (Default to rated power)
+    my $PowerUsage=$iRatedPower;
+    
+    if($item =~ m/Clothes_Washer/) { # If the appliance is a washer
+        # TODO
+    } elsif($item =~ m/Clothes_Dryer/) { # If the appliance is a dryer
+        # TODO
+    } elsif($item =~ m/Dishwasher/) { # If the appliance is a dishwasher
+        # TODO
+    };
+
+    return($PowerUsage);
 };
 
 # Final return value of one to indicate that the perl module is successful

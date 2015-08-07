@@ -376,14 +376,42 @@ MAIN: {
             # --------------------------------------------------------------------
             # Generate the profiles of all other appliances
             # --------------------------------------------------------------------
-            # TODO: Determine the appliance stock of this dwelling
+            # Determine the appliance stock of this dwelling
             my @AppStock=();
+            my $AppStock_ref = &GetApplianceStock($NNdata);
+            @AppStock=@$AppStock_ref;
+            
             foreach my $item (@AppStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data
+                my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
+                my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
+                my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$App->{'Calibration'}->{"_$region"}; # Calibrated number of cycles per year
+                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
+                my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
+                my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
+                my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
+                my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
+                
+                # Determine the additional inputs
+                my $iTimeRunYr = $iCyclesPerYear*$iMeanCycleLength; # Time spent running per year [min]
+                my $iMinutesCanStart; # Minutes in a year when an event can start
+                if($sOccDepend =~ m/YES/) { # Appliance is active occupant dependent
+                    $iMinutesCanStart = (525600*$App->{'Mean_Act_Occ'})-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
+                } else { # Appliance is not active occupant dependent
+                    $iMinutesCanStart = 525600-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
+                };
+                my $fMeanCanStart=$iMinutesCanStart/$iCyclesPerYear; # Mean time between start events given occupancy [min]
+                my $fLambda = 1/$fMeanCanStart;
+                my $fAppCalib = $fLambda/$fAvgActProb; # Calibration scalar
                 
                 # Call the appliance simulation
+                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAppCalib,$Activity,4);
+                my @ThisApp = @$ThisApp_ref;
                 
                 # Update the TotalOther array
+                for(my $k=0;$k<=$#TotalOther;$k++) {
+                    $TotalOther[$k]=$TotalOther[$k]+$ThisApp[$k];
+                };
             
             };
             
