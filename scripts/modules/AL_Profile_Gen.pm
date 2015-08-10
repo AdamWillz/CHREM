@@ -625,7 +625,7 @@ sub GetApplianceProfile {
                         };
                         
                         # Check the probability of a start event
-                        if (rand() < ($fAppCalib*$dActivityProbability) {
+                        if (rand() < ($fAppCalib*$dActivityProbability)) {
                             ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay);
 
                         };

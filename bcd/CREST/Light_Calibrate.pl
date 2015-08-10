@@ -85,17 +85,19 @@ if (@ARGV < 5) {die "Four arguments are required: house_type region Target low h
 
 # Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
 ($hse_types, $regions) = &hse_types_and_regions_and_set_name(shift(@ARGV), shift(@ARGV));
-my $Num_Keys = keys $hse_types;
-if($Num_Keys>1) {die "This script can only handle one house type at a time"};
+my $Num_Keys = 0;
 foreach my $stuff (keys (%{$hse_types})) {
     $hse_type = $hse_types->{$stuff};
+    $Num_Keys++;
 };
+if($Num_Keys>1) {die "This script can only handle one house type at a time"};
     
-$Num_Keys = keys $regions;
-if($Num_Keys>1) {die "This script can only handle one region at a time"};
+$Num_Keys = 0;
 foreach my $stuff (keys (%{$regions})) {
     $region = $regions->{$stuff};
+    $Num_Keys++;
 };
+if($Num_Keys>1) {die "This script can only handle one region at a time"};
 
 $Target = shift (@ARGV);
 if ($Target <=0) {die "Invalid energy consumption target $Target. Must be positive"};
