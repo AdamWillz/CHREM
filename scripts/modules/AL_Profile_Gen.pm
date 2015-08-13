@@ -18,6 +18,7 @@ use CSV;	# CSV-2 (for CSV split and join, this works best)
 use Cwd;
 use Data::Dumper;
 use POSIX qw(ceil floor);
+use Switch;
 
 # Set the package up to export the subroutines for local use within the calling perl script
 require Exporter;
@@ -508,21 +509,53 @@ sub GetApplianceStock {
     my @stock=();
     
     # Determine appliances from CHREM NN inputs
-    if($NN->{'Stove'} > 0) {push(@stock,'Stove')};
+    
+    # Presence only
+    if($NN->{'Stove'} > 0) {
+        push(@stock,'Range');
+        push(@stock,'Oven');
+    };
     if($NN->{'Microwave'} > 0) {push(@stock,'Microwave')};
     if($NN->{'Clothes_Dryer'} > 0) {push(@stock,'Clothes_Dryer')};
     if($NN->{'Dishwasher'} > 0) {push(@stock,'Dishwasher')};
-    if($NN->{'Color_TV'} > 0) {push(@stock,'Color_TV')};
-    if($NN->{'Computer'} > 0) {push(@stock,'Computer')};
     if($NN->{'Fish_Tank'} > 0) {push(@stock,'Fish_Tank')};
-    if($NN->{'VCR'} > 0) {push(@stock,'VCR')};
     if($NN->{'Clothes_Washer'} > 0) {push(@stock,'Clothes_Washer')};
-    if($NN->{'BW_TV'} > 0) {push(@stock,'BW_TV')};
-    if($NN->{'CD_Player'} > 0) {push(@stock,'CD_Player')};
     if($NN->{'Sauna'} > 0) {push(@stock,'Sauna')};
-    if($NN->{'Stereo'} > 0) {push(@stock,'Stereo')};
     if($NN->{'Jacuzzi'} > 0) {push(@stock,'Jacuzzi')};
     if($NN->{'Central_Vacuum'} > 0) {push(@stock,'Central_Vacuum')};
+    
+    # Counts
+    if($NN->{'Color_TV'} > 0) {
+        for(my $i=1; $i<=$NN->{'Color_TV'};$i++) {
+            push(@stock,'TV');
+        };
+    };
+    if($NN->{'Computer'} > 0) {
+        for(my $i=1; $i<=$NN->{'Computer'};$i++) {
+            push(@stock,'Computer');
+        };
+    };
+    if($NN->{'VCR'} > 0) {
+        for(my $i=1; $i<=$NN->{'VCR'};$i++) {
+            push(@stock,'VCR');
+        };
+    };
+    if($NN->{'BW_TV'} > 0) {
+        for(my $i=1; $i<=$NN->{'BW_TV'};$i++) {
+            push(@stock,'TV');
+        };
+    };
+    if($NN->{'CD_Player'} > 0) {
+        for(my $i=1; $i<=$NN->{'CD_Player'};$i++) {
+            push(@stock,'CD_Player');
+        };
+    };
+    if($NN->{'Stereo'} > 0) {
+        for(my $i=1; $i<=$NN->{'Stereo'};$i++) {
+            push(@stock,'Stereo');
+        };
+    };
+    
     
     # TODO: Randomly distribute the CREST appliances
 
@@ -626,7 +659,7 @@ sub GetApplianceProfile {
                         
                         # Check the probability of a start event
                         if (rand() < ($fAppCalib*$dActivityProbability)) {
-                            ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay);
+                            ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
 
                         };
                     };
@@ -640,7 +673,7 @@ sub GetApplianceProfile {
                         # The original CREST model was modified to include dishwashers here as well
                     } else { 
                         # Set the power
-                        $Profile[$iYear]=GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength);
+                        $Profile[$iYear]=GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength,$iStandbyPower);
                         
                         # Decrement the cycle time left
                         $iCycleTimeLeft--;
@@ -788,11 +821,12 @@ sub StartAppliance {
     my $iRatedPower = shift;
     my $iMeanCycleLength = shift;
     my $iRestartDelay=shift;
+    my $iStandbyPower=shift;
 
     # Declare outputs
     my $iCycleTimeLeft = CycleLength($item,$iMeanCycleLength);
     my $iRestartDelayTimeLeft=$iRestartDelay;
-    my $iPower = GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength);
+    my $iPower = GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength,$iStandbyPower);
     
     $iCycleTimeLeft--;
 
@@ -834,16 +868,144 @@ sub GetPowerUsage {
     my $iRatedPower = shift;
     my $iCycleTimeLeft = shift;
     my $iTotalCycleTime = shift;
+    my $iStandbyPower=shift;
 
     # Declare outputs (Default to rated power)
     my $PowerUsage=$iRatedPower;
     
     if($item =~ m/Clothes_Washer/) { # If the appliance is a washer
-        # TODO
+        $PowerUsage=GetPowerWasher($iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
     } elsif($item =~ m/Clothes_Dryer/) { # If the appliance is a dryer
-        # TODO
+        $PowerUsage=GetPowerDryer($iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
     } elsif($item =~ m/Dishwasher/) { # If the appliance is a dishwasher
-        # TODO
+        $PowerUsage=GetPowerDish($iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
+    };
+
+    return($PowerUsage);
+};
+
+# ====================================================================
+# GetPowerDryer
+#   This subroutine generates the dryer profile. Note that it is a fixed
+#   profile. The profile is a 73 minute cycle which consumes 7987 kJ of
+#   energy. The profile is taken from H12 from the paper:
+# REFERENCES: - Saldanha, Beausoleil-Morrison "Measured end-use electric load
+#               profiles for 12 Canadian houses at high temporal resolution."
+#               Energy and Buildings, 49, 2012.
+# ====================================================================
+sub GetPowerDryer {
+    
+    # Declare inputs
+    my $iCycleTimeLeft = shift;
+    my $iTotalCycleTime = shift;
+    my $iStandbyPower = shift;
+
+    # Declare outputs
+    my $PowerUsage;
+    
+    # Declare local variables
+    my $index = $iTotalCycleTime - $iCycleTimeLeft + 1;
+    
+    switch ($index) {
+        case 1          {$PowerUsage = 4545;}
+        case [2..16]    {$PowerUsage = 5445;}
+        case 17         {$PowerUsage = 900;}
+        case 18         {$PowerUsage = 3060;}
+        case [19,20]    {$PowerUsage = 5445;}
+        case 21         {$PowerUsage = 3240;}
+        case 23         {$PowerUsage = 3600;}
+        case 24         {$PowerUsage = 5490;}
+        case 25         {$PowerUsage = 630;}
+        case 27         {$PowerUsage = 1170;}
+        case 28         {$PowerUsage = 2385;}
+        case [29..31]   {$PowerUsage = 3240;}
+        case [22,26,33..35,37,38,40,41,43,45..47,49,50]   {$PowerUsage = 315;}
+        case [52,53,55,56,58,60,61,63,64,66,67,69,71]   {$PowerUsage = 315;}
+        case [32,36,39,42,44,48,51,54,57,59,62,65,68,70,72]   {$PowerUsage = 360;}
+        case 73         {$PowerUsage = 225;}
+        else            {$PowerUsage = $iStandbyPower;} # If the cycle length requested is longer than profile
+    };
+
+    return($PowerUsage);
+};
+
+# ====================================================================
+# GetPowerWasher
+#   This subroutine generates the clothes washer profile. Note that it is a fixed
+#   fixed profile. The profile is a 73 minute cycle which consumes 7987 kJ of
+#   energy. The profile is taken from H12 from the paper:
+# REFERENCES: - Saldanha, Beausoleil-Morrison "Measured end-use electric load
+#               profiles for 12 Canadian houses at high temporal resolution."
+#               Energy and Buildings, 49, 2012.
+# ====================================================================
+sub GetPowerWasher {
+    
+    # Declare inputs
+    my $iCycleTimeLeft = shift;
+    my $iTotalCycleTime = shift;
+    my $iStandbyPower = shift;
+
+    # Declare outputs
+    my $PowerUsage;
+    
+    # Declare local variables
+    my $index = $iTotalCycleTime - $iCycleTimeLeft + 1;
+    
+    switch ($index) {
+        case [1..8]     {$PowerUsage = 73;}
+        case [9..29]    {$PowerUsage = 2056;}
+        case [30..16]   {$PowerUsage = 73;}
+        case [2..16]   {$PowerUsage = 73;}
+        case [2..16]   {$PowerUsage = 250;}
+        case [2..16]   {$PowerUsage = 73;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        else            {$PowerUsage = $iStandbyPower;}
+    };
+
+    return($PowerUsage);
+};
+
+# ====================================================================
+# GetPowerDish
+#   This subroutine generates the clothes washer profile. Note that it is a fixed
+#   fixed profile. The profile is a 73 minute cycle which consumes 7987 kJ of
+#   energy. The profile is taken from H12 from the paper:
+# REFERENCES: - Saldanha, Beausoleil-Morrison "Measured end-use electric load
+#               profiles for 12 Canadian houses at high temporal resolution."
+#               Energy and Buildings, 49, 2012.
+# ====================================================================
+sub GetPowerDish {
+    
+    # Declare inputs
+    my $iCycleTimeLeft = shift;
+    my $iTotalCycleTime = shift;
+    my $iStandbyPower = shift;
+
+    # Declare outputs
+    my $PowerUsage;
+    
+    # Declare local variables
+    my $index = $iTotalCycleTime - $iCycleTimeLeft + 1;
+    
+    switch ($index) {
+        case [1..8]     {$PowerUsage = 73;}
+        case [9..29]    {$PowerUsage = 2056;}
+        case [30..16]   {$PowerUsage = 73;}
+        case [2..16]   {$PowerUsage = 73;}
+        case [2..16]   {$PowerUsage = 250;}
+        case [2..16]   {$PowerUsage = 73;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        case [2..16]   {$PowerUsage = 5445;}
+        else            {$PowerUsage = $iStandbyPower;}
     };
 
     return($PowerUsage);

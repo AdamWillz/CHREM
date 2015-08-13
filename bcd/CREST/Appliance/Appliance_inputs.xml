@@ -9,7 +9,7 @@
         Restart_Delay: Delay restart after cycle [min]
         Avg_Act_Prob: Average activity probability [-]
         Act_Occ_Dep: Active occupant dependant ["YES"/"NO"]-->
-<Appliance Mean_Act_Occ="0.459">
+<Appliance>
     <Calibration _1-AT="1.00" _2-QC="1.00" _3-OT="1.00" _4-PR="1.00" _5-BC="1.00"/>
 
     <Types_Cold>
@@ -29,28 +29,28 @@
         <!--Electric_Blanket Use_Profile=""/-->
         <!--Sump_Pump Use_Profile=""/-->
         <!--Water_Cooler Use_Profile=""/-->
-        <Microwave Use_Profile="Act_Cooking" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Stove Use_Profile="Act_Cooking" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Clothes_Dryer Use_Profile="Act_Laundry" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Dishwasher Use_Profile="Act_Cooking" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Color_TV Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Computer Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Fish_Tank Use_Profile="Level" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <VCR Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Clothes_Washer Use_Profile="Act_Laundry" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <BW_TV Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <CD_Player Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Microwave Use_Profile="Act_Cooking" Mean_cycle_L="10" Base_cycles="720" Standby="0" Mean_Pow_Cyc="1500" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
+        <Range Use_Profile="Act_Cooking" Mean_cycle_L="16" Base_cycles="418" Standby="1" Mean_Pow_Cyc="2400" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
+        <Oven Use_Profile="Act_Cooking" Mean_cycle_L="27" Base_cycles="220" Standby="3" Mean_Pow_Cyc="2125" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
+        <Clothes_Dryer Use_Profile="Act_Laundry" Mean_cycle_L="60" Base_cycles="122" Standby="1" Mean_Pow_Cyc="2500" Restart_Delay="0" Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
+        <Dishwasher Use_Profile="Act_Cooking" Mean_cycle_L="60" Base_cycles="241" Standby="0" Mean_Pow_Cyc="1131" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
+        <TV Use_Profile="Act_TV" Mean_cycle_L="132" Base_cycles="1464" Standby="0" Mean_Pow_Cyc="100" Restart_Delay="0" Avg_Act_Prob="0.339753562107113" Act_Occ_Dep="YES"/>
+        <Computer Use_Profile="Active_Occ" Mean_cycle_L="300" Base_cycles="449" Standby="5" Mean_Pow_Cyc="250" Restart_Delay="0" Avg_Act_Prob="1.00" Act_Occ_Dep="YES"/>
+        <VCR Use_Profile="Act_TV" Mean_cycle_L="132" Base_cycles="1464" Standby="2" Mean_Pow_Cyc="40" Restart_Delay="0" Avg_Act_Prob="0.339753562107113" Act_Occ_Dep="YES"/>
+        <Clothes_Washer Use_Profile="Act_Laundry" Mean_cycle_L="138" Base_cycles="196" Standby="1" Mean_Pow_Cyc="406" Restart_Delay="0" Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
+        <CD_Player Use_Profile="Active_Occ" Mean_cycle_L="60" Base_cycles="1213" Standby="2" Mean_Pow_Cyc="15" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
+        <Stereo Use_Profile="Active_Occ" Mean_cycle_L="60" Base_cycles="109" Standby="9" Mean_Pow_Cyc="120" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
         <Sauna Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Stereo Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
         <Jacuzzi Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Central_Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Central_Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="20" Base_cycles="110" Standby="0" Mean_Pow_Cyc="1700" Restart_Delay="0" Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
+        <Fish_Tank Use_Profile="Level" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep="NO"/>
         <!--END: CHREM Appliances-->
         <!--START: CREST Appliances-->
-        <Iron Use_Profile="Act_Iron" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Printer Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <TV_Reciever_box Use_Profile="Act_TV" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Kettle Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
+        <Iron Use_Profile="Act_Iron" Mean_cycle_L="30" Base_cycles="35" Standby="0" Mean_Pow_Cyc="1000" Restart_Delay="0" Avg_Act_Prob="0.0184640575654675" Act_Occ_Dep="YES"/>
+        <Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="20" Base_cycles="110" Standby="0" Mean_Pow_Cyc="800" Restart_Delay="0" Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
+        <Printer Use_Profile="Active_Occ" Mean_cycle_L="4" Base_cycles="655" Standby="4" Mean_Pow_Cyc="335" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
+        <TV_Reciever_box Use_Profile="Act_TV" Mean_cycle_L="132" Base_cycles="1464" Standby="15" Mean_Pow_Cyc="27" Restart_Delay="0" Avg_Act_Prob="0.339753562107113" Act_Occ_Dep="YES"/>
+        <Kettle Use_Profile="Active_Occ" Mean_cycle_L="3" Base_cycles="1520" Standby="0" Mean_Pow_Cyc="1500" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
         <!--END: CREST Appliances-->
     </Types_Other>
     

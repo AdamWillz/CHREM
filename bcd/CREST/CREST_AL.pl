@@ -240,6 +240,7 @@ MAIN: {
             my $loc = $Climate->{$hse_name}; # Name of climate file for this house
             my $Irr_ref = $Irradiance->{$loc}; # Irradiance data for this climate [W/m2]
             my @Irr = @$Irr_ref;
+            my $MeanActOcc=0;
             
             # --------------------------------------------------------------------
             # Find NN data
@@ -278,6 +279,12 @@ MAIN: {
                 my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
                 my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,4); # TODO: Determine day of the week
                 @Occ = @$Occ_ref;
+                
+                # Determine the mean active occupancy
+                foreach my $Step (@Occ) {
+                    if($Step>0) {$MeanActOcc++};
+                };
+                $MeanActOcc=$MeanActOcc/($#Occ+1); # Fraction of time occupants are active
             };
             # --------------------------------------------------------------------
             # Generate Lighting Profile
@@ -396,7 +403,7 @@ MAIN: {
                 my $iTimeRunYr = $iCyclesPerYear*$iMeanCycleLength; # Time spent running per year [min]
                 my $iMinutesCanStart; # Minutes in a year when an event can start
                 if($sOccDepend =~ m/YES/) { # Appliance is active occupant dependent
-                    $iMinutesCanStart = (525600*$App->{'Mean_Act_Occ'})-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
+                    $iMinutesCanStart = (525600*$MeanActOcc)-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
                 } else { # Appliance is not active occupant dependent
                     $iMinutesCanStart = 525600-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
                 };
