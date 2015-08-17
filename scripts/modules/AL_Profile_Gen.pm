@@ -645,12 +645,12 @@ sub GetApplianceProfile {
                 # Else if this appliance is off    
                 } elsif ($iCycleTimeLeft <= 0) {
                     # There must be active occupants, or the profile must not depend on occupancy for a start event to occur
-                    if ($Occ[$iYear] > 0 || $sUseProfile =~ m/Level/) {
+                    if (($Occ[$iYear] > 0 && $sUseProfile !~ m/Custom/) || $sUseProfile =~ m/Level/) {
                         # Variable to store the event probability (default to 1)
                         my $dActivityProbability = 1;
                         
                         # For appliances that depend on activity profiles
-                        if ($sUseProfile !~ m/Level/ && $sUseProfile !~ m/Active_Occ/) {
+                        if (($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Active_Occ/) && ($sUseProfile !~ m/Custom/)) {
                             # Get the probability for this activity profile for this time step
                             my $CurrOcc = $Occ[$iYear]; # Current occupancy this timestep
                             my $Prob_ref = $DayStat->{"$CurrOcc"}->{$sUseProfile};
@@ -663,21 +663,30 @@ sub GetApplianceProfile {
                             ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
 
                         };
+                    } elsif ($sUseProfile =~ m/Custom/) {
+                        # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
+                        # THIS CODE BLOCK DETERMINES HOW CUSTOM APPLIANCE IS SWITCHED ON
+                        # ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartCustom($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
                     };
 
                 # The appliance is on - if the occupants become inactive, switch off the appliance
                 } else {
-                    if (($Occ[$iYear] == 0) && ($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Act_Laundry/) && ($item !~ m/Dishwasher/)) {
+                    if (($Occ[$iYear] == 0) && ($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Act_Laundry/) && ($item !~ m/Dishwasher/) && ($sUseProfile !~ m/Custom/)) {
                         # Do nothing. The activity will be completed upon the return of the active occupancy.
                         # Note that LEVEL means that the appliance use is not related to active occupancy.
                         # Note also that laundry appliances do not switch off upon a transition to inactive occupancy.
                         # The original CREST model was modified to include dishwashers here as well
-                    } else { 
+                    } elsif ($sUseProfile !~ m/Custom/) { 
                         # Set the power
                         $Profile[$iYear]=GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength,$iStandbyPower);
                         
                         # Decrement the cycle time left
                         $iCycleTimeLeft--;
+                    } else { # Custum Use profile
+                        # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
+                        # THIS CODE BLOCK DETERMINES HOW CUSTOM APPLIANCE BEHAVES 
+                        # WHILE IT IS ON
+                        # $Profile[$iYear]=GetCustomUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength,$iStandbyPower);
                     };
                 };
 
@@ -888,7 +897,7 @@ sub GetPowerUsage {
 # ====================================================================
 # GetPowerDryer
 #   This subroutine generates the dryer profile. Note that it is a fixed
-#   profile. The profile is a 73 minute cycle which consumes 7987 kJ of
+#   profile. The profile is a 73 minute cycle which consumes 7935 kJ of
 #   energy. The profile is taken from H12 from the paper:
 # REFERENCES: - Saldanha, Beausoleil-Morrison "Measured end-use electric load
 #               profiles for 12 Canadian houses at high temporal resolution."
@@ -905,28 +914,19 @@ sub GetPowerDryer {
     my $PowerUsage;
     
     # Declare local variables
-    my $index = $iTotalCycleTime - $iCycleTimeLeft + 1;
+    my $index = $iTotalCycleTime - $iCycleTimeLeft;
+    my @Profile = (3735,5265,5490,5355,5490,5535,5535,5535,5535,5490,5490,5445,5400,5400,
+                   2925,1125,5265,5265,3825,315,4095,5355,1935,315,4140,4455,315,315,1890,
+                   1845,315,315,315,315,315,315,270,315,315,315,315,315,315,315,315,315,315,
+                   315,315,315,315,360,315,315,315,315,315,315,315,315,315,315,315,315,315,
+                   360,315,315,360,315,315,315,360,315,180); # 1-minute profile for dryer
     
-    switch ($index) {
-        case 1          {$PowerUsage = 4545;}
-        case [2..16]    {$PowerUsage = 5445;}
-        case 17         {$PowerUsage = 900;}
-        case 18         {$PowerUsage = 3060;}
-        case [19,20]    {$PowerUsage = 5445;}
-        case 21         {$PowerUsage = 3240;}
-        case 23         {$PowerUsage = 3600;}
-        case 24         {$PowerUsage = 5490;}
-        case 25         {$PowerUsage = 630;}
-        case 27         {$PowerUsage = 1170;}
-        case 28         {$PowerUsage = 2385;}
-        case [29..31]   {$PowerUsage = 3240;}
-        case [22,26,33..35,37,38,40,41,43,45..47,49,50]   {$PowerUsage = 315;}
-        case [52,53,55,56,58,60,61,63,64,66,67,69,71]   {$PowerUsage = 315;}
-        case [32,36,39,42,44,48,51,54,57,59,62,65,68,70,72]   {$PowerUsage = 360;}
-        case 73         {$PowerUsage = 225;}
-        else            {$PowerUsage = $iStandbyPower;} # If the cycle length requested is longer than profile
+    if (($index<0) || ($index>$#Profile)) {
+        $PowerUsage = $iStandbyPower;
+    } else {
+        $PowerUsage=$Profile[$index];
     };
-
+    
     return($PowerUsage);
 };
 

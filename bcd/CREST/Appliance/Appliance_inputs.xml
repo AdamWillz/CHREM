@@ -57,6 +57,17 @@
         <Sauna          Use_Profile="Active_Occ"     Mean_Pow_Cyc="11000" Standby="0"  Mean_cycle_L="15"   Restart_Delay="0"  Base_cycles="52"   Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <Fish_Tank      Use_Profile="Level"          Mean_Pow_Cyc="28"   Standby="28"  Mean_cycle_L="1"    Restart_Delay="0"  Base_cycles="1"    Avg_Act_Prob="1.0"                Act_Occ_Dep="NO"/>
         <Water_Cooler   Use_Profile="Level"          Mean_Pow_Cyc="160"  Standby="160" Mean_cycle_L="1"    Restart_Delay="0"  Base_cycles="1"    Avg_Act_Prob="1.0"                Act_Occ_Dep="NO"/>
+            <!--START: WINTER Appliances-->
+            <!--Water_Bed           Use_Profile="Custom" Mean_Pow_Cyc="500" Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--Electric_Blanket    Use_Profile="Custom" Mean_Pow_Cyc="150" Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--Car_Block           Use_Profile="Custom" Mean_Pow_Cyc="500" Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--Car_Warmer          Use_Profile="Custom" Mean_Pow_Cyc="850" Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--END: WINTER Appliances-->
+            <!--START: SUMMER Appliances-->
+            <!--Dehumidifier        Use_Profile="Custom" Mean_Pow_Cyc="350" Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--Portable_Fan        Use_Profile="Custom" Mean_Pow_Cyc="115" Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--Ceiling_Fan         Use_Profile="Custom" Mean_Pow_Cyc="60"  Standby="0" Mean_cycle_L="0"    Restart_Delay="0"  Base_cycles="0"  Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/-->
+            <!--END: SUMMER Appliances-->
         <!--END: CHREM Appliances-->
         <!--START: CREST Appliances-->
         <Iron           Use_Profile="Act_Iron"       Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="30"   Restart_Delay="0"  Base_cycles="144"  Avg_Act_Prob="0.0184640575654675" Act_Occ_Dep="YES"/>
@@ -68,17 +79,6 @@
         <!--START: OTHER Appliances-->
         <Hair_Dryer     Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="864"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
         <!--END: OTHER Appliances-->
-        <!--START: WINTER Appliances-->
-        <!--Water_Bed           Use_Profile="Custom" Mean_Pow_Cyc="500" Standby="0"/-->
-        <!--Electric_Blanket    Use_Profile="Custom" Mean_Pow_Cyc="150" Standby="0"/-->
-        <!--Car_Block           Use_Profile="Custom" Mean_Pow_Cyc="500" Standby="0"/-->
-        <!--Car_Warmer          Use_Profile="Custom" Mean_Pow_Cyc="850" Standby="0"/-->
-        <!--END: WINTER Appliances-->
-        <!--START: SUMMER Appliances-->
-        <!--Dehumidifier        Use_Profile="Custom" Mean_Pow_Cyc="350"/-->
-        <!--Portable_Fan        Use_Profile="Active_Occ" Mean_Pow_Cyc="115"/-->
-        <!--Ceiling_Fan         Use_Profile="Active_Occ" Mean_Pow_Cyc="60"/-->
-        <!--END: SUMMER Appliances-->
     </Types_Other>
     
     <Ownership>
