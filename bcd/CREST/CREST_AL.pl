@@ -385,14 +385,14 @@ MAIN: {
             # --------------------------------------------------------------------
             # Determine the appliance stock of this dwelling
             my @AppStock=();
-            my $AppStock_ref = &GetApplianceStock($NNdata);
+            my $AppStock_ref = &GetApplianceStock($NNdata,$region);
             @AppStock=@$AppStock_ref;
             
             foreach my $item (@AppStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data
                 my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
                 my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
-                my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$App->{'Calibration'}->{"_$region"}; # Calibrated number of cycles per year
+                my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$App->{"_$region"}->{'Calibration'}; # Calibrated number of cycles per year
                 my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
                 my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
                 my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
@@ -421,6 +421,14 @@ MAIN: {
                 };
             
             };
+            
+            # --------------------------------------------------------------------
+            # Generate the profiles of all summer appliances
+            # --------------------------------------------------------------------
+            
+            # --------------------------------------------------------------------
+            # Generate the profiles of all winter appliances
+            # --------------------------------------------------------------------
             
             
 

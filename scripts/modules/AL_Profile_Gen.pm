@@ -502,6 +502,7 @@ sub ActiveStatParser {
 sub GetApplianceStock {
     # Declare inputs
     my $NN = shift;
+    my $region = shift;
     
     # Local variables
 
@@ -848,10 +849,10 @@ sub CycleLength {
     
     if($item =~ m/TV/) { # If the appliance is a television
         # The cycle length is approximated by the following function
-        # Average time Canadians spend watching TV is 2.2 hrs (Stats Can: General 
+        # Average time Canadians spend watching TV is 2.03 hrs (Stats Can: General 
         # social survey (GSS), average time spent on various activities for the 
-        # population aged 15 years and over, by sex and main activity. Table 113-0001)
-        $CycleLen=int(132 * ((0 - log(1 - rand())) ** 1.1));
+        # population aged 15 years and over, by sex and main activity. 2010)
+        $CycleLen=int(122 * ((0 - log(1 - rand())) ** 1.1));
     };
 
     return($CycleLen);

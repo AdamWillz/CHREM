@@ -10,48 +10,118 @@
         Avg_Act_Prob: Average activity probability [-]
         Act_Occ_Dep: Active occupant dependant ["YES"/"NO"]-->
 <Appliance>
-    <Calibration _1-AT="1.00" _2-QC="1.00" _3-OT="1.00" _4-PR="1.00" _5-BC="1.00"/>
+    <_1-AT> 
+        <_1-SD Calibration="1.000"/>
+        <_2-DR Calibration="1.000"/>
+    </_1-AT>
+    <_2-QC> 
+        <_1-SD Calibration="1.000"/>
+        <_2-DR Calibration="1.000"/>
+    </_2-QC>
+    <_3-OT> 
+        <_1-SD Calibration="1.000"/>
+        <_2-DR Calibration="1.000"/>
+    </_3-OT>
+    <_4-PR> 
+        <_1-SD Calibration="1.000"/>
+        <_2-DR Calibration="1.000"/>
+    </_4-PR>
+    <_5-BC> 
+        <_1-SD Calibration="1.000"/>
+        <_2-DR Calibration="1.000"/>
+    </_5-BC>
 
     <Types_Cold>
-        <Refrigerator Base_cycles="6116" Mean_cycle_L="18" Restart_Delay="36"/>
+        <Refrigerator Base_cycles="6116" Mean_cycle_L="35" Restart_Delay="35"/>
         <Upright_Freezer Base_cycles="6116" Mean_cycle_L="20" Restart_Delay="40"/>
         <Chest_Freezer Base_cycles="6116" Mean_cycle_L="14" Restart_Delay="56"/>
     </Types_Cold>
 
     <Types_Other>
         <!--START: CHREM Appliances-->
-        <!--Dehumidifier Use_Profile=""/-->
-        <!--Portable_Fan Use_Profile=""/-->
-        <!--Car_Warmer Use_Profile=""/-->
-        <!--Water_Softener Use_Profile=""/-->
-        <!--Car_Block Use_Profile=""/-->
-        <!--Ceiling_Fan Use_Profile=""/-->
-        <!--Electric_Blanket Use_Profile=""/-->
-        <!--Sump_Pump Use_Profile=""/-->
-        <!--Water_Cooler Use_Profile=""/-->
-        <Microwave Use_Profile="Act_Cooking" Mean_cycle_L="10" Base_cycles="720" Standby="0" Mean_Pow_Cyc="1500" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
-        <Range Use_Profile="Act_Cooking" Mean_cycle_L="16" Base_cycles="418" Standby="1" Mean_Pow_Cyc="2400" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
-        <Oven Use_Profile="Act_Cooking" Mean_cycle_L="27" Base_cycles="220" Standby="3" Mean_Pow_Cyc="2125" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
-        <Clothes_Dryer Use_Profile="Act_Laundry" Mean_cycle_L="60" Base_cycles="122" Standby="1" Mean_Pow_Cyc="2500" Restart_Delay="0" Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
-        <Dishwasher Use_Profile="Act_Cooking" Mean_cycle_L="60" Base_cycles="241" Standby="0" Mean_Pow_Cyc="1131" Restart_Delay="0" Avg_Act_Prob="0.144258252377998" Act_Occ_Dep="YES"/>
-        <TV Use_Profile="Act_TV" Mean_cycle_L="132" Base_cycles="1464" Standby="0" Mean_Pow_Cyc="100" Restart_Delay="0" Avg_Act_Prob="0.339753562107113" Act_Occ_Dep="YES"/>
-        <Computer Use_Profile="Active_Occ" Mean_cycle_L="300" Base_cycles="449" Standby="5" Mean_Pow_Cyc="250" Restart_Delay="0" Avg_Act_Prob="1.00" Act_Occ_Dep="YES"/>
-        <VCR Use_Profile="Act_TV" Mean_cycle_L="132" Base_cycles="1464" Standby="2" Mean_Pow_Cyc="40" Restart_Delay="0" Avg_Act_Prob="0.339753562107113" Act_Occ_Dep="YES"/>
-        <Clothes_Washer Use_Profile="Act_Laundry" Mean_cycle_L="138" Base_cycles="196" Standby="1" Mean_Pow_Cyc="406" Restart_Delay="0" Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
-        <CD_Player Use_Profile="Active_Occ" Mean_cycle_L="60" Base_cycles="1213" Standby="2" Mean_Pow_Cyc="15" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
-        <Stereo Use_Profile="Active_Occ" Mean_cycle_L="60" Base_cycles="109" Standby="9" Mean_Pow_Cyc="120" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
-        <Sauna Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Jacuzzi Use_Profile="Active_Occ" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep=""/>
-        <Central_Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="20" Base_cycles="110" Standby="0" Mean_Pow_Cyc="1700" Restart_Delay="0" Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
-        <Fish_Tank Use_Profile="Level" Mean_cycle_L="" Base_cycles="" Standby="" Mean_Pow_Cyc="" Restart_Delay="" Avg_Act_Prob="" Act_Occ_Dep="NO"/>
+        <!--Sump_Pump Use_Profile="" Mean_Pow_Cyc="1100"/-->
+        <Microwave      Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="720"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Range          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3500" Standby="1"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="418"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Oven           Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3200" Standby="3"   Mean_cycle_L="27"   Restart_Delay="0"  Base_cycles="220"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1131" Standby="0"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="241"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Clothes_Dryer  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="2500" Standby="1"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="122"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
+        <Clothes_Washer Use_Profile="Act_Laundry"    Mean_Pow_Cyc="406"  Standby="1"   Mean_cycle_L="138"  Restart_Delay="0"  Base_cycles="196"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
+        <TV             Use_Profile="Act_TV"         Mean_Pow_Cyc="100"  Standby="0"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="1464" Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
+        <VCR            Use_Profile="Act_TV"         Mean_Pow_Cyc="40"   Standby="2"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="54"   Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
+        <Central_Vacuum Use_Profile="Act_HouseClean" Mean_Pow_Cyc="1600" Standby="0"   Mean_cycle_L="20"   Restart_Delay="0"  Base_cycles="144"  Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
+        <Jacuzzi        Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1500" Standby="0"   Mean_cycle_L="20"   Restart_Delay="0"  Base_cycles="52"   Avg_Act_Prob="0.125144071129095"  Act_Occ_Dep="YES"/>
+        <Computer_desk  Use_Profile="Active_Occ"     Mean_Pow_Cyc="200"  Standby="5"   Mean_cycle_L="300"  Restart_Delay="0"  Base_cycles="449"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <Computer_lap   Use_Profile="Active_Occ"     Mean_Pow_Cyc="20"   Standby="5"   Mean_cycle_L="300"  Restart_Delay="0"  Base_cycles="449"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <CD_Player      Use_Profile="Active_Occ"     Mean_Pow_Cyc="100"  Standby="2"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="360"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <Stereo         Use_Profile="Active_Occ"     Mean_Pow_Cyc="30"   Standby="9"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="360"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <Sauna          Use_Profile="Active_Occ"     Mean_Pow_Cyc="11000" Standby="0"  Mean_cycle_L="15"   Restart_Delay="0"  Base_cycles="52"   Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <Fish_Tank      Use_Profile="Level"          Mean_Pow_Cyc="28"   Standby="28"  Mean_cycle_L="1"    Restart_Delay="0"  Base_cycles="1"    Avg_Act_Prob="1.0"                Act_Occ_Dep="NO"/>
+        <Water_Cooler   Use_Profile="Level"          Mean_Pow_Cyc="160"  Standby="160" Mean_cycle_L="1"    Restart_Delay="0"  Base_cycles="1"    Avg_Act_Prob="1.0"                Act_Occ_Dep="NO"/>
         <!--END: CHREM Appliances-->
         <!--START: CREST Appliances-->
-        <Iron Use_Profile="Act_Iron" Mean_cycle_L="30" Base_cycles="35" Standby="0" Mean_Pow_Cyc="1000" Restart_Delay="0" Avg_Act_Prob="0.0184640575654675" Act_Occ_Dep="YES"/>
-        <Vacuum Use_Profile="Act_HouseClean" Mean_cycle_L="20" Base_cycles="110" Standby="0" Mean_Pow_Cyc="800" Restart_Delay="0" Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
-        <Printer Use_Profile="Active_Occ" Mean_cycle_L="4" Base_cycles="655" Standby="4" Mean_Pow_Cyc="335" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
-        <TV_Reciever_box Use_Profile="Act_TV" Mean_cycle_L="132" Base_cycles="1464" Standby="15" Mean_Pow_Cyc="27" Restart_Delay="0" Avg_Act_Prob="0.339753562107113" Act_Occ_Dep="YES"/>
-        <Kettle Use_Profile="Active_Occ" Mean_cycle_L="3" Base_cycles="1520" Standby="0" Mean_Pow_Cyc="1500" Restart_Delay="0" Avg_Act_Prob="1.0" Act_Occ_Dep="YES"/>
+        <Iron           Use_Profile="Act_Iron"       Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="30"   Restart_Delay="0"  Base_cycles="144"  Avg_Act_Prob="0.0184640575654675" Act_Occ_Dep="YES"/>
+        <Vacuum         Use_Profile="Act_HouseClean" Mean_Pow_Cyc="800"  Standby="0"   Mean_cycle_L="20"   Restart_Delay="0"  Base_cycles="144"  Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
+        <Printer        Use_Profile="Active_Occ"     Mean_Pow_Cyc="335"  Standby="4"   Mean_cycle_L="4"    Restart_Delay="0"  Base_cycles="655"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <TV_Reciever_box Use_Profile="Act_TV"        Mean_Pow_Cyc="27"   Standby="15"  Mean_cycle_L="132"  Restart_Delay="0"  Base_cycles="1464" Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
+        <Kettle         Use_Profile="Active_Occ"     Mean_Pow_Cyc="1500" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="576"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <!--END: CREST Appliances-->
+        <!--START: OTHER Appliances-->
+        <Hair_Dryer     Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="864"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
+        <!--END: OTHER Appliances-->
+        <!--START: WINTER Appliances-->
+        <!--Water_Bed           Use_Profile="Custom" Mean_Pow_Cyc="500" Standby="0"/-->
+        <!--Electric_Blanket    Use_Profile="Custom" Mean_Pow_Cyc="150" Standby="0"/-->
+        <!--Car_Block           Use_Profile="Custom" Mean_Pow_Cyc="500" Standby="0"/-->
+        <!--Car_Warmer          Use_Profile="Custom" Mean_Pow_Cyc="850" Standby="0"/-->
+        <!--END: WINTER Appliances-->
+        <!--START: SUMMER Appliances-->
+        <!--Dehumidifier        Use_Profile="Custom" Mean_Pow_Cyc="350"/-->
+        <!--Portable_Fan        Use_Profile="Active_Occ" Mean_Pow_Cyc="115"/-->
+        <!--Ceiling_Fan         Use_Profile="Active_Occ" Mean_Pow_Cyc="60"/-->
+        <!--END: SUMMER Appliances-->
     </Types_Other>
+    
+    <Ownership>
+        <_1-AT> 
+            <Iron Portion="0.9"/>
+            <Vacuum Portion="0.9"/>
+            <Printer Portion=""/>
+            <TV_Reciever_box Portion=""/>
+            <Kettle Portion=""/>
+            <Hair_Dryer Portion=""/>
+        </_1-AT>
+        <_2-QC> 
+            <Iron Portion="0.9"/>
+            <Vacuum Portion="0.9"/>
+            <Printer Portion=""/>
+            <TV_Reciever_box Portion=""/>
+            <Kettle Portion=""/>
+            <Hair_Dryer Portion=""/>
+        </_2-QC>
+        <_3-OT> 
+            <Iron Portion="0.9"/>
+            <Vacuum Portion="0.9"/>
+            <Printer Portion=""/>
+            <TV_Reciever_box Portion=""/>
+            <Kettle Portion=""/>
+            <Hair_Dryer Portion=""/>
+        </_3-OT>
+        <_4-PR> 
+            <Iron Portion="0.9"/>
+            <Vacuum Portion="0.9"/>
+            <Printer Portion=""/>
+            <TV_Reciever_box Portion=""/>
+            <Kettle Portion=""/>
+            <Hair_Dryer Portion=""/>
+        </_4-PR>
+        <_5-BC> 
+            <Iron Portion="0.9"/>
+            <Vacuum Portion="0.9"/>
+            <Printer Portion=""/>
+            <TV_Reciever_box Portion=""/>
+            <Kettle Portion=""/>
+            <Hair_Dryer Portion=""/>
+        </_5-BC>
+    </Ownership>
     
 </Appliance>
