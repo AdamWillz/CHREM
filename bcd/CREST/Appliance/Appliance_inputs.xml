@@ -43,7 +43,7 @@
         <Microwave      Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="720"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Range          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3500" Standby="1"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="418"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Oven           Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3200" Standby="3"   Mean_cycle_L="27"   Restart_Delay="0"  Base_cycles="220"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
-        <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1131" Standby="0"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="241"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1300" Standby="0"   Mean_cycle_L="97"   Restart_Delay="0"  Base_cycles="193"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Clothes_Dryer  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="2500" Standby="1"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="122"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
         <Clothes_Washer Use_Profile="Act_Laundry"    Mean_Pow_Cyc="406"  Standby="1"   Mean_cycle_L="138"  Restart_Delay="0"  Base_cycles="196"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
         <TV             Use_Profile="Act_TV"         Mean_Pow_Cyc="100"  Standby="0"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="1464" Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>

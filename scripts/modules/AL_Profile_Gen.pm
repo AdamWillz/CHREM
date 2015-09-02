@@ -887,8 +887,8 @@ sub GetPowerUsage {
         $PowerUsage=GetPowerWasher($iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
     } elsif($item =~ m/Clothes_Dryer/) { # If the appliance is a dryer
         $PowerUsage=GetPowerDryer($iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
-    } elsif($item =~ m/Dishwasher/) { # If the appliance is a dishwasher
-        $PowerUsage=GetPowerDish($iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
+    } elsif($item =~ m/Dishwasher/) { # If the appliance is a dryer
+        $PowerUsage=GetPowerDish($iRatedPower,$iCycleTimeLeft,$iTotalCycleTime,$iStandbyPower);
     };
 
     return($PowerUsage);
@@ -950,32 +950,28 @@ sub GetPowerWasher {
     my $PowerUsage;
     
     # Declare local variables
-    my $index = $iTotalCycleTime - $iCycleTimeLeft + 1;
+    my $index = $iTotalCycleTime - $iCycleTimeLeft;
+    my @Profile = (3735,5265,5490,5355,5490,5535,5535,5535,5535,5490,5490,5445,5400,5400,
+                   2925,1125,5265,5265,3825,315,4095,5355,1935,315,4140,4455,315,315,1890,
+                   1845,315,315,315,315,315,315,270,315,315,315,315,315,315,315,315,315,315,
+                   315,315,315,315,360,315,315,315,315,315,315,315,315,315,315,315,315,315,
+                   360,315,315,360,315,315,315,360,315,180); # 1-minute profile for dryer
     
-    switch ($index) {
-        case [1..8]     {$PowerUsage = 73;}
-        case [9..29]    {$PowerUsage = 2056;}
-        case [30..16]   {$PowerUsage = 73;}
-        case [2..16]   {$PowerUsage = 73;}
-        case [2..16]   {$PowerUsage = 250;}
-        case [2..16]   {$PowerUsage = 73;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        else            {$PowerUsage = $iStandbyPower;}
+    if (($index<0) || ($index>$#Profile)) {
+        $PowerUsage = $iStandbyPower;
+    } else {
+        $PowerUsage=$Profile[$index];
     };
-
+    
     return($PowerUsage);
 };
 
 # ====================================================================
 # GetPowerDish
-#   This subroutine generates the clothes washer profile. Note that it is a fixed
-#   fixed profile. The profile is a 73 minute cycle which consumes 7987 kJ of
-#   energy. The profile is taken from H12 from the paper:
+#   This subroutine generates the dishwasher profile. The profile is a 
+#   130 minute cycle which consumes 3399 kJ of energy. The profile is 
+#   scaled based on the rated input power. The profile is taken from
+#   H13 from the paper:
 # REFERENCES: - Saldanha, Beausoleil-Morrison "Measured end-use electric load
 #               profiles for 12 Canadian houses at high temporal resolution."
 #               Energy and Buildings, 49, 2012.
@@ -983,6 +979,7 @@ sub GetPowerWasher {
 sub GetPowerDish {
     
     # Declare inputs
+    my $iRatedPower = shift;
     my $iCycleTimeLeft = shift;
     my $iTotalCycleTime = shift;
     my $iStandbyPower = shift;
@@ -991,24 +988,34 @@ sub GetPowerDish {
     my $PowerUsage;
     
     # Declare local variables
-    my $index = $iTotalCycleTime - $iCycleTimeLeft + 1;
+    my $index = $iTotalCycleTime - $iCycleTimeLeft;
+    my @Profile = (0.483870968,0.935483871,0.967741935,0.935483871,0.903225806,
+                   0.935483871,0.193548387,0.032258065,0.064516129,0.064516129,
+                   0.032258065,0.032258065,0.032258065,0.096774194,0.064516129,
+                   0,0.032258065,0,0.032258065,0.096774194,0.064516129,0.096774194,
+                   0.096774194,0.064516129,0.064516129,0,0,0.225806452,1,0.967741935,
+                   1,0.967741935,0.967741935,1,0.967741935,0.967741935,1,0.967741935,
+                   1,0.967741935,0.967741935,1,0.967741935,1,0.967741935,0.967741935,
+                   0.225806452,0.064516129,0.064516129,0.064516129,0.096774194,
+                   0.064516129,0.064516129,0.096774194,0.064516129,0.064516129,
+                   0,0.032258065,0,0.032258065,0.064516129,0.032258065,0.064516129,
+                   0.064516129,0.032258065,0.064516129,0.064516129,0.032258065,
+                   0.064516129,0.064516129,0.064516129,0.032258065,0.064516129,
+                   0.064516129,0.032258065,0.064516129,0.064516129,0,0.032258065,
+                   0,0.451612903,0.967741935,0.935483871,0.967741935,0.935483871,
+                   0.967741935,0.967741935,0.935483871,0.967741935,0.935483871,
+                   0.967741935,0.935483871,0.967741935,0.967741935,0.935483871,
+                   0.290322581,0.064516129,0.032258065,0.032258065,0,0.032258065,
+                   0,0,0,0.032258065,0,0,0.032258065,0,0,0,0.032258065,0,0,
+                   0.032258065,0,0,0,0.032258065,0,0,0.032258065,0,0,0,0.032258065,
+                   0,0,0,0.032258065); # 1-minute profile for dishwasher
     
-    switch ($index) {
-        case [1..8]     {$PowerUsage = 73;}
-        case [9..29]    {$PowerUsage = 2056;}
-        case [30..16]   {$PowerUsage = 73;}
-        case [2..16]   {$PowerUsage = 73;}
-        case [2..16]   {$PowerUsage = 250;}
-        case [2..16]   {$PowerUsage = 73;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        case [2..16]   {$PowerUsage = 5445;}
-        else            {$PowerUsage = $iStandbyPower;}
+    if (($index<0) || ($index>$#Profile)) {
+        $PowerUsage = $iStandbyPower;
+    } else {
+        $PowerUsage=$iRatedPower*$Profile[$index];
     };
-
+    
     return($PowerUsage);
 };
 
