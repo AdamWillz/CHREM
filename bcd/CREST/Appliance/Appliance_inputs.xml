@@ -43,16 +43,16 @@
         <Microwave      Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="720"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Range          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3500" Standby="1"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="418"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Oven           Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3200" Standby="3"   Mean_cycle_L="27"   Restart_Delay="0"  Base_cycles="220"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
-        <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1300" Standby="0"   Mean_cycle_L="97"   Restart_Delay="0"  Base_cycles="193"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
-        <Clothes_Dryer  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="2500" Standby="1"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="122"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
-        <Clothes_Washer Use_Profile="Act_Laundry"    Mean_Pow_Cyc="406"  Standby="1"   Mean_cycle_L="138"  Restart_Delay="0"  Base_cycles="196"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
-        <TV             Use_Profile="Act_TV"         Mean_Pow_Cyc="100"  Standby="0"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="1464" Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
-        <VCR            Use_Profile="Act_TV"         Mean_Pow_Cyc="40"   Standby="2"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="54"   Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
+        <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1300" Standby="0"   Mean_cycle_L="165"  Restart_Delay="0"  Base_cycles="193"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Clothes_Dryer  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="5535" Standby="0"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="122"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
+        <Clothes_Washer Use_Profile="Act_Laundry"    Mean_Pow_Cyc="500"  Standby="0"   Mean_cycle_L="50"   Restart_Delay="0"  Base_cycles="196"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
+        <TV             Use_Profile="Act_TV"         Mean_Pow_Cyc="100"  Standby="0"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="1181" Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
+        <VCR            Use_Profile="Act_TV"         Mean_Pow_Cyc="40"   Standby="2"   Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="60"   Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
         <Central_Vacuum Use_Profile="Act_HouseClean" Mean_Pow_Cyc="1600" Standby="0"   Mean_cycle_L="20"   Restart_Delay="0"  Base_cycles="144"  Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
         <Jacuzzi        Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1500" Standby="0"   Mean_cycle_L="20"   Restart_Delay="0"  Base_cycles="52"   Avg_Act_Prob="0.125144071129095"  Act_Occ_Dep="YES"/>
         <Computer_desk  Use_Profile="Active_Occ"     Mean_Pow_Cyc="200"  Standby="5"   Mean_cycle_L="300"  Restart_Delay="0"  Base_cycles="449"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <Computer_lap   Use_Profile="Active_Occ"     Mean_Pow_Cyc="20"   Standby="5"   Mean_cycle_L="300"  Restart_Delay="0"  Base_cycles="449"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
-        <CD_Player      Use_Profile="Active_Occ"     Mean_Pow_Cyc="100"  Standby="2"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="360"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <CD_Player      Use_Profile="Active_Occ"     Mean_Pow_Cyc="50"   Standby="2"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="360"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <Stereo         Use_Profile="Active_Occ"     Mean_Pow_Cyc="30"   Standby="9"   Mean_cycle_L="60"   Restart_Delay="0"  Base_cycles="360"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <Sauna          Use_Profile="Active_Occ"     Mean_Pow_Cyc="11000" Standby="0"  Mean_cycle_L="15"   Restart_Delay="0"  Base_cycles="52"   Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <Fish_Tank      Use_Profile="Level"          Mean_Pow_Cyc="28"   Standby="28"  Mean_cycle_L="1"    Restart_Delay="0"  Base_cycles="1"    Avg_Act_Prob="1.0"                Act_Occ_Dep="NO"/>
@@ -85,42 +85,42 @@
         <_1-AT> 
             <Iron Portion="0.9"/>
             <Vacuum Portion="0.9"/>
-            <Printer Portion=""/>
-            <TV_Reciever_box Portion=""/>
-            <Kettle Portion=""/>
-            <Hair_Dryer Portion=""/>
+            <Printer Portion="0.9"/>
+            <TV_Reciever_box Portion="0.9"/>
+            <Kettle Portion="0.9"/>
+            <Hair_Dryer Portion="0.9"/>
         </_1-AT>
         <_2-QC> 
             <Iron Portion="0.9"/>
             <Vacuum Portion="0.9"/>
-            <Printer Portion=""/>
-            <TV_Reciever_box Portion=""/>
-            <Kettle Portion=""/>
-            <Hair_Dryer Portion=""/>
+            <Printer Portion="0.9"/>
+            <TV_Reciever_box Portion="0.9"/>
+            <Kettle Portion="0.9"/>
+            <Hair_Dryer Portion="0.9"/>
         </_2-QC>
         <_3-OT> 
             <Iron Portion="0.9"/>
             <Vacuum Portion="0.9"/>
-            <Printer Portion=""/>
-            <TV_Reciever_box Portion=""/>
-            <Kettle Portion=""/>
-            <Hair_Dryer Portion=""/>
+            <Printer Portion="0.9"/>
+            <TV_Reciever_box Portion="0.9"/>
+            <Kettle Portion="0.9"/>
+            <Hair_Dryer Portion="0.9"/>
         </_3-OT>
         <_4-PR> 
             <Iron Portion="0.9"/>
             <Vacuum Portion="0.9"/>
-            <Printer Portion=""/>
-            <TV_Reciever_box Portion=""/>
-            <Kettle Portion=""/>
-            <Hair_Dryer Portion=""/>
+            <Printer Portion="0.9"/>
+            <TV_Reciever_box Portion="0.9"/>
+            <Kettle Portion="0.9"/>
+            <Hair_Dryer Portion="0.9"/>
         </_4-PR>
         <_5-BC> 
             <Iron Portion="0.9"/>
             <Vacuum Portion="0.9"/>
-            <Printer Portion=""/>
-            <TV_Reciever_box Portion=""/>
-            <Kettle Portion=""/>
-            <Hair_Dryer Portion=""/>
+            <Printer Portion="0.9"/>
+            <TV_Reciever_box Portion="0.9"/>
+            <Kettle Portion="0.9"/>
+            <Hair_Dryer Portion="0.9"/>
         </_5-BC>
     </Ownership>
     
