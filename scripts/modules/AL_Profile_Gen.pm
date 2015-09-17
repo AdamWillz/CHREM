@@ -595,9 +595,13 @@ sub GetApplianceProfile {
     my $iStandbyPower = shift;
     my $iRatedPower = shift;
     my $iRestartDelay = shift;
-    my $fAppCalib = shift;
+    my $fAvgActProb = shift;
     my $ActStat = shift;
+    my $MeanActOcc = shift;
     my $dayWeek = shift;
+    
+    # Determine the calibration scalar
+    my $fAppCalib = ApplianceCalibrationScalar($iCyclesPerYear,$iMeanCycleLength,$MeanActOcc,$iRestartDelay);
     
     # Local variables
     my $iCycleTimeLeft = 0;
@@ -658,10 +662,16 @@ sub GetApplianceProfile {
                             $dActivityProbability = $Prob[$iTenMin];
                         };
                         
+                        # If there is seasonal variation, adjust the calibration scalar
+                        if ($item =~ m/Clothes_Dryer/) { # Dryer usage varies seasonally
+                            my $fAmp =  20.5; # based on difference in average loads/week winter/summer (SHEU 2011);
+                            my $fModCyc = ($fAmp*sin(((2*3.14159265*$iDay)/365)-((1053*3.14159265)/730)))+$iCyclesPerYear;
+                            $fAppCalib = ApplianceCalibrationScalar($fModCyc,$iMeanCycleLength,$MeanActOcc,$iRestartDelay); #Adjust the calibration
+                        }; # elsif .. (Other appliances)
+                        
                         # Check the probability of a start event
                         if (rand() < ($fAppCalib*$dActivityProbability)) {
                             ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
-
                         };
                     } elsif ($sUseProfile =~ m/Custom/) {
                         # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
@@ -858,7 +868,7 @@ sub CycleLength {
     
     if($item =~ m/TV/) { # If the appliance is a television
         # The cycle length is approximated by the following function
-        # Average time Canadians spend watching TV is 2.03 hrs (Stats Can: General 
+        # Average time Canadians spend watching TV is 2.1 hrs (Stats Can: General 
         # social survey (GSS), average time spent on various activities for the 
         # population aged 15 years and over, by sex and main activity. 2010)
         $CycleLen=int(122 * ((0 - log(1 - rand())) ** 1.1));
@@ -1025,5 +1035,34 @@ sub GetPowerDish {
     return($PowerUsage);
 };
 
+# ====================================================================
+# ApplianceCalibrationScalar
+#   This subroutine determines the appliance calibration scalar
+# ====================================================================
+sub ApplianceCalibrationScalar {
+    
+    # Declare inputs
+    my $iCyclesPerYear = shift;
+    my $iMeanCycleLength = shift;
+    my $MeanActOcc = shift;
+    my $iRestartDelay = shift;
+    
+    # Declare outputs
+    my $fAppCalib;
+
+    # Determine the calibration scalar for this appliance
+    my $iTimeRunYr = $iCyclesPerYear*$iMeanCycleLength; # Time spent running per year [min]
+    my $iMinutesCanStart; # Minutes in a year when an event can start
+    if($sOccDepend =~ m/YES/) { # Appliance is active occupant dependent
+        $iMinutesCanStart = (525600*$MeanActOcc)-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
+    } else { # Appliance is not active occupant dependent
+        $iMinutesCanStart = 525600-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
+    };
+    my $fMeanCanStart=$iMinutesCanStart/$iCyclesPerYear; # Mean time between start events given occupancy [min]
+    my $fLambda = 1/$fMeanCanStart;
+    $fAppCalib = $fLambda/$fAvgActProb; # Calibration scalar
+    
+    return($fAppCalib);
+};
 # Final return value of one to indicate that the perl module is successful
 1;

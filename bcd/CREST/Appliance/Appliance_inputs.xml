@@ -78,6 +78,7 @@
         <!--END: CREST Appliances-->
         <!--START: OTHER Appliances-->
         <Hair_Dryer     Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="864"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
+        <Game_Console   Use_Profile="Act_TV"         Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="864"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
         <!--END: OTHER Appliances-->
     </Types_Other>
     
@@ -89,6 +90,7 @@
             <TV_Reciever_box Portion="0.9"/>
             <Kettle Portion="0.9"/>
             <Hair_Dryer Portion="0.9"/>
+            <Game_Console Portion="0.9"/>
         </_1-AT>
         <_2-QC> 
             <Iron Portion="0.9"/>
@@ -97,6 +99,7 @@
             <TV_Reciever_box Portion="0.9"/>
             <Kettle Portion="0.9"/>
             <Hair_Dryer Portion="0.9"/>
+            <Game_Console Portion="0.9"/>
         </_2-QC>
         <_3-OT> 
             <Iron Portion="0.9"/>
@@ -105,6 +108,7 @@
             <TV_Reciever_box Portion="0.9"/>
             <Kettle Portion="0.9"/>
             <Hair_Dryer Portion="0.9"/>
+            <Game_Console Portion="0.9"/>
         </_3-OT>
         <_4-PR> 
             <Iron Portion="0.9"/>
@@ -113,6 +117,7 @@
             <TV_Reciever_box Portion="0.9"/>
             <Kettle Portion="0.9"/>
             <Hair_Dryer Portion="0.9"/>
+            <Game_Console Portion="0.9"/>
         </_4-PR>
         <_5-BC> 
             <Iron Portion="0.9"/>
@@ -121,6 +126,7 @@
             <TV_Reciever_box Portion="0.9"/>
             <Kettle Portion="0.9"/>
             <Hair_Dryer Portion="0.9"/>
+            <Game_Console Portion="0.9"/>
         </_5-BC>
     </Ownership>
     

@@ -398,21 +398,9 @@ MAIN: {
                 my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
                 my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
                 my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
-                
-                # Determine the additional inputs
-                my $iTimeRunYr = $iCyclesPerYear*$iMeanCycleLength; # Time spent running per year [min]
-                my $iMinutesCanStart; # Minutes in a year when an event can start
-                if($sOccDepend =~ m/YES/) { # Appliance is active occupant dependent
-                    $iMinutesCanStart = (525600*$MeanActOcc)-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
-                } else { # Appliance is not active occupant dependent
-                    $iMinutesCanStart = 525600-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
-                };
-                my $fMeanCanStart=$iMinutesCanStart/$iCyclesPerYear; # Mean time between start events given occupancy [min]
-                my $fLambda = 1/$fMeanCanStart;
-                my $fAppCalib = $fLambda/$fAvgActProb; # Calibration scalar
-                
+
                 # Call the appliance simulation
-                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAppCalib,$Activity,4);
+                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,4);
                 my @ThisApp = @$ThisApp_ref;
                 
                 # Update the TotalOther array
@@ -421,16 +409,6 @@ MAIN: {
                 };
             
             };
-            
-            # --------------------------------------------------------------------
-            # Generate the profiles of all summer appliances
-            # --------------------------------------------------------------------
-            
-            # --------------------------------------------------------------------
-            # Generate the profiles of all winter appliances
-            # --------------------------------------------------------------------
-            
-            
 
         }; # END RECORD
         
