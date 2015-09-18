@@ -84,49 +84,49 @@
     
     <Ownership>
         <_1-AT> 
-            <Iron Portion="0.9"/>
-            <Vacuum Portion="0.9"/>
-            <Printer Portion="0.9"/>
-            <TV_Reciever_box Portion="0.9"/>
-            <Kettle Portion="0.9"/>
+            <Iron Portion="0.900"/>
+            <Vacuum Portion="0.937"/>
+            <Printer Portion="0.803"/>
+            <TV_Reciever_box Portion="0.649"/>
+            <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.9"/>
+            <Game_Console Portion="0.445"/>
         </_1-AT>
         <_2-QC> 
-            <Iron Portion="0.9"/>
-            <Vacuum Portion="0.9"/>
-            <Printer Portion="0.9"/>
-            <TV_Reciever_box Portion="0.9"/>
-            <Kettle Portion="0.9"/>
+            <Iron Portion="0.900"/>
+            <Vacuum Portion="0.937"/>
+            <Printer Portion="0.766"/>
+            <TV_Reciever_box Portion="0.718"/>
+            <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.9"/>
+            <Game_Console Portion="0.410"/>
         </_2-QC>
         <_3-OT> 
-            <Iron Portion="0.9"/>
-            <Vacuum Portion="0.9"/>
-            <Printer Portion="0.9"/>
-            <TV_Reciever_box Portion="0.9"/>
-            <Kettle Portion="0.9"/>
+            <Iron Portion="0.900"/>
+            <Vacuum Portion="0.937"/>
+            <Printer Portion="0.763"/>
+            <TV_Reciever_box Portion="0.676"/>
+            <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.9"/>
+            <Game_Console Portion="0.462"/>
         </_3-OT>
         <_4-PR> 
-            <Iron Portion="0.9"/>
-            <Vacuum Portion="0.9"/>
-            <Printer Portion="0.9"/>
-            <TV_Reciever_box Portion="0.9"/>
-            <Kettle Portion="0.9"/>
+            <Iron Portion="0.900"/>
+            <Vacuum Portion="0.937"/>
+            <Printer Portion="0.816"/>
+            <TV_Reciever_box Portion="0.725"/>
+            <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.9"/>
+            <Game_Console Portion="0.421"/>
         </_4-PR>
         <_5-BC> 
-            <Iron Portion="0.9"/>
-            <Vacuum Portion="0.9"/>
-            <Printer Portion="0.9"/>
-            <TV_Reciever_box Portion="0.9"/>
-            <Kettle Portion="0.9"/>
+            <Iron Portion="0.900"/>
+            <Vacuum Portion="0.937"/>
+            <Printer Portion="0.817"/>
+            <TV_Reciever_box Portion="0.758"/>
+            <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.9"/>
+            <Game_Console Portion="0.374"/>
         </_5-BC>
     </Ownership>
     
