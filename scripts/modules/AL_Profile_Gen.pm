@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -502,7 +502,7 @@ sub ActiveStatParser {
 sub GetApplianceStock {
     # Declare inputs
     my $NN = shift;
-    my $region = shift;
+    my $AppRegion = shift;
     
     # Local variables
 
@@ -523,17 +523,31 @@ sub GetApplianceStock {
     if($NN->{'Clothes_Washer'} > 0) {push(@stock,'Clothes_Washer')};
     if($NN->{'Sauna'} > 0) {push(@stock,'Sauna')};
     if($NN->{'Jacuzzi'} > 0) {push(@stock,'Jacuzzi')};
-    if($NN->{'Central_Vacuum'} > 0) {push(@stock,'Central_Vacuum')};
+
+    if($NN->{'Central_Vacuum'} > 0) {
+        push(@stock,'Central_Vacuum');
+    } elsif (rand() < $AppRegion->{'Vacuum'}) {
+        push(@stock,'Vacuum');
+    };
     
     # Counts
     if($NN->{'Color_TV'} > 0) {
         for(my $i=1; $i<=$NN->{'Color_TV'};$i++) {
             push(@stock,'TV');
+            if (rand() < $AppRegion->{'TV_Reciever_box'}) { # Is there an associated receiver box?
+                push(@stock,'TV_Reciever_box');
+            };
+            if (rand() < $AppRegion->{'Game_Console'}) {
+                push(@stock,'Game_Console');
+            };
         };
     };
     if($NN->{'Computer'} > 0) {
         for(my $i=1; $i<=$NN->{'Computer'};$i++) {
-            push(@stock,'Computer');
+            push(@stock,'Computer_desk');
+            if (rand() < $AppRegion->{'Printer'}) {
+                push(@stock,'Printer');
+            };
         };
     };
     if($NN->{'VCR'} > 0) {
@@ -556,9 +570,17 @@ sub GetApplianceStock {
             push(@stock,'Stereo');
         };
     };
-    
-    
-    # TODO: Randomly distribute the CREST appliances
+
+    # Randomly distribute the remaining CREST appliances
+    if (rand() < $AppRegion->{'Iron'}) {
+        push(@stock,'Iron');
+    };
+    if (rand() < $AppRegion->{'Kettle'}) {
+        push(@stock,'Kettle');
+    };
+    if (rand() < $AppRegion->{'Hair_Dryer'}) {
+        push(@stock,'Hair_Dryer');
+    };
 
     return(\@stock);
 };
@@ -580,6 +602,8 @@ sub GetApplianceStock {
 #           iRestartDelay: Delay prior to starting a cycle [min]
 #           fAppCalib: Calibration scalar [-]
 #           ActStat: HASH holding the activity statistics
+#           MeanActOcc: Mean active occupancy [-]
+#           sOccDepend: Activity occupant presence dependent [YES/NO]
 #           dayWeek: day of the week [1=Sunday, 7=Saturday]
 # OUTPUT    Profile: The power consumption for this appliance at a 1-minute timestep [kW]
 # ====================================================================
@@ -598,10 +622,11 @@ sub GetApplianceProfile {
     my $fAvgActProb = shift;
     my $ActStat = shift;
     my $MeanActOcc = shift;
+    my $sOccDepend = shift;
     my $dayWeek = shift;
     
     # Determine the calibration scalar
-    my $fAppCalib = ApplianceCalibrationScalar($iCyclesPerYear,$iMeanCycleLength,$MeanActOcc,$iRestartDelay);
+    my $fAppCalib = ApplianceCalibrationScalar($iCyclesPerYear,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb);
     
     # Local variables
     my $iCycleTimeLeft = 0;
@@ -666,7 +691,7 @@ sub GetApplianceProfile {
                         if ($item =~ m/Clothes_Dryer/) { # Dryer usage varies seasonally
                             my $fAmp =  20.5; # based on difference in average loads/week winter/summer (SHEU 2011);
                             my $fModCyc = ($fAmp*sin(((2*3.14159265*$iDay)/365)-((1241*3.14159265)/730)))+$iCyclesPerYear;
-                            $fAppCalib = ApplianceCalibrationScalar($fModCyc,$iMeanCycleLength,$MeanActOcc,$iRestartDelay); #Adjust the calibration
+                            $fAppCalib = ApplianceCalibrationScalar($fModCyc,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb); #Adjust the calibration
                         }; # elsif .. (Other appliances)
                         
                         # Check the probability of a start event
@@ -871,12 +896,18 @@ sub CycleLength {
         # Average time Canadians spend watching TV is 2.1 hrs (Stats Can: General 
         # social survey (GSS), average time spent on various activities for the 
         # population aged 15 years and over, by sex and main activity. 2010)
-        $CycleLen=int(122 * ((0 - log(1 - rand())) ** 1.1));
-        
+        my $fRando = rand();
+        if ($fRando > 0.999) {$fRando=0.995};
+        $CycleLen=int($iMeanCycleLength * ((0 - log(1 - $fRando)) ** 1.1));
+    } elsif ($item =~ m/Game_Console/) {
+        # The cycle length is approximated by the following function
+        my $fRando = rand();
+        if ($fRando > 0.999) {$fRando=0.995};
+        $CycleLen=int($iMeanCycleLength * ((0 - log(1 - $fRando)) ** 1.1));
     # Currently these profiles are fixed. Override user input to length of
     # each static cycle
     } elsif ($item =~ m/Clothes_Washer/) {
-        $CycleLen=;
+        $CycleLen=40;
     } elsif ($item =~ m/Clothes_Dryer/) {
         $CycleLen=75;
     } elsif ($item =~ m/Dishwasher/) {
@@ -902,7 +933,7 @@ sub GetPowerUsage {
     my $PowerUsage=$iRatedPower;
     
     if($item =~ m/Clothes_Washer/) { # If the appliance is a washer (peak 500 W)
-        #$PowerUsage=GetPowerWasher($iRatedPower,$iCycleTimeLeft,$iStandbyPower);
+        $PowerUsage=GetPowerWasher($iRatedPower,$iCycleTimeLeft,$iStandbyPower);
     } elsif($item =~ m/Clothes_Dryer/) { # If the appliance is a dryer (peak 5535 W)
         $PowerUsage=GetPowerDryer($iRatedPower,$iCycleTimeLeft,$iStandbyPower);
     } elsif($item =~ m/Dishwasher/) { # If the appliance is a dishwasher (peak 1300 W)
@@ -960,15 +991,14 @@ sub GetPowerDryer {
 # ====================================================================
 # GetPowerWasher
 #   This subroutine generates the clothes washer profile. Note that it is a
-#   fixed profile. The profile is a 73 minute cycle which consumes 7987 kJ of
-#   energy. The profile is taken from H12 from the paper:
-# REFERENCES: - Saldanha, Beausoleil-Morrison "Measured end-use electric load
-#               profiles for 12 Canadian houses at high temporal resolution."
-#               Energy and Buildings, 49, 2012.
+#   fixed profile. The profile is a 40 minute cycle. This is measured data
+#   from a top-loading washing maching of approximately 1990's vintage
+#   Data was measured using a WattsUp? Pro at 1-min timesteps
 # ====================================================================
 sub GetPowerWasher {
     
     # Declare inputs
+    my $iRatedPower = shift; # Peak power demand
     my $iCycleTimeLeft = shift;
     my $iStandbyPower = shift;
 
@@ -976,14 +1006,20 @@ sub GetPowerWasher {
     my $PowerUsage;
     
     # Declare local variables
-    my @Profile = (); # 1-minute profile for dryer
+    my @Profile = (0.008748413,0.008748413,0.008748413,0.008748413,0.008748413,
+    0.956681247,0.916325667,0.892620291,0.853816848,0.853675744,0.860166502,
+    0.872865811,0.847608297,0.589247919,0.59136447,0.595174263,0.591646677,
+    0.593904332,0.583885988,0.54197827,0.498377311,0.786510512,0.730915761,
+    0.008607309,0.008607309,0.008748413,0.008607309,0.008607309,0.838295471,
+    0.843798504,0.828418231,0.874276845,0.535487512,0.497954,1,0.761535205,
+    0.725836038,0.705658247,0.698603076,0.688725836); # 1-minute profile for washer
     my $iTotalCycleTime = scalar @Profile;
     my $index = $iTotalCycleTime - $iCycleTimeLeft;
 
     if (($index<0) || ($index>$#Profile)) {
         $PowerUsage = $iStandbyPower;
     } else {
-        $PowerUsage=$Profile[$index];
+        $PowerUsage=$iRatedPower*$Profile[$index];
     };
     
     return($PowerUsage);
@@ -1046,6 +1082,8 @@ sub ApplianceCalibrationScalar {
     my $iMeanCycleLength = shift;
     my $MeanActOcc = shift;
     my $iRestartDelay = shift;
+    my $sOccDepend = shift;
+    my $fAvgActProb = shift;
     
     # Declare outputs
     my $fAppCalib;
