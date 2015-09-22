@@ -41,7 +41,7 @@
         <!--START: CHREM Appliances-->
         <!--Sump_Pump Use_Profile="" Mean_Pow_Cyc="1100"/-->
         <Microwave      Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1000" Standby="3"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="313"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
-        <Range          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3500" Standby="1"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="574"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
+        <Range          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="2300" Standby="1"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="574"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Oven           Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3200" Standby="3"   Mean_cycle_L="27"   Restart_Delay="0"  Base_cycles="302"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1300" Standby="0"   Mean_cycle_L="124"  Restart_Delay="0"  Base_cycles="181"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Clothes_Dryer  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="5535" Standby="0"   Mean_cycle_L="75"   Restart_Delay="0"  Base_cycles="177"  Avg_Act_Prob="0.0176977228395127" Act_Occ_Dep="YES"/>
