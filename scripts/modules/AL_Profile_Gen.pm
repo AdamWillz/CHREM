@@ -388,7 +388,7 @@ sub GetUEC {
 #           iCyclesPerYear: number of cycles per year
 #           iMeanCycleLength: mean cycle length [min]
 #           iRestartDelay: delay restart after cycle [min]
-# OUTPUT    Cold: Annual electrical consumption profile of cold appliance [kW]
+# OUTPUT    Cold: Annual electrical consumption profile of cold appliance [W]
 # ====================================================================
 
 sub setColdProfile {
@@ -399,7 +399,7 @@ sub setColdProfile {
     my $iRestartDelay = shift;
     
     # Local variables
-    my $fPower; # Power draw when cycle is on [kW]
+    my $fPower; # Power draw when cycle is on [W]
     my $dCalibrate; # Calibration value to determine switch-on events
     my $iRestartDelayTimeLeft; # Counter to hold time left in the delay restart
     
@@ -417,8 +417,8 @@ sub setColdProfile {
     my $MT=$Ms/$iCyclesPerYear;
     $dCalibrate=1/$MT;
     
-    # Estimate the cycle power [kW]
-    $fPower=$UEC/($Trunning/60);
+    # Estimate the cycle power [W]
+    $fPower=($UEC/($Trunning/60))*1000;
     
     # ====================================================================
     # Begin generating profile
@@ -625,9 +625,6 @@ sub GetApplianceProfile {
     my $sOccDepend = shift;
     my $dayWeek = shift;
     
-    # Determine the calibration scalar
-    my $fAppCalib = ApplianceCalibrationScalar($iCyclesPerYear,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb);
-    
     # Local variables
     my $iCycleTimeLeft = 0;
     my $sDay;   # String to indicate weekday or weekend
@@ -635,101 +632,109 @@ sub GetApplianceProfile {
     my $iRestartDelayTimeLeft = rand()*$iRestartDelay*2; # Randomly delay the start of appliances that have a restart delay
     my $bDayDep=1; # Flag indicating if appliance is dependent on weekend/weekday (default is true)
     my @PDF=(); # Array to hold the ten minute interval usage statistics for the appliance
+    my $fAppCalib;
+    my $bBaseL=0; # Boolean to state whether this appliance is a constant base load
     
     # Declare outputs
-    my @Profile=(0) x 525600;
+    my @Profile=($iStandbyPower) x 525600; # Initialize to constant standby power [W]
     
-    # Make the rated power variable over a normal distribution to provide some variation
-    $iRatedPower = GetMonteCarloNormalDistGuess($iRatedPower,($iRatedPower/10));
+    # Determine the calibration scalar
+    if ($iCyclesPerYear > 0) {
+        $fAppCalib = ApplianceCalibrationScalar($iCyclesPerYear,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb);
+    } else { # This is just a constant load
+        $bBaseL=1;
+    };
     
-    # Determine if appliance operation is weekday/weekend dependent
-    if($sUseProfile =~ m/Active_Occ/ || $sUseProfile =~ m/Level/) {$bDayDep=0};
-    
-    # Start looping through each day of the year
-    DAY: for(my $iDay=1;$iDay<=365;$iDay++) {
-        my $DayStat; # HASH reference for current day
+    if ($bBaseL < 1) { # Not a baseload appliance, calculate the timestep data
+        # Make the rated power variable over a normal distribution to provide some variation
+        $iRatedPower = GetMonteCarloNormalDistGuess($iRatedPower,($iRatedPower/10));
         
-        # If this appliance depends on day type, get the relevant activity statistics
-        if($bDayDep) { 
-            if($dayWeek>7){$dayWeek=1};
-            if($dayWeek == 1 || $dayWeek == 7) { # Weekend
-                $sDay = 'we';
-            } else { # Weekday
-                $sDay = 'wd';
-            };
-            $DayStat=$ActStat->{$sDay};
-        };
+        # Determine if appliance operation is weekday/weekend dependent
+        if($sUseProfile =~ m/Active_Occ/ || $sUseProfile =~ m/Level/) {$bDayDep=0};
         
-        # For each 10 minute period of the day
-        TEN_MIN: for(my $iTenMin=0;$iTenMin<144;$iTenMin++) {
-            # For each minute of the day
-            MINUTE: for(my $iMin=0;$iMin<10;$iMin++) {
-                # Default the power draw to standby
-                $Profile[$iYear]=$iStandbyPower;
-                
-                # If this appliance is off having completed a cycle (ie. a restart delay)
-                if ($iCycleTimeLeft <= 0 && $iRestartDelayTimeLeft > 0) {
-                    $iRestartDelayTimeLeft--; # Decrement the cycle time left
-                    
-                # Else if this appliance is off    
-                } elsif ($iCycleTimeLeft <= 0) {
-                    # There must be active occupants, or the profile must not depend on occupancy for a start event to occur
-                    if (($Occ[$iYear] > 0 && $sUseProfile !~ m/Custom/) || $sUseProfile =~ m/Level/) {
-                        # Variable to store the event probability (default to 1)
-                        my $dActivityProbability = 1;
-                        
-                        # For appliances that depend on activity profiles
-                        if (($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Active_Occ/) && ($sUseProfile !~ m/Custom/)) {
-                            # Get the probability for this activity profile for this time step
-                            my $CurrOcc = $Occ[$iYear]; # Current occupancy this timestep
-                            my $Prob_ref = $DayStat->{"$CurrOcc"}->{$sUseProfile};
-                            my @Prob=@$Prob_ref;
-                            $dActivityProbability = $Prob[$iTenMin];
-                        };
-                        
-                        # If there is seasonal variation, adjust the calibration scalar
-                        if ($item =~ m/Clothes_Dryer/) { # Dryer usage varies seasonally
-                            my $fAmp =  20.5; # based on difference in average loads/week winter/summer (SHEU 2011);
-                            my $fModCyc = ($fAmp*sin(((2*3.14159265*$iDay)/365)-((1241*3.14159265)/730)))+$iCyclesPerYear;
-                            $fAppCalib = ApplianceCalibrationScalar($fModCyc,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb); #Adjust the calibration
-                        }; # elsif .. (Other appliances)
-                        
-                        # Check the probability of a start event
-                        if (rand() < ($fAppCalib*$dActivityProbability)) {
-                            ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
-                        };
-                    } elsif ($sUseProfile =~ m/Custom/) {
-                        # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
-                        # THIS CODE BLOCK DETERMINES HOW CUSTOM APPLIANCE IS SWITCHED ON
-                        # ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartCustom($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
-                    };
-
-                # The appliance is on - if the occupants become inactive, switch off the appliance
-                } else {
-                    if (($Occ[$iYear] == 0) && ($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Act_Laundry/) && ($item !~ m/Dishwasher/) && ($sUseProfile !~ m/Custom/)) {
-                        # Do nothing. The activity will be completed upon the return of the active occupancy.
-                        # Note that LEVEL means that the appliance use is not related to active occupancy.
-                        # Note also that laundry appliances do not switch off upon a transition to inactive occupancy.
-                        # The original CREST model was modified to include dishwashers here as well
-                    } elsif ($sUseProfile !~ m/Custom/) { 
-                        # Set the power
-                        $Profile[$iYear]=GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iStandbyPower);
-                        
-                        # Decrement the cycle time left
-                        $iCycleTimeLeft--;
-                    } else { # Custum Use profile
-                        # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
-                        # THIS CODE BLOCK DETERMINES HOW CUSTOM APPLIANCE BEHAVES 
-                        # WHILE IT IS ON
-                        # $Profile[$iYear]=GetCustomUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength,$iStandbyPower);
-                    };
+        # Start looping through each day of the year
+        DAY: for(my $iDay=1;$iDay<=365;$iDay++) {
+            my $DayStat; # HASH reference for current day
+            
+            # If this appliance depends on day type, get the relevant activity statistics
+            if($bDayDep) { 
+                if($dayWeek>7){$dayWeek=1};
+                if($dayWeek == 1 || $dayWeek == 7) { # Weekend
+                    $sDay = 'we';
+                } else { # Weekday
+                    $sDay = 'wd';
                 };
-
-                $iYear++; # Increment the minute of the year
-            }; # END MINUTE
-        }; # END TEN_MIN
-        $dayWeek++; # Increment the day of the week
-    }; # END DAY
+                $DayStat=$ActStat->{$sDay};
+            };
+            
+            # For each 10 minute period of the day
+            TEN_MIN: for(my $iTenMin=0;$iTenMin<144;$iTenMin++) {
+                # For each minute of the day
+                MINUTE: for(my $iMin=0;$iMin<10;$iMin++) {
+                    # If this appliance is off having completed a cycle (ie. a restart delay)
+                    if ($iCycleTimeLeft <= 0 && $iRestartDelayTimeLeft > 0) {
+                        $iRestartDelayTimeLeft--; # Decrement the cycle time left
+                        
+                    # Else if this appliance is off    
+                    } elsif ($iCycleTimeLeft <= 0) {
+                        # There must be active occupants, or the profile must not depend on occupancy for a start event to occur
+                        if (($Occ[$iYear] > 0 && $sUseProfile !~ m/Custom/) || $sUseProfile =~ m/Level/) {
+                            # Variable to store the event probability (default to 1)
+                            my $dActivityProbability = 1;
+                            
+                            # For appliances that depend on activity profiles
+                            if (($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Active_Occ/) && ($sUseProfile !~ m/Custom/)) {
+                                # Get the probability for this activity profile for this time step
+                                my $CurrOcc = $Occ[$iYear]; # Current occupancy this timestep
+                                my $Prob_ref = $DayStat->{"$CurrOcc"}->{$sUseProfile};
+                                my @Prob=@$Prob_ref;
+                                $dActivityProbability = $Prob[$iTenMin];
+                            };
+                            
+                            # If there is seasonal variation, adjust the calibration scalar
+                            if ($item =~ m/Clothes_Dryer/) { # Dryer usage varies seasonally
+                                my $fAmp =  20.5; # based on difference in average loads/week winter/summer (SHEU 2011);
+                                my $fModCyc = ($fAmp*sin(((2*3.14159265*$iDay)/365)-((1241*3.14159265)/730)))+$iCyclesPerYear;
+                                $fAppCalib = ApplianceCalibrationScalar($fModCyc,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb); #Adjust the calibration
+                            }; # elsif .. (Other appliances)
+                            
+                            # Check the probability of a start event
+                            if (rand() < ($fAppCalib*$dActivityProbability)) {
+                                ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartAppliance($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
+                            };
+                        } elsif ($sUseProfile =~ m/Custom/) {
+                            # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
+                            # THIS CODE BLOCK DETERMINES HOW CUSTOM APPLIANCE IS SWITCHED ON
+                            # ($iCycleTimeLeft,$iRestartDelayTimeLeft,$Profile[$iYear]) = StartCustom($item,$iRatedPower,$iMeanCycleLength,$iRestartDelay,$iStandbyPower);
+                        };
+    
+                    # The appliance is on - if the occupants become inactive, switch off the appliance
+                    } else {
+                        if (($Occ[$iYear] == 0) && ($sUseProfile !~ m/Level/) && ($sUseProfile !~ m/Act_Laundry/) && ($item !~ m/Dishwasher/) && ($sUseProfile !~ m/Custom/)) {
+                            # Do nothing. The activity will be completed upon the return of the active occupancy.
+                            # Note that LEVEL means that the appliance use is not related to active occupancy.
+                            # Note also that laundry appliances do not switch off upon a transition to inactive occupancy.
+                            # The original CREST model was modified to include dishwashers here as well
+                        } elsif ($sUseProfile !~ m/Custom/) { 
+                            # Set the power
+                            $Profile[$iYear]=GetPowerUsage($item,$iRatedPower,$iCycleTimeLeft,$iStandbyPower);
+                            
+                            # Decrement the cycle time left
+                            $iCycleTimeLeft--;
+                        } else { # Custum Use profile
+                            # PLACE CODE HERE FOR CUSTUM APPLIANCE BEHAVIOUR
+                            # THIS CODE BLOCK DETERMINES HOW CUSTOM APPLIANCE BEHAVES 
+                            # WHILE IT IS ON
+                            # $Profile[$iYear]=GetCustomUsage($item,$iRatedPower,$iCycleTimeLeft,$iMeanCycleLength,$iStandbyPower);
+                        };
+                    };
+    
+                    $iYear++; # Increment the minute of the year
+                }; # END MINUTE
+            }; # END TEN_MIN
+            $dayWeek++; # Increment the day of the week
+        }; # END DAY
+    }; # END CALCS
 
     return(\@Profile);
 };

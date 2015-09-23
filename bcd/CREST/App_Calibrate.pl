@@ -338,6 +338,7 @@ sub main {
     my @AggAnnual=();
     my $TrueError;      # Relative value for true error [%]
     my @Occ_keys=qw(zero one two three four five six);
+    my $iHseCount = 1; # House counter
 
     # --------------------------------------------------------------------
     # Begin processing each house model for the region and house type
@@ -346,9 +347,9 @@ sub main {
         my @Occ; # Array to hold occupancy
         my $issue = 0;      # Issue counter
         my $hse_occ = $CREST->{$hse_name}->{'Num_Occ'};
-        my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [kW]
-        my @TotalOther=(0) x 525600; # Array to hold the total power draw of all other appliances [kW]
-        my @TotalALL=(0) x 525600; # Array to hold the total power draw of ALL appliances [kW]
+        my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [W]
+        my @TotalOther=(0) x 525600; # Array to hold the total power draw of all other appliances [W]
+        my @TotalALL=(0) x 525600; # Array to hold the total power draw of ALL appliances [W]
         my $MeanActOcc=0;
         my $DayWeekStart = 4; # TODO: Determine day of the week
 
@@ -398,7 +399,7 @@ sub main {
                     my $Cold_Ref = &setColdProfile($UEC,$CalibCyc,$App->{'Types_Cold'}->{$cType}->{'Mean_cycle_L'},$App->{'Types_Cold'}->{$cType}->{'Restart_Delay'});
                     my @ThisCold = @$Cold_Ref;
                     
-                    # Update the total cold appliance power draw [kW]
+                    # Update the total cold appliance power draw [W]
                     for (my $k=0; $k<=$#ThisCold;$k++) {
                         $TotalCold[$k]=$TotalCold[$k]+$ThisCold[$k];
                     };
@@ -429,7 +430,7 @@ sub main {
             my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
             my @ThisApp = @$ThisApp_ref;
             
-            # Update the TotalOther array
+            # Update the TotalOther array [W]
             for(my $k=0;$k<=$#TotalOther;$k++) {
                 $TotalOther[$k]=$TotalOther[$k]+$ThisApp[$k];
             };
@@ -442,11 +443,12 @@ sub main {
         # --------------------------------------------------------------------
         my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh]
         for(my $k=0;$k<=$#TotalOther;$k++) {
-            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k];
-            $AnnPow=$AnnPow+(($TotalALL[$k]*60)/3600); # [kWh]
+            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]; # [W]
+            $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
         };
         push(@AggAnnual,$AnnPow);
-
+        print "Completed Record $iHseCount. Annual power is $AnnPow\n";
+        $iHseCount++;
     }; # END RECORD
 
     # --------------------------------------------------------------------
