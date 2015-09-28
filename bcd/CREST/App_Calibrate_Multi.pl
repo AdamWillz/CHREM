@@ -172,6 +172,8 @@ SET_CREST: {
         push(@hse_TOT,$hse_name);
         $CREST->{$hse_name}->{'Num_Occ'} = $hse_occ;
         $CREST->{$hse_name}->{'data'}= dclone $NNdata; # All the NN data associtated with this record
+        $CREST->{$hse_name}->{'stove_fuel'}=$CSDDRD->{'stove_fuel_use'}; # Fuel use: 1 = NG or propane, 2 = electricity
+        $CREST->{$hse_name}->{'dryer_fuel'}=$CSDDRD->{'dryer_fuel_used'}; # Fuel use: 1 = NG or propane, 2 = electricity
     }; # END REC
     close $LIST;
 }; # END CSDDRD_READ
@@ -367,7 +369,7 @@ GOLDEN: {
             };
             $pred2 = $AggkWh/$iThreads;
             $AggkWh = 0; # Reinitialize
-            $f2 = abs($Target-$pred1);
+            $f2 = abs($Target-$pred2);
             # --------------------------------------------------------
         };
         $count++;
@@ -407,9 +409,9 @@ GOLDEN: {
         my @Dummy = $thread->{"$w"}->join();
         $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
     };
-    $pVaild = $AggkWh/$iThreads;
+    my $pVaild = $AggkWh/$iThreads;
     $AggkWh = 0; # Reinitialize
-    $fValid = abs($Target-$pred1);
+    my $fValid = abs($Target-$pred1);
     # --------------------------------------------------------
     print "Validation complete\n";
 
@@ -454,7 +456,9 @@ sub main {
         my $hse_occ = $CREST->{$hse_name}->{'Num_Occ'};
         my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [W]
         my @TotalOther=(0) x 525600; # Array to hold the total power draw of all other appliances [W]
-        my @TotalALL=(0) x 525600; # Array to hold the total power draw of ALL appliances [W]
+        my @TotalCook=(0) x 525600; # Array to hold the annual power draw of range and oven [W]
+        my @TotalDry=(0) x 525600; # Array to hold the annual power draw of dryer [W]
+        my @TotalALL=(0) x 525600; # Array to hold the total electrical power draw of ALL appliances [W]
         my $MeanActOcc=0;
         my $DayWeekStart = 4; # TODO: Determine day of the week
 
@@ -513,7 +517,7 @@ sub main {
         }; # END COLD
         
         # --------------------------------------------------------------------
-        # Generate the profiles of all other appliances
+        # Generate the profiles of all other appliances (except stove and dryer)
         # --------------------------------------------------------------------
         # Determine the appliance stock of this dwelling
         my @AppStock=();
@@ -541,14 +545,58 @@ sub main {
             };
         
         };
+
+        # --------------------------------------------------------------------
+        # Generate the profiles of all other appliances (except stove and dryer)
+        # --------------------------------------------------------------------
+        if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0) { # COOK: There is a stove, compute the profile
+            my @CookStock = ();
+            push(@CookStock,'Range');
+            push(@CookStock,'Oven');
+            
+            foreach my $item (@CookStock) { # For each appliance in the dwelling
+                # Load the appropriate appliance data
+                my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
+                my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
+                my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
+                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
+                my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
+                my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
+                my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
+                my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
+    
+                # Call the appliance simulation
+                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                @TotalCook = @$ThisApp_ref; # [W]
+
+            };
+        }; # END COOK
+        if($CREST->{$hse_name}->{'data'}->{'Clothes_Dryer'} > 0) { # DRY: If there is a dryer, generate the profile
+            my $item = 'Clothes_Dryer';
+            # Load the appropriate appliance data
+            my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
+            my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
+            my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
+            my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
+            my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
+            my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
+            my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
+            my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
+    
+            # Call the appliance simulation
+            my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+            @TotalDry = @$ThisApp_ref; # [W]
+        }; # END DRY
         
         # --------------------------------------------------------------------
         # Sum cold and other appliance vectors
         # Determine the annual energy consumption for the dwelling
         # --------------------------------------------------------------------
-        my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh]
-        for(my $k=0;$k<=$#TotalOther;$k++) {
-            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]; # [W]
+        my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh] (includes NG and Propane)
+        my $fFuelCook = 1;
+        if ($CREST->{$hse_name}->{'stove_fuel'} == 1) {$fFuelCook  =  2.0}; # Stove is NG/propane; electricity assumed twice as efficient 
+        for(my $k=0;$k<=$#TotalOther;$k++) {                                #(EPRI, Nov 2000,Technical brief, Electric and gas range tops: energy performance)
+            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+($fFuelCook*$TotalCook[$k])+$TotalDry[$k]; # [W]
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
         };
         push(@AggAnnual,$AnnPow);

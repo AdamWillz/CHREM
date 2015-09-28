@@ -512,12 +512,12 @@ sub GetApplianceStock {
     # Determine appliances from CHREM NN inputs
     
     # Presence only
-    if($NN->{'Stove'} > 0) {
-        push(@stock,'Range');
-        push(@stock,'Oven');
-    };
+    #if($NN->{'Stove'} > 0) {
+    #    push(@stock,'Range');
+    #    push(@stock,'Oven');
+    #};
     if($NN->{'Microwave'} > 0) {push(@stock,'Microwave')};
-    if($NN->{'Clothes_Dryer'} > 0) {push(@stock,'Clothes_Dryer')};
+    #if($NN->{'Clothes_Dryer'} > 0) {push(@stock,'Clothes_Dryer')};
     if($NN->{'Dishwasher'} > 0) {push(@stock,'Dishwasher')};
     if($NN->{'Fish_Tank'} > 0) {push(@stock,'Fish_Tank')};
     if($NN->{'Clothes_Washer'} > 0) {push(@stock,'Clothes_Washer')};
