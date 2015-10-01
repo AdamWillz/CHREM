@@ -66,7 +66,7 @@ our $ColdApp;             # HASH to hold the cold appliance data
 our $App;             # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
 my $phi = 1.61803398874989;  # Golden ratio
-my $iThreads = 3;                  # Number of threads
+my $iThreads = 1;                  # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -474,7 +474,7 @@ sub main {
             if($Step>0) {$MeanActOcc++};
         };
         $MeanActOcc=$MeanActOcc/($#Occ+1); # Fraction of time occupants are active
-        
+
         # --------------------------------------------------------------------
         # Generate Cold appliance profiles
         # --------------------------------------------------------------------
@@ -503,11 +503,11 @@ sub main {
                     # Determine the corresponding UEC for this vintage and appliance type (Refrigerator,Chest_Freezer,Upright_Freezer)
                     my ($UEC,$cType) = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
                     
-                    # Generate the annual appliance profile for this appliance
-                    my $CalibCyc = $fCalibrationScalar*$App->{'Types_Cold'}->{$cType}->{'Base_cycles'}; # Calibrated mean cycles per year
+                    # Generate the annual appliance profile for this appliance (NOTE: The calibration scalar is not applied here)
+                    my $CalibCyc = $App->{'Types_Cold'}->{$cType}->{'Base_cycles'}; # Calibrated mean cycles per year
                     my $Cold_Ref = &setColdProfile($UEC,$CalibCyc,$App->{'Types_Cold'}->{$cType}->{'Mean_cycle_L'},$App->{'Types_Cold'}->{$cType}->{'Restart_Delay'});
                     my @ThisCold = @$Cold_Ref;
-                    
+
                     # Update the total cold appliance power draw [W]
                     for (my $k=0; $k<=$#ThisCold;$k++) {
                         $TotalCold[$k]=$TotalCold[$k]+$ThisCold[$k];
@@ -538,7 +538,7 @@ sub main {
             # Call the appliance simulation
             my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
             my @ThisApp = @$ThisApp_ref;
-            
+
             # Update the TotalOther array [W]
             for(my $k=0;$k<=$#TotalOther;$k++) {
                 $TotalOther[$k]=$TotalOther[$k]+$ThisApp[$k];
@@ -547,7 +547,7 @@ sub main {
         };
 
         # --------------------------------------------------------------------
-        # Generate the profiles of all other appliances (except stove and dryer)
+        # Generate the profiles of the stove and dryer
         # --------------------------------------------------------------------
         if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0) { # COOK: There is a stove, compute the profile
             my @CookStock = ();
@@ -567,7 +567,12 @@ sub main {
     
                 # Call the appliance simulation
                 my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
-                @TotalCook = @$ThisApp_ref; # [W]
+                my @ThisCook = @$ThisApp_ref; # [W]
+
+                # Update the TotalCook array [W]
+                for(my $k=0;$k<=$#TotalCook;$k++) {
+                    $TotalCook[$k]=$TotalCook[$k]+$ThisCook[$k];
+                };
 
             };
         }; # END COOK
@@ -586,8 +591,9 @@ sub main {
             # Call the appliance simulation
             my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
             @TotalDry = @$ThisApp_ref; # [W]
+
         }; # END DRY
-        
+
         # --------------------------------------------------------------------
         # Sum cold and other appliance vectors
         # Determine the annual energy consumption for the dwelling

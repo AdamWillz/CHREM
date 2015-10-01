@@ -5,10 +5,6 @@ Ref: Energy consumption of Major Household Appliances Shipped in Canada:
      Trends for 1990-2010-->
         
 <FREEZER>
-
-    <!--Inputs based on the defaults from the CREST model for 'Refrigerator'-->
-    <Inputs iMeanCycleLength="18" iRestartDelay="36" iBaseCyclesYear="6116"/>
-
     <!--National Distribution of freezer types by year [%]. Table A.17 -->
     <!--Type 8: Upright Manual Defrost -->
     <!--Type 9: Upright Auto Defrost -->

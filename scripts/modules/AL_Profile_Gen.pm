@@ -505,6 +505,7 @@ sub GetApplianceStock {
     my $AppRegion = shift;
     
     # Local variables
+    my $bHasTV = 0;     # Boolean variable to indicate presence of TV
 
     # Declare outputs
     my @stock=();
@@ -534,12 +535,7 @@ sub GetApplianceStock {
     if($NN->{'Color_TV'} > 0) {
         for(my $i=1; $i<=$NN->{'Color_TV'};$i++) {
             push(@stock,'TV');
-            if (rand() < $AppRegion->{'TV_Reciever_box'}) { # Is there an associated receiver box?
-                push(@stock,'TV_Reciever_box');
-            };
-            if (rand() < $AppRegion->{'Game_Console'}) {
-                push(@stock,'Game_Console');
-            };
+            $bHasTV=$bHasTV+1;
         };
     };
     if($NN->{'Computer'} > 0) {
@@ -558,6 +554,7 @@ sub GetApplianceStock {
     if($NN->{'BW_TV'} > 0) {
         for(my $i=1; $i<=$NN->{'BW_TV'};$i++) {
             push(@stock,'TV');
+            $bHasTV=$bHasTV+1;
         };
     };
     if($NN->{'CD_Player'} > 0) {
@@ -572,16 +569,33 @@ sub GetApplianceStock {
     };
 
     # Randomly distribute the remaining CREST appliances
-    if (rand() < $AppRegion->{'Iron'}) {
+    if (rand() < $AppRegion->{'Iron'}->{'Portion'}) {
         push(@stock,'Iron');
     };
-    if (rand() < $AppRegion->{'Kettle'}) {
+    if (rand() < $AppRegion->{'Kettle'}->{'Portion'}) {
         push(@stock,'Kettle');
     };
-    if (rand() < $AppRegion->{'Hair_Dryer'}) {
+    if (rand() < $AppRegion->{'Hair_Dryer'}->{'Portion'}) {
         push(@stock,'Hair_Dryer');
     };
-
+    
+    # Determine TV accessory stock
+    if ($bHasTV>0) {
+        if (rand() < $AppRegion->{'TV_Reciever_box'}->{'Portion'}) { # Is there an associated receiver box?
+            # How many?
+            push(@stock,'TV_Reciever_box');
+            if ($bHasTV>1) { # More than one TV
+                if (rand() > $AppRegion->{'TV_Reciever_box'}->{'Only_One'}) {push(@stock,'TV_Reciever_box')}; # Add another console
+            };
+        };
+        if (rand() < $AppRegion->{'Game_Console'}->{'Portion'}) {
+            # How many?
+            push(@stock,'Game_Console');
+            if ($bHasTV>1) { # More than one TV
+                if (rand() > $AppRegion->{'Game_Console'}->{'Only_One'}) {push(@stock,'Game_Console')}; # Add another console
+            };
+        };
+    }
     return(\@stock);
 };
 
@@ -646,7 +660,7 @@ sub GetApplianceProfile {
     };
     
     if ($bBaseL < 1) { # Not a baseload appliance, calculate the timestep data
-        # Make the rated power variable over a normal distribution to provide some variation
+        # Make the rated power variable over a normal distribution to provide some variation [W]
         $iRatedPower = GetMonteCarloNormalDistGuess($iRatedPower,($iRatedPower/10));
         
         # Determine if appliance operation is weekday/weekend dependent
@@ -1095,11 +1109,23 @@ sub ApplianceCalibrationScalar {
 
     # Determine the calibration scalar for this appliance
     my $iTimeRunYr = $iCyclesPerYear*$iMeanCycleLength; # Time spent running per year [min]
+    if ($iTimeRunYr>525600) { # Not possible to have this many cycles
+        # Warn the user
+        print "WARNING: Appliance with $iCyclesPerYear cycles per year and cycle length $iMeanCycleLength min\n";
+        print "         Computed running time exceeds time in year. Setting time spent running to 70% of year.\n";
+        $iCyclesPerYear = floor((525600*0.7)/$iMeanCycleLength);
+        $iTimeRunYr = $iCyclesPerYear*$iMeanCycleLength;
+    };
     my $iMinutesCanStart; # Minutes in a year when an event can start
     if($sOccDepend =~ m/YES/) { # Appliance is active occupant dependent
         $iMinutesCanStart = (525600*$MeanActOcc)-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
     } else { # Appliance is not active occupant dependent
         $iMinutesCanStart = 525600-($iTimeRunYr+($iCyclesPerYear*$iRestartDelay));
+    };
+    if ($iMinutesCanStart<=0) { # There is no minutes when this appliance can start
+        print "WARNING: Appliance has $iMinutesCanStart min in the year which it can start\n";
+        print "         Setting mean start time between events to 1 min\n";
+        $iMinutesCanStart=$iCyclesPerYear;
     };
     my $fMeanCanStart=$iMinutesCanStart/$iCyclesPerYear; # Mean time between start events given occupancy [min]
     my $fLambda = 1/$fMeanCanStart;

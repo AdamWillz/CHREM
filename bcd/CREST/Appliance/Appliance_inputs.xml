@@ -87,46 +87,46 @@
             <Iron Portion="0.900"/>
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.803"/>
-            <TV_Reciever_box Portion="0.649"/>
+            <TV_Reciever_box Portion="0.649" Only_One="0.577"/>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.445"/>
+            <Game_Console Portion="0.445" Only_One="0.753"/>
         </_1-AT>
         <_2-QC> 
             <Iron Portion="0.900"/>
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.766"/>
-            <TV_Reciever_box Portion="0.718"/>
+            <TV_Reciever_box Portion="0.718" Only_One="0.625"/>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.410"/>
+            <Game_Console Portion="0.410" Only_One="0.825"/>
         </_2-QC>
         <_3-OT> 
             <Iron Portion="0.900"/>
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.763"/>
-            <TV_Reciever_box Portion="0.676"/>
+            <TV_Reciever_box Portion="0.676" Only_One="0.544"/>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.462"/>
+            <Game_Console Portion="0.462" Only_One="0.680"/>
         </_3-OT>
         <_4-PR> 
             <Iron Portion="0.900"/>
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.816"/>
-            <TV_Reciever_box Portion="0.725"/>
+            <TV_Reciever_box Portion="0.725" Only_One="0.585"/>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.421"/>
+            <Game_Console Portion="0.421" Only_One="0.775"/>
         </_4-PR>
         <_5-BC> 
             <Iron Portion="0.900"/>
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.817"/>
-            <TV_Reciever_box Portion="0.758"/>
+            <TV_Reciever_box Portion="0.758" Only_One="0.679"/>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
-            <Game_Console Portion="0.374"/>
+            <Game_Console Portion="0.374" Only_One="1.0"/>
         </_5-BC>
     </Ownership>
     

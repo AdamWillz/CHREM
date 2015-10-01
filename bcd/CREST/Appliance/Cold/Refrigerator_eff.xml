@@ -3,9 +3,6 @@
         volume [kWh/yr]. Ref: SHEU 2011-->
         
 <FRIDGE>
-    <!--Inputs based on the defaults from the CREST model for 'Refrigerator'-->
-    <Inputs iMeanCycleLength="18" iRestartDelay="36" iBaseCyclesYear="6116"/>
-    
     <!--Classes of fridge sizes [cu. ft]-->
     <Sizes intervals="7">
         <_1 max="10.4"/>
