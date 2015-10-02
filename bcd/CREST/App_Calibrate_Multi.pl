@@ -66,7 +66,7 @@ our $ColdApp;             # HASH to hold the cold appliance data
 our $App;             # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
 my $phi = 1.61803398874989;  # Golden ratio
-my $iThreads = 1;                  # Number of threads
+my $iThreads = 7;                  # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
