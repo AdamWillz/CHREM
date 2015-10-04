@@ -410,8 +410,7 @@ GOLDEN: {
         $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
     };
     my $pVaild = $AggkWh/$iThreads;
-    $AggkWh = 0; # Reinitialize
-    my $fValid = abs($Target-$pred1);
+    my $fValid = abs($Target-$pVaild);
     # --------------------------------------------------------
     print "Validation complete\n";
 
