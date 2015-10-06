@@ -66,7 +66,7 @@ our $ColdApp;             # HASH to hold the cold appliance data
 our $App;             # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
 my $phi = 1.61803398874989;  # Golden ratio
-my $iThreads = 7;                  # Number of threads
+my $iThreads = 16;                  # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -552,13 +552,15 @@ sub main {
             my @CookStock = ();
             push(@CookStock,'Range');
             push(@CookStock,'Oven');
+            my $fFuelCook = 1;
+            if ($CREST->{$hse_name}->{'stove_fuel'} == 1) {$fFuelCook  =  2.0}; # Stove is natural gas
             
             foreach my $item (@CookStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data
                 my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
                 my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
                 my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
-                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
+                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}/$fFuelCook; # Standby power [W] (reduce the standby, will be scaled up later)
                 my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
                 my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
                 my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
