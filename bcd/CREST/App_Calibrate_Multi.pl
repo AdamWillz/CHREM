@@ -444,7 +444,6 @@ sub main {
     my @AggAnnual=();
     my $TrueError;      # Relative value for true error [%]
     my @Occ_keys=qw(zero one two three four five six);
-    my $iHseCount = 1; # House counter
 
     # --------------------------------------------------------------------
     # Begin processing each house model for the region and house type
@@ -607,7 +606,6 @@ sub main {
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
         };
         push(@AggAnnual,$AnnPow);
-        $iHseCount++;
     }; # END RECORD
 
     # --------------------------------------------------------------------
