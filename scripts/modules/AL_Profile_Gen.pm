@@ -505,20 +505,14 @@ sub GetApplianceStock {
     my $AppRegion = shift;
     
     # Local variables
-    my $bHasTV = 0;     # Boolean variable to indicate presence of TV
+    my $bHasTV = 0;     # Interger to track number of TVs in dwelling
 
     # Declare outputs
     my @stock=();
     
     # Determine appliances from CHREM NN inputs
-    
-    # Presence only
-    #if($NN->{'Stove'} > 0) {
-    #    push(@stock,'Range');
-    #    push(@stock,'Oven');
-    #};
+
     if($NN->{'Microwave'} > 0) {push(@stock,'Microwave')};
-    #if($NN->{'Clothes_Dryer'} > 0) {push(@stock,'Clothes_Dryer')};
     if($NN->{'Dishwasher'} > 0) {push(@stock,'Dishwasher')};
     if($NN->{'Fish_Tank'} > 0) {push(@stock,'Fish_Tank')};
     if($NN->{'Clothes_Washer'} > 0) {push(@stock,'Clothes_Washer')};
@@ -534,8 +528,12 @@ sub GetApplianceStock {
     # Counts
     if($NN->{'Color_TV'} > 0) {
         for(my $i=1; $i<=$NN->{'Color_TV'};$i++) {
-            push(@stock,'TV');
-            $bHasTV=$bHasTV+1;
+            $bHasTV++;
+            if($bHasTV>3) {
+                push(@stock,'TV_9999');
+            } else {
+                push(@stock,"TV_$bHasTV");
+            };
         };
     };
     if($NN->{'Computer'} > 0) {
@@ -553,8 +551,12 @@ sub GetApplianceStock {
     };
     if($NN->{'BW_TV'} > 0) {
         for(my $i=1; $i<=$NN->{'BW_TV'};$i++) {
-            push(@stock,'TV');
-            $bHasTV=$bHasTV+1;
+            $bHasTV++;
+            if($bHasTV>3) {
+                push(@stock,'TV_9999');
+            } else {
+                push(@stock,"TV_$bHasTV");
+            };
         };
     };
     if($NN->{'CD_Player'} > 0) {
@@ -912,9 +914,6 @@ sub CycleLength {
     
     if($item =~ m/TV/) { # If the appliance is a television
         # The cycle length is approximated by the following function
-        # Average time Canadians spend watching TV is 2.1 hrs (Stats Can: General 
-        # social survey (GSS), average time spent on various activities for the 
-        # population aged 15 years and over, by sex and main activity. 2010)
         my $fRando = rand();
         if ($fRando > 0.999) {$fRando=0.995};
         $CycleLen=int($iMeanCycleLength * ((0 - log(1 - $fRando)) ** 1.1));
