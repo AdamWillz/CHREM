@@ -508,7 +508,7 @@ sub GetApplianceStock {
     my $bHasTV = 0;     # Interger to track number of TVs in dwelling
 
     # Declare outputs
-    my @stock=();
+    my @stock=('Base_Load'); # Every dwelling has a baseload 
     
     # Determine appliances from CHREM NN inputs
 
@@ -650,16 +650,17 @@ sub GetApplianceProfile {
     my @PDF=(); # Array to hold the ten minute interval usage statistics for the appliance
     my $fAppCalib;
     my $bBaseL=0; # Boolean to state whether this appliance is a constant base load
-    
-    # Declare outputs
-    my @Profile=($iStandbyPower) x 525600; # Initialize to constant standby power [W]
-    
+
     # Determine the calibration scalar
     if ($iCyclesPerYear > 0) {
         $fAppCalib = ApplianceCalibrationScalar($iCyclesPerYear,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb);
     } else { # This is just a constant load
         $bBaseL=1;
     };
+    
+    # Declare outputs
+    if($bBaseL == 1) {$iStandbyPower = GetMonteCarloNormalDistGuess($iStandbyPower,($iStandbyPower/10))}; # Add variance to the base load
+    my @Profile=($iStandbyPower) x 525600; # Initialize to constant standby power [W]
     
     if ($bBaseL < 1) { # Not a baseload appliance, calculate the timestep data
         # Make the rated power variable over a normal distribution to provide some variation [W]

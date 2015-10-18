@@ -86,7 +86,7 @@ my $SubSet = 377;   # Number of houses to run each iteration
 # Read the command line input arguments
 # --------------------------------------------------------------------
 
-if (@ARGV < 5) {die "Four arguments are required: house_type region Target low high\n";};	# check for proper argument count
+if (@ARGV < 5) {die "Five arguments are required: house_type region Target low high\n";};	# check for proper argument count
 
 # Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
 ($hse_types, $regions) = &hse_types_and_regions_and_set_name(shift(@ARGV), shift(@ARGV));
@@ -236,7 +236,7 @@ GOLDEN: {
     if ($iThreads<=0) {die "Number of threads cannot be less than 1\n"};
     my $iChunk = floor(($#hse_list+1)/$iThreads); # Number of houses sent to each thread
     my $thread;
-    my $AggkWh = 0; # Holds the aggregate average across the threads
+    my $AggkWh = 0; # Holds the aggregate energy consumption across the threads
     
     # Evaluate the interior points
     # $x1-----------------------------------------------------
@@ -249,13 +249,13 @@ GOLDEN: {
             $end = $#hse_list;
         };
         my @ShortList = @hse_list[ $start .. $end ];
-        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x1);
+        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x1,$w);
     };
     for(my $w=1; $w<=$iThreads; $w++){
         my @Dummy = $thread->{"$w"}->join();
-        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
+        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
     };
-    $pred1 = $AggkWh/$iThreads;
+    $pred1 = $AggkWh/($#hse_list+1);
     $AggkWh = 0; # Reinitialize
     $f1 = abs($Target-$pred1);
     # --------------------------------------------------------
@@ -271,13 +271,13 @@ GOLDEN: {
             $end = $#hse_list;
         };
         my @ShortList = @hse_list[ $start .. $end ];
-        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x2);
+        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x2,$w);
     };
     for(my $w=1; $w<=$iThreads; $w++){
         my @Dummy = $thread->{"$w"}->join();
-        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output (second variable) [kWh/yr]
+        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
     };
-    $pred2 = $AggkWh/$iThreads;
+    $pred2 = $AggkWh/($#hse_list+1);
     $AggkWh = 0; # Reinitialize
     $f2 = abs($Target-$pred1);
     # --------------------------------------------------------
@@ -322,13 +322,13 @@ GOLDEN: {
                     $end = $#hse_list;
                 };
                 my @ShortList = @hse_list[ $start .. $end ];
-                ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x1);
+                ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x1,$w);
             };
             for(my $w=1; $w<=$iThreads; $w++){
                 my @Dummy = $thread->{"$w"}->join();
-                $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
+                $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
             };
-            $pred1 = $AggkWh/$iThreads;
+            $pred1 = $AggkWh/($#hse_list+1);
             $AggkWh = 0; # Reinitialize
             $f1 = abs($Target-$pred1);
             # --------------------------------------------------------
@@ -361,13 +361,13 @@ GOLDEN: {
                     $end = $#hse_list;
                 };
                 my @ShortList = @hse_list[ $start .. $end ];
-                ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x2);
+                ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x2,$w);
             };
             for(my $w=1; $w<=$iThreads; $w++){
                 my @Dummy = $thread->{"$w"}->join();
-                $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
+                $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
             };
-            $pred2 = $AggkWh/$iThreads;
+            $pred2 = $AggkWh/($#hse_list+1);
             $AggkWh = 0; # Reinitialize
             $f2 = abs($Target-$pred2);
             # --------------------------------------------------------
@@ -403,13 +403,13 @@ GOLDEN: {
             $end = $#hse_list;
         };
         my @ShortList = @hse_list[ $start .. $end ];
-        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$xmin);
+        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$xmin,$w);
     };
     for(my $w=1; $w<=$iThreads; $w++){
         my @Dummy = $thread->{"$w"}->join();
-        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
+        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
     };
-    my $pVaild = $AggkWh/$iThreads;
+    my $pVaild = $AggkWh/($#hse_list+1);
     my $fValid = abs($Target-$pVaild);
     # --------------------------------------------------------
     print "Validation complete\n";
@@ -438,11 +438,12 @@ sub main {
 
     my $list_ref = shift;
     my $fCalibrationScalar = shift;
+    my $iThreadNum = shift;
     my @houses = @$list_ref;
     
-    my $kWhAverage; 
+    #my $kWhAverage; 
     my @AggAnnual=();
-    my $TrueError;      # Relative value for true error [%]
+    #my $TrueError;      # Relative value for true error [%]
     my @Occ_keys=qw(zero one two three four five six);
 
     # --------------------------------------------------------------------
@@ -612,17 +613,19 @@ sub main {
     # determine the average per household
     # --------------------------------------------------------------------
     my $Agg=0;
-    my $Nhousehold = scalar @AggAnnual;
+    #my $Nhousehold = scalar @AggAnnual;
     foreach my $load (@AggAnnual) {
         $Agg=$Agg+$load;
     };
-    $kWhAverage = $Agg/$Nhousehold;
+    #$kWhAverage = $Agg/$Nhousehold;
 
     # Determine the absolute true error
-    $TrueError = abs($Target-$kWhAverage);
+    #$TrueError = abs($Target-$kWhAverage);
+    #print "True Error $TrueError, average of $kWhAverage kWh\n";
+    #return($TrueError,$kWhAverage);
     
-    print "True Error $TrueError, average of $kWhAverage kWh\n";
-    return($TrueError,$kWhAverage);
+    print "Thread $iThreadNum complete\n";
+    return(1,$Agg);
 
 }; # END sub main
 
