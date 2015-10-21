@@ -236,7 +236,7 @@ GOLDEN: {
     if ($iThreads<=0) {die "Number of threads cannot be less than 1\n"};
     my $iChunk = floor(($#hse_list+1)/$iThreads); # Number of houses sent to each thread
     my $thread;
-    my $AggkWh = 0; # Holds the aggregate energy consumption across the threads
+    my $AggkWh=0.0; # Holds the aggregate energy consumption across the threads
     
     # Evaluate the interior points
     # $x1-----------------------------------------------------
@@ -256,7 +256,9 @@ GOLDEN: {
         $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
     };
     $pred1 = $AggkWh/($#hse_list+1);
-    $AggkWh = 0; # Reinitialize
+    print "Aggregate energy is $AggkWh, average is $pred1\n";
+    sleep;
+    $AggkWh = 0.0; # Reinitialize
     $f1 = abs($Target-$pred1);
     # --------------------------------------------------------
     $datestring = localtime();
@@ -521,7 +523,6 @@ sub main {
         # Determine the appliance stock of this dwelling
         my @AppStock=();
         my $AppStock_ref = &GetApplianceStock($CREST->{$hse_name}->{'data'},$App->{'Ownership'}->{"_$region"});
-        @AppStock=@$AppStock_ref;
         
         foreach my $item (@AppStock) { # For each appliance in the dwelling
             # Load the appropriate appliance data
@@ -599,20 +600,21 @@ sub main {
         # Sum cold and other appliance vectors
         # Determine the annual energy consumption for the dwelling
         # --------------------------------------------------------------------
-        my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh] (includes NG and Propane)
+        my $AnnPow=0.0; # Total appliance energy consumption for the year for this dwelling[kWh] (includes NG and Propane)
         my $fFuelCook = 1;
         if ($CREST->{$hse_name}->{'stove_fuel'} == 1) {$fFuelCook  =  2.0}; # Stove is NG/propane; electricity assumed twice as efficient 
         for(my $k=0;$k<=$#TotalOther;$k++) {                                #(EPRI, Nov 2000,Technical brief, Electric and gas range tops: energy performance)
             $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+($fFuelCook*$TotalCook[$k])+$TotalDry[$k]; # [W]
-            $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
+            $AnnPow=$AnnPow+((($TotalALL[$k]*60.0)/3600.0)/1000.0); # [kWh]
         };
         push(@AggAnnual,$AnnPow);
+        print "Annual power for $hse_name is $AnnPow kWh \n";
     }; # END RECORD
 
     # --------------------------------------------------------------------
     # determine the average per household
     # --------------------------------------------------------------------
-    my $Agg=0;
+    my $Agg=0.0;
     #my $Nhousehold = scalar @AggAnnual;
     foreach my $load (@AggAnnual) {
         $Agg=$Agg+$load;

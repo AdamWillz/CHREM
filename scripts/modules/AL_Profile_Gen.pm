@@ -913,7 +913,7 @@ sub CycleLength {
     # Declare outputs
     my $CycleLen=$iMeanCycleLength;
     
-    if($item =~ m/TV/) { # If the appliance is a television
+    if($item =~ m/^TV/) { # If the appliance is a television
         # The cycle length is approximated by the following function
         my $fRando = rand();
         if ($fRando > 0.999) {$fRando=0.995};
