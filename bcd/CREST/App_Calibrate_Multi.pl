@@ -256,8 +256,6 @@ GOLDEN: {
         $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
     };
     $pred1 = $AggkWh/($#hse_list+1);
-    print "Aggregate energy is $AggkWh, average is $pred1\n";
-    sleep;
     $AggkWh = 0.0; # Reinitialize
     $f1 = abs($Target-$pred1);
     # --------------------------------------------------------
@@ -280,7 +278,7 @@ GOLDEN: {
         $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
     };
     $pred2 = $AggkWh/($#hse_list+1);
-    $AggkWh = 0; # Reinitialize
+    $AggkWh = 0.0; # Reinitialize
     $f2 = abs($Target-$pred1);
     # --------------------------------------------------------
     $datestring = localtime();
@@ -331,7 +329,7 @@ GOLDEN: {
                 $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
             };
             $pred1 = $AggkWh/($#hse_list+1);
-            $AggkWh = 0; # Reinitialize
+            $AggkWh = 0.0; # Reinitialize
             $f1 = abs($Target-$pred1);
             # --------------------------------------------------------
             
@@ -370,7 +368,7 @@ GOLDEN: {
                 $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy consumption of subset [kWh/yr]
             };
             $pred2 = $AggkWh/($#hse_list+1);
-            $AggkWh = 0; # Reinitialize
+            $AggkWh = 0.0; # Reinitialize
             $f2 = abs($Target-$pred2);
             # --------------------------------------------------------
         };
