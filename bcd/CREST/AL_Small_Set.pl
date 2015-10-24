@@ -69,7 +69,7 @@ our $light_sim;            # HASH holding lighting sim data
 our $ColdApp;              # HASH to hold the cold appliance data
 our $App;                  # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
-my $iThreads = 4;          # Number of threads
+my $iThreads = 1;          # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -318,6 +318,8 @@ sub main {
     my $list_ref = shift;
     #my $fCalibrationScalar = shift;
     my @houses = @$list_ref;
+    print "Light calibration $LightCalib\n";
+    print "Appliance calibration $AppCalib\n";
     
     my @Occ_keys=qw(zero one two three four five six);
     my $iHseCount = 0; # House counter
