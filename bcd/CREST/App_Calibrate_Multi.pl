@@ -591,8 +591,12 @@ sub main {
             my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
     
             # Call the appliance simulation
-            my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
-            @TotalDry = @$ThisApp_ref; # [W]
+            if ($CREST->{$hse_name}->{'dryer_fuel'} != 1) { # Dryer is not natural gas/propane
+                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                @TotalDry = @$ThisApp_ref; # [W]
+            } else { # Dryer is natural gas/propane. Only consider the standby power
+                @TotalDry = ($iStandbyPower) x 525600;
+            };
 
         }; # END DRY
 
