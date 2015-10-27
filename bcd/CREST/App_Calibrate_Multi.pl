@@ -602,11 +602,14 @@ sub main {
 
         # --------------------------------------------------------------------
         # Sum cold and other appliance vectors
+        # ADD THE BASELOAD
         # Determine the annual energy consumption for the dwelling
         # --------------------------------------------------------------------
-        my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh] (includes NG and Propane)
-        for(my $k=0;$k<=$#TotalOther;$k++) {                                #(EPRI, Nov 2000,Technical brief, Electric and gas range tops: energy performance)
-            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k]; # [W]
+        my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh]
+        my $ThisBase = $App->{'Types_Other'}->{'Base_Load'}->{'Standby'}; # Constant baseload power [W]
+        $ThisBase = GetMonteCarloNormalDistGuess($ThisBase,($ThisBase/10));
+        for(my $k=0;$k<=$#TotalOther;$k++) {
+            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k] + $ThisBase; # [W]
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
         };
         push(@AggAnnual,$AnnPow);
@@ -638,5 +641,29 @@ SUBROUTINES: {
         my ($x, $y) = @_;
     return int(rand($y - $x)) + $x;
     };
+    
+    sub GetMonteCarloNormalDistGuess {
+        my ($dMean, $dSD) = @_;
+        my $iGuess=0;
+        my $bOk;
+        
+        if($dMean == 0) {
+            $bOk = 1;
+        } else {
+            $bOk = 0;
+        };
+        
+        while (!$bOk) {
+            $iGuess = (rand()*($dSD*8))-($dSD*4)+$dMean;
+            my $px = (1/($dSD * sqrt(2*3.14159))) * exp(-(($iGuess - $dMean) ** 2) / (2 * $dSD * $dSD));
+    
+            if ($px >= rand()) {$bOk=1};
+    
+        };
+    
+        return $iGuess;
+        
+    };
+};
 
 };

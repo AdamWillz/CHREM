@@ -80,6 +80,9 @@
         <Hair_Dryer     Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="365"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
         <Game_Console   Use_Profile="Act_TV"         Mean_Pow_Cyc="25"   Standby="1"   Mean_cycle_L="50"   Restart_Delay="0"  Base_cycles="365"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
         <!--END: OTHER Appliances-->
+        <!--START: BASE LOAD POWER-->
+        <Base_Load   Standby="15"/>
+        <!--END: BASE LOAD POWER-->
     </Types_Other>
     
     <Ownership>
