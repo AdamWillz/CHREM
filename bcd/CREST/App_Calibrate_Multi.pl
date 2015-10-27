@@ -551,24 +551,26 @@ sub main {
             my @CookStock = ();
             push(@CookStock,'Range');
             push(@CookStock,'Oven');
-            my $fFuelCook = 1;
-            if ($CREST->{$hse_name}->{'stove_fuel'} == 1) {$fFuelCook  =  2.0}; # Stove is natural gas
             
             foreach my $item (@CookStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data
                 my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
                 my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
                 my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
-                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}/$fFuelCook; # Standby power [W] (reduce the standby, will be scaled up later)
+                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W] (reduce the standby, will be scaled up later)
                 my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
                 my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
                 my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
                 my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
     
                 # Call the appliance simulation
-                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
-                my @ThisCook = @$ThisApp_ref; # [W]
-
+                my @ThisCook;
+                if ($CREST->{$hse_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
+                    my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                    @ThisCook = @$ThisApp_ref; # [W]
+                } else { # Stove is natural gas. Only consider standby power
+                    @ThisCook = ($iStandbyPower) x 525600;
+                };
                 # Update the TotalCook array [W]
                 for(my $k=0;$k<=$#TotalCook;$k++) {
                     $TotalCook[$k]=$TotalCook[$k]+$ThisCook[$k];
@@ -599,10 +601,8 @@ sub main {
         # Determine the annual energy consumption for the dwelling
         # --------------------------------------------------------------------
         my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh] (includes NG and Propane)
-        my $fFuelCook = 1;
-        if ($CREST->{$hse_name}->{'stove_fuel'} == 1) {$fFuelCook  =  2.0}; # Stove is NG/propane; electricity assumed twice as efficient 
         for(my $k=0;$k<=$#TotalOther;$k++) {                                #(EPRI, Nov 2000,Technical brief, Electric and gas range tops: energy performance)
-            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+($fFuelCook*$TotalCook[$k])+$TotalDry[$k]; # [W]
+            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k]; # [W]
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
         };
         push(@AggAnnual,$AnnPow);
