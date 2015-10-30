@@ -69,7 +69,7 @@ our $light_sim;            # HASH holding lighting sim data
 our $ColdApp;              # HASH to hold the cold appliance data
 our $App;                  # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
-my $iThreads = 1;          # Number of threads
+my $iThreads = 6;          # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -316,10 +316,9 @@ print "Finished profile generation on $datestring\n";
 sub main {
 
     my $list_ref = shift;
-    #my $fCalibrationScalar = shift;
     my @houses = @$list_ref;
-    print "Light calibration $LightCalib\n";
-    print "Appliance calibration $AppCalib\n";
+    #print "Light calibration $LightCalib\n";
+    #print "Appliance calibration $AppCalib\n";
     
     my @Occ_keys=qw(zero one two three four five six);
     my $iHseCount = 0; # House counter
@@ -479,44 +478,13 @@ sub main {
         # Generate the electric profiles of the stove and dryer
         # --------------------------------------------------------------------
         my $nEStoves = 0; # Number of electric stoves
-        if(($CREST->{$hse_name}->{'data'}->{'Stove'} > 0) && ($CREST->{$hse_name}->{'stove_fuel'} == 2)){ # COOK: There is a stove, generate profile
-            if ($CREST->{$hse_name}->{'stove_fuel'} == 2) { # stove is electric
-                my @CookStock = ();
-                push(@CookStock,'Range');
-                push(@CookStock,'Oven');
-                $nEStoves=1;
-    
-                foreach my $item (@CookStock) { # For each appliance in the dwelling
-                    # Load the appropriate appliance data
-                    my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
-                    my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
-                    my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$AppCalib; # Calibrated number of cycles per year
-                    my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
-                    my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
-                    my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
-                    my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
-                    my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
+        if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0){ # COOK: There is a stove, generate profile
+            my @CookStock = ();
+            push(@CookStock,'Range');
+            push(@CookStock,'Oven');
+            $nEStoves=1;
         
-                    # Call the appliance simulation
-                    my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
-                    my @ThisCook = @$ThisApp_ref; # [W]
-    
-                    # Update the TotalCook array [W]
-                    for(my $k=0;$k<=$#TotalCook;$k++) {
-                        $TotalCook[$k]=$TotalCook[$k]+$ThisCook[$k];
-                    };
-    
-                };
-            } else { # Stove is natural gas, consider standby only power draw
-                my $ConstPower = $App->{'Types_Other'}->{'Range'}->{'Standby'}+$App->{'Types_Other'}->{'Oven'}->{'Standby'};
-                @TotalCook=($ConstPower) x 525600;
-            };
-        }; # END COOK
-        my $nEDry = 0; # Number of electric stoves
-        if($CREST->{$hse_name}->{'data'}->{'Clothes_Dryer'} > 0) { # DRY: If there is a dryer, generate the profile
-            if ($CREST->{$hse_name}->{'stove_fuel'} == 2) { # Dryer is electric
-                my $item = 'Clothes_Dryer';
-                $nEDry = 1;
+            foreach my $item (@CookStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data
                 my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
                 my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
@@ -526,24 +494,56 @@ sub main {
                 my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
                 my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
                 my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
-        
+            
                 # Call the appliance simulation
+                my @ThisCook;
+                if ($CREST->{$hse_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
+                    my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                    @ThisCook = @$ThisApp_ref; # [W]
+                } else { # Stove is natural gas. Only consider standby power
+                    @ThisCook = ($iStandbyPower) x 525600;
+                };
+                # Update the TotalCook array [W]
+                for(my $k=0;$k<=$#TotalCook;$k++) {
+                    $TotalCook[$k]=$TotalCook[$k]+$ThisCook[$k];
+                };
+        
+            };
+        }; # END COOK
+        my $nEDry = 0; # Number of electric stoves
+        if($CREST->{$hse_name}->{'data'}->{'Clothes_Dryer'} > 0) { # DRY: If there is a dryer, generate the profile
+            my $item = 'Clothes_Dryer';
+            $nEDry = 1;
+            # Load the appropriate appliance data
+            my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
+            my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
+            my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$AppCalib; # Calibrated number of cycles per year
+            my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
+            my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
+            my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
+            my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
+            my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
+            
+            # Call the appliance simulation
+            if ($CREST->{$hse_name}->{'dryer_fuel'} != 1) { # Dryer is not natural gas/propane
                 my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
                 @TotalDry = @$ThisApp_ref; # [W]
-            } else { # Dryer is natural gas, use standby power only
-                my $ConstPower = $App->{'Types_Other'}->{'Clothes_Dryer'}->{'Standby'};
-                @TotalDry=($ConstPower) x 525600;
+            } else { # Dryer is natural gas/propane. Only consider the standby power
+                @TotalDry=($iStandbyPower) x 525600;
             };
-
+    
         }; # END DRY
 
         # --------------------------------------------------------------------
         # Sum lighting, cold, and other appliance vectors [W]
+        # Set the base load of the dwelling [W]
         # Determine the annual energy consumption for the dwelling [kWh]
         # --------------------------------------------------------------------
         $AnnPow=0; # Rezero annual power
+        my $ThisBase = $App->{'Types_Other'}->{'Base_Load'}->{'Standby'}; # Constant baseload power [W]
+        $ThisBase = GetMonteCarloNormalDistGuess($ThisBase,($ThisBase/10)); # Create some variations in the baseload
         for(my $k=0;$k<=$#TotalOther;$k++) {                                
-            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k]+($Light[$k]*1000); # [W]
+            $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k]+($Light[$k]*1000)+$ThisBase; # [W]
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
         };
 
@@ -580,6 +580,29 @@ SUBROUTINES: {
     sub rand_range {
         my ($x, $y) = @_;
     return int(rand($y - $x)) + $x;
+    };
+    
+    sub GetMonteCarloNormalDistGuess {
+        my ($dMean, $dSD) = @_;
+        my $iGuess=0;
+        my $bOk;
+        
+        if($dMean == 0) {
+            $bOk = 1;
+        } else {
+            $bOk = 0;
+        };
+        
+        while (!$bOk) {
+            $iGuess = (rand()*($dSD*8))-($dSD*4)+$dMean;
+            my $px = (1/($dSD * sqrt(2*3.14159))) * exp(-(($iGuess - $dMean) ** 2) / (2 * $dSD * $dSD));
+    
+            if ($px >= rand()) {$bOk=1};
+    
+        };
+    
+        return $iGuess;
+        
     };
 
 };
