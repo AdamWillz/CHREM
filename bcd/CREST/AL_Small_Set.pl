@@ -69,7 +69,7 @@ our $light_sim;            # HASH holding lighting sim data
 our $ColdApp;              # HASH to hold the cold appliance data
 our $App;                  # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
-my $iThreads = 6;          # Number of threads
+my $iThreads = 3;          # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -540,8 +540,9 @@ sub main {
         # Determine the annual energy consumption for the dwelling [kWh]
         # --------------------------------------------------------------------
         $AnnPow=0; # Rezero annual power
-        my $ThisBase = $App->{'Types_Other'}->{'Base_Load'}->{'Standby'}; # Constant baseload power [W]
-        $ThisBase = GetMonteCarloNormalDistGuess($ThisBase,($ThisBase/10)); # Create some variations in the baseload
+        my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
+        my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
+        $ThisBase = GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
         for(my $k=0;$k<=$#TotalOther;$k++) {                                
             $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k]+($Light[$k]*1000)+$ThisBase; # [W]
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]

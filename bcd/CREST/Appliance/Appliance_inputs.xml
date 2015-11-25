@@ -11,24 +11,24 @@
         Act_Occ_Dep: Active occupant dependant ["YES"/"NO"]-->
 <Appliance>
     <_1-AT> 
-        <_1-SD Calibration="1.000"/>
-        <_2-DR Calibration="1.000"/>
+        <_1-SD Calibration="1.000" Baseload="163" BaseStdDev="139"/>
+        <_2-DR Calibration="1.000" Baseload="116" BaseStdDev="71"/>
     </_1-AT>
     <_2-QC> 
-        <_1-SD Calibration="1.000"/>
-        <_2-DR Calibration="1.000"/>
+        <_1-SD Calibration="1.000" Baseload="163" BaseStdDev="139"/>
+        <_2-DR Calibration="1.000" Baseload="116" BaseStdDev="71"/>
     </_2-QC>
     <_3-OT> 
-        <_1-SD Calibration="1.19137517379395"/>
-        <_2-DR Calibration="1.44236192828559"/>
+        <_1-SD Calibration="1.19137517379395" Baseload="163" BaseStdDev="139"/>
+        <_2-DR Calibration="1.4618131056587" Baseload="116" BaseStdDev="71"/>
     </_3-OT>
     <_4-PR> 
-        <_1-SD Calibration="1.000"/>
-        <_2-DR Calibration="1.000"/>
+        <_1-SD Calibration="1.000" Baseload="163" BaseStdDev="139"/>
+        <_2-DR Calibration="1.000" Baseload="116" BaseStdDev="71"/>
     </_4-PR>
     <_5-BC> 
-        <_1-SD Calibration="1.000"/>
-        <_2-DR Calibration="1.000"/>
+        <_1-SD Calibration="1.000" Baseload="163" BaseStdDev="139"/>
+        <_2-DR Calibration="1.000" Baseload="116" BaseStdDev="71"/>
     </_5-BC>
 
     <Types_Cold>
@@ -80,9 +80,6 @@
         <Hair_Dryer     Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="365"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
         <Game_Console   Use_Profile="Act_TV"         Mean_Pow_Cyc="25"   Standby="1"   Mean_cycle_L="50"   Restart_Delay="0"  Base_cycles="365"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>
         <!--END: OTHER Appliances-->
-        <!--START: BASE LOAD POWER-->
-        <Base_Load   Standby="15"/>
-        <!--END: BASE LOAD POWER-->
     </Types_Other>
     
     <Ownership>
