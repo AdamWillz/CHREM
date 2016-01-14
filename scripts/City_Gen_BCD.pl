@@ -206,8 +206,6 @@ print "Complete\n";
 foreach my $blb (keys (%{$light_sim->{'Types'}})) { # Read an store all bulb categories
     push(@BTypes,$blb);
 };
-print Dumper @BTypes;
-sleep;
 # --------------------------------------------------------------------
 # Load in cold appliance data
 # --------------------------------------------------------------------
@@ -276,7 +274,7 @@ my $BCD_dhw_al_ann = &cross_ref_readin($BCD_dhw_al_ann_files[0]);	# create an DH
 # Declare important variables for file generation
 # -----------------------------------------------
 # The template extentions that will be used in file generation (alphabetical order)
-my $bld_extensions = ['aim', 'cfg', 'cnn', 'ctl', 'dhw', 'elec', 'gshp', 'hvac', 'log', 'mvnt', 'afn', 'bcd'];	# extentions that are building based (not per zone)
+my $bld_extensions = ['aim', 'cfg', 'cnn', 'ctl', 'dhw', 'elec', 'gshp', 'hvac', 'log', 'mvnt', 'afn'];	# extentions that are building based (not per zone)
 
 # If the simulation uses TMC file for optic or CFC file two different templates are needed
 my $zone_extensions = ['bsm', 'con', 'geo', 'obs', 'opr', 'tmc'];
@@ -543,7 +541,7 @@ MAIN: {
             # --------------------------------------------------------------------
             # Determine number of occupants
             # --------------------------------------------------------------------
-            $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
+            my $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
             if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
                 #$issue++;
                 #$return->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
@@ -562,9 +560,9 @@ MAIN: {
             # --------------------------------------------------------------------
             # Update the list and CREST inputs for the house
             # --------------------------------------------------------------------
-            $CREST->{$hse_name}->{'Num_Occ'} = $hse_occ;
-            $CREST->{$hse_name}->{'Num_Bulbs'} = $iBulbs;
-            $CREST->{$hse_name}->{'data'}= dclone $NNdata; # All the NN data associtated with this record
+            $CREST->{$house_name}->{'Num_Occ'} = $hse_occ;
+            $CREST->{$house_name}->{'Num_Bulbs'} = $iBulbs;
+            $CREST->{$house_name}->{'data'}= dclone $NNdata; # All the NN data associtated with this record
         }; # END CREST_LOAD
         my @Occ_keys=qw(zero one two three four five six);
 
@@ -593,6 +591,8 @@ MAIN: {
                     last;
                 }
             }
+            $CREST->{$house_name}->{'stove_fuel'}=$CSDDRD->{'stove_fuel_use'}; # Fuel use: 1 = NG or propane, 2 = electricity
+            $CREST->{$house_name}->{'dryer_fuel'}=$CSDDRD->{'dryer_fuel_used'}; # Fuel use: 1 = NG or propane, 2 = electricity
 			#foreach my $house_name (@houses_desired) {
 			#	# it matches, so set the flag
 			#	if ($CSDDRD->{'file_name'} =~ /^$house_name/) {$desired_house = 1};
@@ -3276,22 +3276,24 @@ MAIN: {
 				#ADW TODO: Load the $bcd_file, copy, and replace with synthetic data
 				# replace the bcd filename in the cfg file
                 SYNTH_AL: {
+                    my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
+                    my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
+                    $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
                     # --------------------------------------------------------------------
                     # Declare the variables for synthetic profile generation
                     # --------------------------------------------------------------------
                     my @Occ; # Array to hold occupancy
-                    my $hse_occ= $CREST->{$hse_name}->{'Num_Occ'};
-                    my $iBulbs= $CREST->{$hse_name}->{'Num_Bulbs'};
+                    my $hse_occ= $CREST->{$house_name}->{'Num_Occ'};
+                    my $iBulbs= $CREST->{$house_name}->{'Num_Bulbs'};
                     my $loc;
-                    my @Irr = @$Irr_ref;
+                    my @Irr;
                     my @Light; # Array to hold the total power draw of all lights [kW]
                     my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [W]
-                    my @TotalOther=(0) x 525600; # Array to hold the total power draw of all other appliances [W]
+                    my @TotalOther=($ThisBase) x 525600; # Array to hold the total power draw of all other appliances [W]
                     my @TotalCook=(0) x 525600; # Array to hold the annual power draw of range and oven (base electric) [W]
                     my @TotalDry=(0) x 525600;; # Array to hold the annual power draw of dryer (base electric) [W]
-                    my @TotalALL=(0) x 525600; # Array to hold the total electrical power draw of ALL appliances [W]
                     my $MeanActOcc=0;
-                    my $DayWeekStart = 4; # TODO: Determine day of the week
+                    my $DayWeekStart = 5; # CHREM cfg template sets the assessment year to 2009, which started on Thursday
 
                     # --------------------------------------------------------------------
                     # Get climate file for this house
@@ -3319,7 +3321,7 @@ MAIN: {
                     # Generate the occupancy profiles
                     # --------------------------------------------------------------------
                     my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
-                    my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,$DayWeekStart); 
+                    my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,$DayWeekStart,"../bcd/CREST"); 
                     @Occ = @$Occ_ref;
                     
                     # Determine the mean active occupancy
@@ -3380,9 +3382,9 @@ MAIN: {
                     COLD: {
                         my @Cold_key = qw(Main_Refrigerator Secondary_Refrigerator Main_Freezer Secondary_Freezer); # Keys for each type of cold appliance in NN inputs
                         foreach my $cold (@Cold_key) { # Determine what cold appliances this dwelling has
-                            if ($CREST->{$hse_name}->{'data'}->{"$cold"} > 0) { # Dwelling has this type of cold appliance
+                            if ($CREST->{$house_name}->{'data'}->{"$cold"} > 0) { # Dwelling has this type of cold appliance
                                 $iNumColds++;
-                                my $ColdSize = $CREST->{$hse_name}->{'data'}->{"$cold"}/28.316847; # Convert size to cu. ft
+                                my $ColdSize = $CREST->{$house_name}->{'data'}->{"$cold"}/28.316847; # Convert size to cu. ft
                                 # Determine if fridge or freezer
                                 my ($ColdType) = $cold =~ m/_(.*)/;
                                 my ($Colduse) = $cold =~ m/(.*)_/;
@@ -3398,7 +3400,7 @@ MAIN: {
                                     if ($fRand < $fCumulativeP) {last COLD_VINT};
                                     $InterVint++;
                                 }; # END COLD_VINT
-                                my $vintage = rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
+                                my $vintage = &rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
                                 
                                 # Determine the corresponding UEC for this vintage and appliance type (Refrigerator,Chest_Freezer,Upright_Freezer)
                                 my ($UEC,$cType) = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
@@ -3421,7 +3423,7 @@ MAIN: {
                     # --------------------------------------------------------------------
                     # Determine the appliance stock of this dwelling
                     my @AppStock=();
-                    my $AppStock_ref = &GetApplianceStock($CREST->{$hse_name}->{'data'},$App->{'Ownership'}->{"_$region"});
+                    my $AppStock_ref = &GetApplianceStock($CREST->{$house_name}->{'data'},$App->{'Ownership'}->{"_$region"});
                     @AppStock=@$AppStock_ref;
                     
                     foreach my $item (@AppStock) { # For each appliance in the dwelling
@@ -3447,10 +3449,17 @@ MAIN: {
                     };
                     
                     # --------------------------------------------------------------------
+                    # Merge the cold, lighting, and other appliances
+                    # --------------------------------------------------------------------
+                    for(my $k=0;$k<=$#TotalOther;$k++) {
+                        $TotalOther[$k]=$TotalOther[$k]+$TotalCold[$k]+($Light[$k]/1000.0);
+                    };
+                    
+                    # --------------------------------------------------------------------
                     # Generate the electric profiles of the stove and dryer
                     # --------------------------------------------------------------------
                     my $nEStoves = 0; # Number of electric stoves
-                    if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0){ # COOK: There is a stove, generate profile
+                    if($CREST->{$house_name}->{'data'}->{'Stove'} > 0){ # COOK: There is a stove, generate profile
                         my @CookStock = ();
                         push(@CookStock,'Range');
                         push(@CookStock,'Oven');
@@ -3489,7 +3498,7 @@ MAIN: {
                         };
                     }; # END COOK
                     my $nEDry = 0; # Number of electric stoves
-                    if($CREST->{$hse_name}->{'data'}->{'Clothes_Dryer'} > 0) { # DRY: If there is a dryer, generate the profile
+                    if($CREST->{$house_name}->{'data'}->{'Clothes_Dryer'} > 0) { # DRY: If there is a dryer, generate the profile
                         my $item = 'Clothes_Dryer';
                         $nEDry = 1;
                         # Load the appropriate appliance data
@@ -3503,14 +3512,66 @@ MAIN: {
                         my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
                         
                         # Call the appliance simulation
-                        if ($CREST->{$hse_name}->{'dryer_fuel'} == 1) {$iStandbyPower/2.0}; # Natural gas dryer. This standby power will be scaled back up later
-                        my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
-                        @TotalDry = @$ThisApp_ref; # [W]
+                        if ($CREST->{$house_name}->{'dryer_fuel'} != 1) { # Electric dryer
+                            my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                            @TotalDry = @$ThisApp_ref; # [W]
+                        } else { # Natural gas dryer. Pass standby power to the total other electric load
+                            my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,0.0,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                            @TotalDry = @$ThisApp_ref; # [W]
+                            # Update the total electric with dryer electric standby power
+                            for(my $k=0;$k<=$#TotalOther;$k++) {
+                                $TotalOther[$k]=$TotalOther[$k]+$iStandbyPower;
+                            };
+                        };
+                        
                 
                     }; # END DRY
 
-                };
-				&replace ($hse_file->{'cfg'}, "#BCD", 1, 1, "%s\n", "*bcd ../../../bcd/$bcd_file");	# boundary condition path
+                    # --------------------------------------------------------------------
+                    # Adjust the timestep of the data if required
+                    # --------------------------------------------------------------------
+                    if ($time_step>1) {
+                        my ($TOther_ref, $Errr) = &IncreaseTimestepPower(\@TotalOther,1.0,$time_step);
+                        #TODO: ERROR HANDLING if($Errr) {};
+                        @TotalOther = @$TOther_ref;
+                        
+                        ($TOther_ref, $Errr) = &IncreaseTimestepPower(\@TotalDry,1.0,$time_step);
+                        #TODO: ERROR HANDLING if($Errr) {};
+                        @TotalDry = @$TOther_ref;
+                        
+                        ($TOther_ref, $Errr) = &IncreaseTimestepPower(\@TotalCook,1.0,$time_step);
+                        #TODO: ERROR HANDLING if($Errr) {};
+                        @TotalCook = @$TOther_ref;
+                    };
+                    
+                    #my $OUT = "Dumped.csv";
+                    #my @ResOut=("Other,Dry,Cook\n");
+                    #
+                    #for (my $k=0;$k<=$#TotalOther;$k++) {
+                    #    push(@ResOut, "$TotalOther[$k],$TotalDry[$k],$TotalCook[$k]\n");
+                    #};
+                    #open (my $FILE, '>', $OUT) or die ("\n\nERROR: can't open $OUT\n");
+                    #print $FILE @ResOut;
+                    #close($FILE);
+
+                    # -----------------------------------------------
+                    # Update the BCD file with synthetic data
+                    # -----------------------------------------------
+                    # Load the recommended BCD file
+                    my $bcd_copy = "../bcd/" . $bcd_file;
+                    open (my $GETBCD, '<', $bcd_copy) or die ("can't open template: $bcd_copy");	# open the template TODO proper error handling
+                    $hse_file->{'bcd'} = [<$GETBCD>];	# Slurp the entire file with one line per array element
+                    close $GETBCD;
+                    &replace ($hse_file->{'bcd'}, "*period_start 1 1 2007", 1, 0, "%s\n", "*period_start 1 1 2009");	# Bring the assessment year in line with the CFG
+                    my($StoveE,$DryerE,$OtherE) = &UpdateBCD ($hse_file->{'bcd'},\@TotalCook,\@TotalDry,\@TotalOther,$CSDDRD->{'stove_fuel_use'},$time_step);    # Insert the new AL data
+                    &replace($hse_file->{'bcd'},"#NOTES",1,3,"%s\n","# Stove Annual Energy: $StoveE kWh");
+                    &replace($hse_file->{'bcd'},"#NOTES",1,4,"%s\n","# Dryer Annual Energy: $DryerE kWh");
+                    &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# Other Energy: $OtherE kWh");
+                    &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# AL loads synthetically generated with baseload $ThisBase W");
+
+                }; # END SYNTH_AL
+
+                &replace ($hse_file->{'cfg'}, "#BCD", 1, 1, "%s\n", "*bcd ./$house_name.bcd");	# boundary condition path
 
 				# -----------------------------------------------
 				# Appliance and Lighting 

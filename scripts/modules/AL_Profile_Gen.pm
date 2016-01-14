@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -84,12 +84,12 @@ sub setStartState {
 
 sub OccupancySimulation {
 	# Read in inputs
-    my ($numOcc, $initial, $dayWeek) = @_;
+    my ($numOcc, $initial, $dayWeek, $dir) = @_;
     
     # Local variables
     my @Occ = ($initial) x 10; # Array holding number of active occupants in dwelling per minute
     my $bStart=1;
-    my $dir = getcwd;
+    if (not defined $dir) {$dir = getcwd};
     
     # Check to see if occupancy exceeds model limits
     if ($numOcc>5) { # Reduce the number of occupants to 5
@@ -752,9 +752,6 @@ sub GetApplianceProfile {
 
     return(\@Profile);
 };
-# ====================================================================
-#  LOCAL SUBROUTINES
-# ====================================================================
 
 # ====================================================================
 # GetMonteCarloNormalDistGuess
@@ -782,6 +779,117 @@ sub GetMonteCarloNormalDistGuess {
 
     return $iGuess;
 };
+
+# ====================================================================
+# IncreaseTimestepPower
+#       This subroutine increases the timestep of a vector of power data
+#
+# INPUT     data: 1D array holding the data [W]
+#           OldTstep: Old timestep of data [min]
+#           NexTstep: New timestep of data [min]
+# OUTPUT    NewData: 1D array holding the conditioned data
+#           Errflg: Integer error flag to indicate process was successful
+# ====================================================================
+sub IncreaseTimestepPower {
+    
+    # Declare inputs
+    my $data_ref = shift;
+    my @data = @$data_ref;
+    my $OldTstep = shift;
+    my $NewTstep = shift;
+    
+    # Declare outputs
+    my @NewData;
+    my $Errflg=0;
+    
+    # Gather input data characteristics
+    my $length = $#data+1; # length of array
+    if (($length*$OldTstep) % $NewTstep) {
+        # Invalid averaging period
+        $Errflg=1;
+    };
+
+    # Condition the power data
+    my $i=0;
+    while ($i < $length) {
+        my $SumOver = 0.0;
+        for(my $j=0; $j<($NewTstep/$OldTstep);$j++) {
+            $SumOver=$SumOver+$data[$i];
+            $i++;
+        };
+        my $Out = $SumOver/($NewTstep/$OldTstep);
+        push(@NewData,$Out);
+    };
+
+    return(\@NewData,$Errflg);
+};
+# ====================================================================
+# rand_range
+#   Randomly select an integer between two defined integers
+# ====================================================================
+sub rand_range {
+    my ($x, $y) = @_;
+    return int(rand($y - $x)) + $x;
+};
+
+# ====================================================================
+# UpdateBCD
+#   Randomly select an integer between two defined integers
+# ====================================================================
+sub UpdateBCD {	# subroutine to perform a simple element replace (house file to read/write, keyword to identify row, rows below keyword to replace, replacement text)
+	my $hse_file = shift (@_);	# the house file to read/write
+	my $Stove_ref = shift (@_);	# Stove power profile [W]
+    my $Dryer_ref = shift (@_);	# Dryer power profile [W]
+	my $Other_ref = shift (@_);	# Other AL power profile [W]
+    my $Stovefuel = shift (@_);	# the house file to read/write
+    my $TStep = shift (@_);	# timestep of the simulation [min]
+    my @Stove = @$Stove_ref;
+    my @Dryer = @$Dryer_ref;
+    my @Other = @$Other_ref;
+    
+    # Declare outputs
+    my $StoveE=0.0; # Stove energy [kWh]
+    my $DryerE=0.0; # Dryer energy [kWh]
+    my $OtherE=0.0; # Other energy [kWh]
+    
+    my $line = 0;
+    CHECK_LINES: while ($line<=$#{$hse_file}) {
+        if ($hse_file->[$line] =~ /data_start/) {
+            $line++; # advance to the next line and begin inserting new data
+            my $k=0;
+            while ($hse_file->[$line] !~ m/data_end/) {
+                my ($DHW) = $hse_file->[$line] =~ /(\d+)/; # Get the DHW data
+                # Populate new line
+                $Stove[$k]=sprintf("%d",$Stove[$k]);
+                $Dryer[$k]=sprintf("%d",$Dryer[$k]);
+                $Other[$k]=sprintf("%d",$Other[$k]);
+
+                my $newline = sprintf "%26s %15s %15s %10s %15s\n", $DHW, $Stove[$k],$Stove[$k],$Dryer[$k],$Other[$k];
+                $hse_file->[$line] = $newline;
+                # Update the energy counts
+                $StoveE=$StoveE+(($Stove[$k]*$TStep)/60000.0);
+                $DryerE=$DryerE+(($Dryer[$k]*$TStep)/60000.0);
+                $OtherE=$OtherE+(($Other[$k]*$TStep)/60000.0);
+                
+                $line++;
+                $k++;
+            };
+            last CHECK_LINES;
+        } else {
+            $line++;
+        };
+    };
+    
+    $StoveE=sprintf("%.2f",$StoveE);
+    $DryerE=sprintf("%.2f",$DryerE);
+    $OtherE=sprintf("%.2f",$OtherE);
+    
+
+	return($StoveE,$DryerE,$OtherE);
+};
+# ====================================================================
+#  LOCAL SUBROUTINES
+# ====================================================================
 
 # ====================================================================
 # EffectiveOccupancy
@@ -1133,5 +1241,8 @@ sub ApplianceCalibrationScalar {
     
     return($fAppCalib);
 };
+
+
+
 # Final return value of one to indicate that the perl module is successful
 1;
