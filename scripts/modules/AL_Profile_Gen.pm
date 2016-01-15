@@ -800,13 +800,13 @@ sub IncreaseTimestepPower {
     
     # Declare outputs
     my @NewData;
-    my $Errflg=0;
+    my $Errflg=1;
     
     # Gather input data characteristics
     my $length = $#data+1; # length of array
     if (($length*$OldTstep) % $NewTstep) {
         # Invalid averaging period
-        $Errflg=1;
+        $Errflg=0;
     };
 
     # Condition the power data

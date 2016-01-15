@@ -426,7 +426,7 @@ sub main {
                         if ($fRand < $fCumulativeP) {last COLD_VINT};
                         $InterVint++;
                     }; # END COLD_VINT
-                    my $vintage = rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
+                    my $vintage = &rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
                     
                     # Determine the corresponding UEC for this vintage and appliance type (Refrigerator,Chest_Freezer,Upright_Freezer)
                     my ($UEC,$cType) = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
@@ -542,7 +542,7 @@ sub main {
         $AnnPow=0; # Rezero annual power
         my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
         my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
-        $ThisBase = GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+        $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
         for(my $k=0;$k<=$#TotalOther;$k++) {                                
             $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k]+($Light[$k]*1000)+$ThisBase; # [W]
             $AnnPow=$AnnPow+((($TotalALL[$k]*60)/3600)/1000); # [kWh]
@@ -573,37 +573,3 @@ sub main {
     return($iHseCount);
 
 }; # END sub main
-
-# -----------------------------------------------
-# Subroutines
-# -----------------------------------------------
-SUBROUTINES: {
-    sub rand_range {
-        my ($x, $y) = @_;
-    return int(rand($y - $x)) + $x;
-    };
-    
-    sub GetMonteCarloNormalDistGuess {
-        my ($dMean, $dSD) = @_;
-        my $iGuess=0;
-        my $bOk;
-        
-        if($dMean == 0) {
-            $bOk = 1;
-        } else {
-            $bOk = 0;
-        };
-        
-        while (!$bOk) {
-            $iGuess = (rand()*($dSD*8))-($dSD*4)+$dMean;
-            my $px = (1/($dSD * sqrt(2*3.14159))) * exp(-(($iGuess - $dMean) ** 2) / (2 * $dSD * $dSD));
-    
-            if ($px >= rand()) {$bOk=1};
-    
-        };
-    
-        return $iGuess;
-        
-    };
-
-};

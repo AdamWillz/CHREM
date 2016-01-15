@@ -526,6 +526,9 @@ MAIN: {
 		# Gather Data for CREST (AL) model
 		# -----------------------------------------------
         CREST_LOAD: foreach my $house_name (@houses_desired) {
+            # house file coordinates to print when an error is encountered
+			my $coordinates = {'hse_type' => $hse_type, 'region' => $region, 'file_name' => "$house_name.HDF"};
+            
             # --------------------------------------------------------------------
             # Find NN data
             # --------------------------------------------------------------------
@@ -535,7 +538,9 @@ MAIN: {
             } elsif (exists $NNinput->{'data'}->{"$house_name.HDF.No-Dryer"}) {
                 $NNdata = $NNinput->{'data'}->{"$house_name.HDF.No-Dryer"};
             } else {
-                # TODO: ERROR handling
+                # Unable to find record. Warn user
+                print "Could not find NN data for $house_name. Skipping\n";
+                next CREST_LOAD;
             };
             
             # --------------------------------------------------------------------
@@ -543,10 +548,9 @@ MAIN: {
             # --------------------------------------------------------------------
             my $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
             if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
-                #$issue++;
-                #$return->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
-                #$hse_occ=5;
-                #TODO: Warn that occupants exceeded 5
+                # Set number of occupants to 5
+                $issues = set_issue("%s", $issues, 'CREST', 'Occupants exceeds max', "Number of occupants $hse_occ reduced to 5 for AL generation", $coordinates);
+                $hse_occ=5;
             };
             
             # --------------------------------------------------------------------
@@ -591,6 +595,8 @@ MAIN: {
                     last;
                 }
             }
+            if(not exists $CREST->{$house_name}) {next RECORD}; # CREST data load failed. Skip
+
             $CREST->{$house_name}->{'stove_fuel'}=$CSDDRD->{'stove_fuel_use'}; # Fuel use: 1 = NG or propane, 2 = electricity
             $CREST->{$house_name}->{'dryer_fuel'}=$CSDDRD->{'dryer_fuel_used'}; # Fuel use: 1 = NG or propane, 2 = electricity
 			#foreach my $house_name (@houses_desired) {
@@ -3273,8 +3279,7 @@ MAIN: {
 						$bcd_sdhw = $bcd;};
 					
 				};
-				#ADW TODO: Load the $bcd_file, copy, and replace with synthetic data
-				# replace the bcd filename in the cfg file
+
                 SYNTH_AL: {
                     my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
                     my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
@@ -3315,12 +3320,15 @@ MAIN: {
                         };
                     };
                     closedir(DIR);
-                    #TODO: Error handling, couldn't find Irradiance data
+                    if(!@Irr) { # Could not find irradiance data. Print issue and skip
+                        $issues = set_issue("%s", $issues, 'CREST', 'No irradiance data', "Skipping record", $coordinates);
+                        next RECORD;
+                    };
                     
                     # --------------------------------------------------------------------
                     # Generate the occupancy profiles
                     # --------------------------------------------------------------------
-                    my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"}); # TODO: Determine 'we' or 'wd'
+                    my $IniState = &setStartState($hse_occ,$occ_strt->{'wd'}->{"$Occ_keys[$hse_occ]"});
                     my $Occ_ref = &OccupancySimulation($hse_occ,$IniState,$DayWeekStart,"../bcd/CREST"); 
                     @Occ = @$Occ_ref;
                     
@@ -3532,15 +3540,24 @@ MAIN: {
                     # --------------------------------------------------------------------
                     if ($time_step>1) {
                         my ($TOther_ref, $Errr) = &IncreaseTimestepPower(\@TotalOther,1.0,$time_step);
-                        #TODO: ERROR HANDLING if($Errr) {};
+                        if(!$Errr) {
+                            $issues = set_issue("%s", $issues, 'CREST', 'Timestep averaging', "Could not average other data. Skipping", $coordinates);
+                            next RECORD;
+                        };
                         @TotalOther = @$TOther_ref;
                         
                         ($TOther_ref, $Errr) = &IncreaseTimestepPower(\@TotalDry,1.0,$time_step);
-                        #TODO: ERROR HANDLING if($Errr) {};
+                        if(!$Errr) {
+                            $issues = set_issue("%s", $issues, 'CREST', 'Timestep averaging', "Could not average dryer data. Skipping", $coordinates);
+                            next RECORD;
+                        };
                         @TotalDry = @$TOther_ref;
                         
                         ($TOther_ref, $Errr) = &IncreaseTimestepPower(\@TotalCook,1.0,$time_step);
-                        #TODO: ERROR HANDLING if($Errr) {};
+                        if(!$Errr) {
+                            $issues = set_issue("%s", $issues, 'CREST', 'Timestep averaging', "Could not average stove data. Skipping", $coordinates);
+                            next RECORD;
+                        };
                         @TotalCook = @$TOther_ref;
                     };
                     
@@ -3559,7 +3576,7 @@ MAIN: {
                     # -----------------------------------------------
                     # Load the recommended BCD file
                     my $bcd_copy = "../bcd/" . $bcd_file;
-                    open (my $GETBCD, '<', $bcd_copy) or die ("can't open template: $bcd_copy");	# open the template TODO proper error handling
+                    open (my $GETBCD, '<', $bcd_copy) or die ("can't open template: $bcd_copy");	# open the template
                     $hse_file->{'bcd'} = [<$GETBCD>];	# Slurp the entire file with one line per array element
                     close $GETBCD;
                     &replace ($hse_file->{'bcd'}, "*period_start 1 1 2007", 1, 0, "%s\n", "*period_start 1 1 2009");	# Bring the assessment year in line with the CFG
@@ -3571,6 +3588,7 @@ MAIN: {
 
                 }; # END SYNTH_AL
 
+                # replace the bcd filename in the cfg file
                 &replace ($hse_file->{'cfg'}, "#BCD", 1, 1, "%s\n", "*bcd ./$house_name.bcd");	# boundary condition path
 
 				# -----------------------------------------------
@@ -4448,7 +4466,6 @@ MAIN: {
                     close $FILE;
 				};
 				copy ("../templates/input.xml", "$folder/input.xml") or die ("can't copy file: ../templates/input.xml to $folder/input.xml");	# add an input.xml file to the house for XML reporting of results
-                #ADW TODO: Print BCD File
 			};
 
 # 			print Dumper $record_indc;

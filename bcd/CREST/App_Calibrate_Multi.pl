@@ -160,9 +160,8 @@ SET_CREST: {
         # --------------------------------------------------------------------
         $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
         if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
-            #$issue++;
-            #$return->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
-            #$hse_occ=5;
+            # Set number of occupants to 5
+            $hse_occ=5;
             print $LogFH "Warning: Occupants $hse_occ exceeded 5 for $hse_name\n";
         };
         
@@ -496,7 +495,7 @@ sub main {
                         if ($fRand < $fCumulativeP) {last COLD_VINT};
                         $InterVint++;
                     }; # END COLD_VINT
-                    my $vintage = rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
+                    my $vintage = &rand_range($ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'min'},$ColdRef->{'dist'}->{'Periods'}->{"_$InterVint"}->{'max'});
                     
                     # Determine the corresponding UEC for this vintage and appliance type (Refrigerator,Chest_Freezer,Upright_Freezer)
                     my ($UEC,$cType) = &GetUEC($ColdType,$vintage,$ColdSize,$ColdRef->{'eff'});
@@ -608,7 +607,7 @@ sub main {
         my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh]
         my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
         my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
-        $ThisBase = GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+        $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
         if($ThisBase<0) {$ThisBase=0};
         for(my $k=0;$k<=$#TotalOther;$k++) {
             $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k] + $ThisBase; # [W]
@@ -634,36 +633,3 @@ sub main {
     return($TrueError,$kWhAverage);
 
 }; # END sub main
-
-# -----------------------------------------------
-# Subroutines
-# -----------------------------------------------
-SUBROUTINES: {
-    sub rand_range {
-        my ($x, $y) = @_;
-    return int(rand($y - $x)) + $x;
-    };
-    
-    sub GetMonteCarloNormalDistGuess {
-        my ($dMean, $dSD) = @_;
-        my $iGuess=0;
-        my $bOk;
-        
-        if($dMean == 0) {
-            $bOk = 1;
-        } else {
-            $bOk = 0;
-        };
-        
-        while (!$bOk) {
-            $iGuess = (rand()*($dSD*8))-($dSD*4)+$dMean;
-            my $px = (1/($dSD * sqrt(2*3.14159))) * exp(-(($iGuess - $dMean) ** 2) / (2 * $dSD * $dSD));
-    
-            if ($px >= rand()) {$bOk=1};
-    
-        };
-    
-        return $iGuess;
-        
-    };
-};
