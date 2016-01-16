@@ -929,12 +929,12 @@ MAIN: {
                 };
                 
                 my $OpMode = '1'; # Operation mode: 1 is power input know, 2 is output known
-                my $NomPow = sprintf("%5.1f", $Inverter_data->{"$InvPnm"}->{'Pn'});
-                my $IdleC = sprintf("%6.5E", $Inverter_data->{"$InvPnm"}->{'P0Pn'});
-                my $SetV = sprintf("%6.5f", $Inverter_data->{"$InvPnm"}->{'Us'});
-                my $InRes = sprintf("%7.6E", $Inverter_data->{"$InvPnm"}->{'RiPn'});
-                my $AuxPow = sprintf("%5.1f", $Inverter_data->{"$InvPnm"}->{'AuxPwr'});
-                my $InverterDesc = $Inverter_data->{"$InvPnm"}->{'description'};
+                my $NomPow = sprintf("%5.1f", $Inverter_data->{"_$InvPnm"}->{'Pn'});
+                my $IdleC = sprintf("%6.5E", $Inverter_data->{"_$InvPnm"}->{'P0Pn'});
+                my $SetV = sprintf("%6.5f", $Inverter_data->{"_$InvPnm"}->{'Us'});
+                my $InRes = sprintf("%7.6E", $Inverter_data->{"_$InvPnm"}->{'RiPn'});
+                my $AuxPow = sprintf("%5.1f", $Inverter_data->{"_$InvPnm"}->{'AuxPwr'});
+                my $InverterDesc = $Inverter_data->{"_$InvPnm"}->{'description'};
                 
                 $NumPowOnly++;
                 &replace ($hse_file->{'elec'}, "#NUM_POWER_ONLY_COMPONENTS", 1, 1, "%s\n", "  $NumPowOnly");
