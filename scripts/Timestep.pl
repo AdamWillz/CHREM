@@ -161,18 +161,18 @@ MAIN: {
             # --------------------------------------------------------------------
             
             # Load in building files to be updated
-             foreach my $ext (qw(cfg)) {
-                my $FILEpath = $dir . "/" . $hse_name . ".$ext"; # Path to cfg file
-                open (my $FILEid, '<', $FILEpath) or die ("can't open file: $FILEpath");
-                $hse_file->{$ext} = [<$FILEid>];	# Slurp the entire file with one line per array element
-                close $FILEid;
-                # Create backups of old files
-                rename $FILEpath, "$FILEpath.orig";
-                unlink $FILEpath;
-            };
-            
-            # Update simulation parameters
-            &replace ($hse_file->{'cfg'}, "#SIM_PRESET_LINE2: start day; start month; end day; end month; simulation preset name", 1, -2, "%s\n", "*sps 1 4 12 1 4 0");
+            # foreach my $ext (qw(cfg)) {
+            #    my $FILEpath = $dir . "/" . $hse_name . ".$ext"; # Path to cfg file
+            #    open (my $FILEid, '<', $FILEpath) or die ("can't open file: $FILEpath");
+            #    $hse_file->{$ext} = [<$FILEid>];	# Slurp the entire file with one line per array element
+            #    close $FILEid;
+            #    # Create backups of old files
+            #    rename $FILEpath, "$FILEpath.orig";
+            #    unlink $FILEpath;
+            #};
+            #
+            ## Update simulation parameters
+            #&replace ($hse_file->{'cfg'}, "#SIM_PRESET_LINE2: start day; start month; end day; end month; simulation preset name", 1, -2, "%s\n", "*sps 1 4 12 1 4 0");
             
             # Update input.xml file
             my $XML = $dir . "/" . "input.xml";
@@ -183,18 +183,18 @@ MAIN: {
             # -----------------------------------------------
 			# Print out each new esp-r house file for the house record
 			# -----------------------------------------------
-			FILE_PRINTOUT: {
-				foreach my $ext (keys %{$hse_file}) {	# go through each extention inclusive of the zones for this particular record
-                    if ($ext =~ m/^(opr|con|htc|geo|tmc)$/) { # Template file, remove it from HASH
-                        undef $hse_file->{$ext};
-                    } else {
-                        my $file = $dir . "/$hse_name.";
-                        my $FILE;
-                        open ($FILE, '>', $file . $ext) or die ("Can't open datafile: $file$ext");	# open writeable file
-                        foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out
-                    };
-				};
-			};
+			#FILE_PRINTOUT: {
+			#	foreach my $ext (keys %{$hse_file}) {	# go through each extention inclusive of the zones for this particular record
+            #        if ($ext =~ m/^(opr|con|htc|geo|tmc)$/) { # Template file, remove it from HASH
+            #            undef $hse_file->{$ext};
+            #        } else {
+            #            my $file = $dir . "/$hse_name.";
+            #            my $FILE;
+            #            open ($FILE, '>', $file . $ext) or die ("Can't open datafile: $file$ext");	# open writeable file
+            #            foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out
+            #        };
+			#	};
+			#};
         };
         
     print "Thread for Timestep reports mode of $hse_type $region - Complete\n";
