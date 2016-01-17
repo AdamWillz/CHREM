@@ -32,6 +32,10 @@
 	<en_src name = "oil" unit="g/l" CO2="2725" CH4="0.026" N2O="0.006" GHGIF="2727" ESsource="1.01">
         <NREL preCombGHGIF="491" siteCombGHGIF="2730" NSource = "1.162"/>
     </en_src>
+    <!-- TODO: Update to proper values for mixed wood -->
+    <en_src name = "mixed_wood" unit="g/l" CO2="2725" CH4="0.026" N2O="0.006" GHGIF="2727" ESsource="1.00">
+        <NREL preCombGHGIF="1.0" siteCombGHGIF="1.0" NSource = "1.0"/>
+    </en_src>
 
 <!-- ELECTRICITY -->
 
