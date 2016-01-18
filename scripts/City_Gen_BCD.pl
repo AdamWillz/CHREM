@@ -3284,6 +3284,7 @@ MAIN: {
                     my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
                     my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
                     $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+                    if($ThisBase<0) {$ThisBase=0}; # Correct the base load if negative
                     # --------------------------------------------------------------------
                     # Declare the variables for synthetic profile generation
                     # --------------------------------------------------------------------
