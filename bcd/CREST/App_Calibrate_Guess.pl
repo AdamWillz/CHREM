@@ -65,8 +65,7 @@ our $CREST;             # HASH holding CREST input data
 our $ColdApp;             # HASH to hold the cold appliance data
 our $App;             # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
-my $phi = 1.61803398874989;  # Golden ratio
-my $iThreads = 16;                  # Number of threads
+my $iThreads = 1;                  # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
@@ -74,11 +73,10 @@ my $iThreads = 16;                  # Number of threads
 
 my $hse_types;	    # declare an hash array to store the house types to be modeled (e.g. 1 -> 1-SD)
 my $regions;	    # declare an hash array to store the regions to be modeled (e.g. 1 -> 1-AT)
-my $xlow;
-my $xu;
+my $fCali;          # Calibration scalar
 my @hse_TOT;        # Array to hold the list of all houses for region and type
 my @hse_list;        # Array to hold the subset of houses for this region and type
-my $MAXTOL = 0.001; # Maximum error estimate [%]
+my $MAXTOL = 1.0;   # Maximum error estimate [%]
 my $MaxIter = 35;   # Maximum iterations
 my $SubSet = 377;   # Number of houses to run each iteration
 
@@ -86,7 +84,7 @@ my $SubSet = 377;   # Number of houses to run each iteration
 # Read the command line input arguments
 # --------------------------------------------------------------------
 
-if (@ARGV < 5) {die "Four arguments are required: house_type region Target low high\n";};	# check for proper argument count
+if (@ARGV < 4) {die "Four arguments are required: house_type region Target initial_guess\n";};	# check for proper argument count
 
 # Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
 ($hse_types, $regions) = &hse_types_and_regions_and_set_name(shift(@ARGV), shift(@ARGV));
@@ -107,16 +105,13 @@ if($Num_Keys>1) {die "This script can only handle one region at a time"};
 $Target = shift (@ARGV);
 if ($Target <=0) {die "Invalid energy consumption target $Target. Must be positive"};
 
-$xlow = shift (@ARGV);
-if ($xlow <=0) {die "Invalid lower calibration scalar $xlow. Must be positive"};
-
-$xu = shift (@ARGV);
-if ($xu <=0 || $xu < $xlow) {die "Invalid higher calibration scalar $xu. Must be positive and greater than $xlow"};
+$fCali = shift (@ARGV);
+if ($fCali <=0) {die "Invalid calibration scalar $fCali. Must be positive"};
 
 # --------------------------------------------------------------------
 # Set the CREST input data
 # --------------------------------------------------------------------
-my $LogFile = "GoldenSection_" . $hse_type . "_" . "$region.log";
+my $LogFile = "InitialGuess_" . $hse_type . "_" . "$region.log";
 open(my $LogFH, '>', $LogFile) or die ("Can't open datafile: $LogFile");
 SET_CREST: {
 
@@ -221,178 +216,54 @@ print " - Complete\n";
 # --------------------------------------------------------------------
 my $datestring = localtime();
 print "Starting the search at $datestring\n";
-GOLDEN: {
-    my $f1;
-    my $f2;
-    my $pred1;
-    my $pred2;
-    # Generate interior points
-    my $d = 0.61803*($xu-$xlow);
-    my $x1 = $xlow + $d;
-    my $x2 = $xu - $d;
-    
+GUESS: {
     # Threading variables
     if ($iThreads<=0) {die "Number of threads cannot be less than 1\n"};
     my $iChunk = floor(($#hse_list+1)/$iThreads); # Number of houses sent to each thread
     my $thread;
     my $AggkWh = 0; # Holds the aggregate average across the threads
     
-    # Evaluate the interior points
-    # $x1-----------------------------------------------------
-    for(my $w=1; $w<=$iThreads; $w++){ # Multithread low
-        my $end;
-        my $start = $iChunk*($w-1);
-        if ($w<$iThreads) {
-            $end = ($iChunk*$w)-1;
-        } else { # grab the last bit of the list
-            $end = $#hse_list;
-        };
-        my @ShortList = @hse_list[ $start .. $end ];
-        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x1);
-    };
-    for(my $w=1; $w<=$iThreads; $w++){
-        my @Dummy = $thread->{"$w"}->join();
-        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
-    };
-    $pred1 = $AggkWh/$iThreads;
-    $AggkWh = 0; # Reinitialize
-    $f1 = abs($Target-$pred1);
-    # --------------------------------------------------------
-    $datestring = localtime();
-    print "Finished computing first internal point at $datestring\n";
-    # $x2-----------------------------------------------------
-    for(my $w=1; $w<=$iThreads; $w++){ # Multithread high
-        my $end;
-        my $start = $iChunk*($w-1);
-        if ($w<$iThreads) {
-            $end = ($iChunk*$w)-1;
-        } else { # grab the last bit of the list
-            $end = $#hse_list;
-        };
-        my @ShortList = @hse_list[ $start .. $end ];
-        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x2);
-    };
-    for(my $w=1; $w<=$iThreads; $w++){
-        my @Dummy = $thread->{"$w"}->join();
-        $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output (second variable) [kWh/yr]
-    };
-    $pred2 = $AggkWh/$iThreads;
-    $AggkWh = 0; # Reinitialize
-    $f2 = abs($Target-$pred1);
-    # --------------------------------------------------------
-    $datestring = localtime();
-    print "Finished computing second internal point at $datestring\n";
-    
-    #($f1,$pred1) = main(\@hse_list,$x1);
-    #($f2,$pred2) = main(\@hse_list,$x2);
-    
     # Loop until convergence or max. iterations
     my $count = 1;
     my $ea;  # Error estimation
-    my $xmin;
-    my $fmin;
     ITERATOR: while ($count <= $MaxIter) {
-        if ($f1 < $f2) { # x1 most likely candidate for minimum
-            # Check for convergence
-            $ea = (2-$phi)*abs(($xu-$xlow)/$x1)*100; # Error estimate [%]
-            $datestring = localtime();
-            print "$datestring: Minimum: $f1, Scalar: $x1, Error:$ea\n";
-            if ($ea <= $MAXTOL) {
-                $xmin = $x1;
-                $fmin = $f1;
-                last ITERATOR;
+        for(my $w=1; $w<=$iThreads; $w++){ # Multithread high
+            my $end;
+            my $start = $iChunk*($w-1);
+            if ($w<$iThreads) {
+                $end = ($iChunk*$w)-1;
+            } else { # grab the last bit of the list
+                $end = $#hse_list;
             };
-            
-            # Update the domain
-            $xlow=$x2;
-            $x2=$x1;
-            $f2=$f1;
-
-            # Evaluate the new interior point
-            $d = 0.61803*($xu-$xlow);
-            $x1=$xlow + $d;
-            # $x1-----------------------------------------------------
-            for(my $w=1; $w<=$iThreads; $w++){ # Multithread low
-                my $end;
-                my $start = $iChunk*($w-1);
-                if ($w<$iThreads) {
-                    $end = ($iChunk*$w)-1;
-                } else { # grab the last bit of the list
-                    $end = $#hse_list;
-                };
-                my @ShortList = @hse_list[ $start .. $end ];
-                ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x1);
-            };
-            for(my $w=1; $w<=$iThreads; $w++){
-                my @Dummy = $thread->{"$w"}->join();
-                $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
-            };
-            $pred1 = $AggkWh/$iThreads;
-            $AggkWh = 0; # Reinitialize
-            $f1 = abs($Target-$pred1);
-            # --------------------------------------------------------
-            
-        } else { # x2 most likely candidate for minimum
-            # Check for convergence
-            $ea = (2-$phi)*abs(($xu-$xlow)/$x2)*100; # Error estimate [%]
-            $datestring = localtime();
-            print "$datestring: Minimum: $f2, Scalar: $x2, Error:$ea\n";
-            if ($ea <= $MAXTOL) {
-                $xmin = $x2;
-                $fmin = $f2;
-                last ITERATOR;
-            };
-
-            # Update the domain
-            $xu=$x1;
-            $x1=$x2;
-            $f1=$f2;
-            # Evaluate the new interior point
-            $d = 0.61803*($xu-$xlow);
-            $x2 = $xu - $d;
-            # $x2-----------------------------------------------------
-            for(my $w=1; $w<=$iThreads; $w++){ # Multithread high
-                my $end;
-                my $start = $iChunk*($w-1);
-                if ($w<$iThreads) {
-                    $end = ($iChunk*$w)-1;
-                } else { # grab the last bit of the list
-                    $end = $#hse_list;
-                };
-                my @ShortList = @hse_list[ $start .. $end ];
-                ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$x2);
-            };
-            for(my $w=1; $w<=$iThreads; $w++){
-                my @Dummy = $thread->{"$w"}->join();
-                $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
-            };
-            $pred2 = $AggkWh/$iThreads;
-            $AggkWh = 0; # Reinitialize
-            $f2 = abs($Target-$pred2);
-            # --------------------------------------------------------
+            my @ShortList = @hse_list[ $start .. $end ];
+            ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$fCali);
         };
+        for(my $w=1; $w<=$iThreads; $w++){
+            my @Dummy = $thread->{"$w"}->join();
+            $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
+        };
+        my $AvgLoad = $AggkWh/$iThreads;
+        my $Err = (abs($Target-$AvgLoad)/$Target)*100; # Error [%]
+        
+        $datestring = localtime();
+        if($Err<=$MAXTOL){ # Convergence criteria achieved
+            print "Finished iterating at $datestring\n";
+            print "Minimum scalar $fCali with error of $Err percent\n";
+            $ea = $Err;
+            last ITERATOR;
+        };
+        # ELSE make new guess for scalar
+        print "$datestring: Avg. Load: $AvgLoad, Scalar: $fCali, Error:$Err\n";
+        $fCali = $Target/($AvgLoad/$fCali);
+        # Reset the aggregate load
+        $AggkWh = 0;
+
         $count++;
-    }; # END ITERATOR
+    }; # END INTERATOR
 
-    my $bNonconverge = 0;
-    if ($count>$MaxIter) {$bNonconverge = 1};
-    if ($bNonconverge) { # Non-convergence
-        if ($f1 < $f2) {
-            $fmin = $f1;
-            $xmin = $x1;
-        } else {
-            $fmin = $f2;
-            $xmin = $x2;
-        };
-    };
-    
-    $datestring = localtime();
-    print "Finished iterating at $datestring\n";
-    print "Minimum scalar $xmin with absolute true difference of $fmin\n\n";
-    
+
     print "Multithreading validation\n";
-    #my ($fValid,$pVaild) = main(\@hse_TOT,$xmin);
-    # $x2-----------------------------------------------------
+    $AggkWh = 0; # Reset aggregate load
     for(my $w=1; $w<=$iThreads; $w++){ # Multithread high
         my $end;
         my $start = $iChunk*($w-1);
@@ -402,33 +273,32 @@ GOLDEN: {
             $end = $#hse_list;
         };
         my @ShortList = @hse_list[ $start .. $end ];
-        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$xmin);
+        ($thread->{"$w"}) = threads->create(\&main,\@ShortList,$fCali);
     };
     for(my $w=1; $w<=$iThreads; $w++){
         my @Dummy = $thread->{"$w"}->join();
         $AggkWh = $AggkWh+$Dummy[1]; # Recover the annual energy average output [kWh/yr]
     };
     my $pVaild = $AggkWh/$iThreads;
-    my $fValid = abs($Target-$pVaild);
+    my $fValid = (abs($Target-$pVaild)/$Target)*100;
     # --------------------------------------------------------
     print "Validation complete\n";
+    
 
     RESOUT: { # Print out results
 
-        my $ResFile = "GoldenSearch_" . "$hse_type" . "_" . "$region" . ".res";
+        my $ResFile = "InitialGuess_" . $hse_type . "_" . "$region.txt";
         open (my $RESfh, '>', $ResFile) or die "Cannot print output file $ResFile";
         
-        print $RESfh "Target was $Target\n";
-        print $RESfh "Minimum target difference of $fmin\n";
-        print $RESfh "for scalar $xmin\n";
-        print $RESfh "Validation: Difference=$fValid and Average=$pVaild\n";
-        if($bNonconverge){print $RESfh "WARNING: max iterations of $MaxIter reached\n"};
+        print $RESfh "Target was $Target kWh/house\n";
+        print $RESfh "for scalar $fCali\n";
+        print $RESfh "Validation: Error was $fValid and Average Load was $pVaild kWh/house\n";
         
         close $RESfh;
 
     }; # END RESOUT
 
-}; # END GOLDEN 
+}; # END GUESS 
 
 # --------------------------------------------------------------------
 # Main calculation subroutine
@@ -605,9 +475,10 @@ sub main {
         # Determine the annual energy consumption for the dwelling
         # --------------------------------------------------------------------
         my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh]
-        my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
-        my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
-        $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+        #my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
+        #my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
+        #$ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+        my $ThisBase = 0;
         if($ThisBase<0) {$ThisBase=0};
         for(my $k=0;$k<=$#TotalOther;$k++) {
             $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k] + $ThisBase; # [W]
@@ -627,7 +498,7 @@ sub main {
     $kWhAverage = $Agg/$Nhousehold;
 
     # Determine the absolute true error
-    $TrueError = abs($Target-$kWhAverage);
+    $TrueError = abs($Target-$kWhAverage)/$Target;
     
     print "True Error $TrueError, average of $kWhAverage kWh\n";
     return($TrueError,$kWhAverage);
