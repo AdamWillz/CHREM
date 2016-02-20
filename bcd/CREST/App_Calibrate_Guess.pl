@@ -476,8 +476,10 @@ sub main {
         # --------------------------------------------------------------------
         my $AnnPow=0; # Total appliance energy consumption for the year for this dwelling[kWh]
         my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
-        my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
-        $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+        if($ThisBase>0) {
+            my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
+            $ThisBase = &GetMonteCarloNormalDistGuess($ThisBase,$ThisBaseStDev);
+        };
         if($ThisBase<0) {$ThisBase=0};
         for(my $k=0;$k<=$#TotalOther;$k++) {
             $TotalALL[$k]=$TotalOther[$k]+$TotalCold[$k]+$TotalCook[$k]+$TotalDry[$k] + $ThisBase; # [W]
