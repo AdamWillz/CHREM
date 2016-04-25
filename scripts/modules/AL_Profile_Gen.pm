@@ -614,9 +614,9 @@ sub GetApplianceStock {
 #           iStandbyPower: Standby power [W]
 #           iRatedPower: Rated power during cycles [W]
 #           iRestartDelay: Delay prior to starting a cycle [min]
-#           fAppCalib: Calibration scalar [-]
+#           fAvgActProb: Average activity probability [-]
 #           ActStat: HASH holding the activity statistics
-#           MeanActOcc: Mean active occupancy [-]
+#           MeanActOcc: fraction of time occupants are active [-]
 #           sOccDepend: Activity occupant presence dependent [YES/NO]
 #           dayWeek: day of the week [1=Sunday, 7=Saturday]
 # OUTPUT    Profile: The power consumption for this appliance at a 1-minute timestep [kW]
