@@ -3590,7 +3590,7 @@ MAIN: {
                 }; # END SYNTH_AL
 
                 # replace the bcd filename in the cfg file
-                &replace ($hse_file->{'cfg'}, "#BCD", 1, 1, "%s\n", "*bcd ./$house_name.bcd");	# boundary condition path
+                &replace ($hse_file->{'cfg'}, "#BCD", 1, 1, "%s\n", "*bcd ../BCD/$house_name.bcd");	# boundary condition path
 
 				# -----------------------------------------------
 				# Appliance and Lighting 
@@ -4450,7 +4450,11 @@ MAIN: {
 			# -----------------------------------------------
 			# Print out each esp-r house file for the house record
 			# -----------------------------------------------
-			FILE_PRINTOUT: {         
+			FILE_PRINTOUT: {
+
+                # If a folder hasn't been created for BCD files, create it
+                my $BDCfolder = "../$hse_type$set_name/$region/BCD";
+                if (not (-d $BDCfolder)) {mkpath ($BDCfolder)};
 
 				# Develop a path and make the directory tree to get to that path
 				$CSDDRD->{'file_name'} = $CSDDRD->{'file_name'};
@@ -4460,7 +4464,12 @@ MAIN: {
 				mkpath ($folder);	# make the output path directory tree to store the house files
 				
 				foreach my $ext (keys %{$hse_file}) {	# go through each extention inclusive of the zones for this particular record
-					my $file = $folder . "/$NewFolder.";
+                    my $file;
+                    if($ext =~ /bcd/) { # BCD Files stored in central folder
+                        $file = "../$hse_type$set_name/$region/BCD/$NewFolder.";
+                    } else {
+                        $file = $folder . "/$NewFolder.";
+                    };
 					my $FILE;
 					open ($FILE, '>', $file . $ext) or die ("Can't open datafile: $file$ext");	# open writeable file
 					foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out

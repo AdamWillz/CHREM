@@ -1,0 +1,4 @@
+<opt>
+    <CEIL_INS max_RSI="8.8" ins_k="0.043" ins_rho="16.0" ins_Cp="835.0"/>
+    <BASE_INS max_RSI="3.5"/>
+</opt>
