@@ -35,7 +35,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw( surf_slope_azimuth rotate_vector poly_obj R3_cross R_dot tri_trap_rect rect_finite_first_fit trap_finite_first_fit tri_finite_first_fit set_origin);
+our @EXPORT = qw( surf_slope_azimuth rotate_vector poly_obj R3_cross R_dot tri_trap_rect rect_finite_first_fit trap_finite_first_fit tri_finite_first_fit set_origin area3D_Polygon);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -535,6 +535,147 @@ sub tri_finite_first_fit {
         };
     };
     return ($Num_P);
+};
+
+# ====================================================================
+# compute the area of a 3D planar polygon
+# Input:  iVer = the number of vertices in the polygon
+#         V = an array of n points in a 3D plane with V[n] != V[0] 
+#             (close of polygon is implied)
+#         n = a normal vector of the polygon's plane
+# Return: the (float) area of the polygon
+#
+# Reference: J.P. Snyder and A.H. Barr, "Ray Tracing Complex Models 
+#            Containing Surface Tessellations", ACM Comp Graphics 
+#            21, (1987)
+# ====================================================================
+sub area3D_Polygon {
+   
+    # Read inputs
+    my $V_ref = $_[0];
+    my @V=@$V_ref;
+
+    # Outputs
+    my $area=0;
+    
+    # Intermediates
+    my $iVer; # Number of vertices in the polygon
+    my $coord=3; # coord to ignore: 1=x, 2=y, 3=z
+    
+    # Check to see if the last point is the same as the first
+    if ((${$V[0]}[0] == ${$V[$#V]}[0]) && (${$V[0]}[1] == ${$V[$#V]}[1]) && (${$V[0]}[2] == ${$V[$#V]}[2])) { # Polygon is closed
+        #print "Polygon is closed\n";
+        $iVer = (scalar @V)-1; 
+    } else { # close the polygon
+        #print "Polygon is open\n";
+        $iVer = scalar @V;
+        push @V, [@{$V[0]}];
+    };
+
+    my @n; # Normal vector
+    my @P1=@{$V[0]}; # Find 3 non-collinear points on the surface
+    my @P2=@{$V[1]};
+    my @P12; # One vector on the plane
+    my @P13; # Another non-collinear vector on the plane
+    # Generate the first vector on the plane
+    for (my $i=0; $i <=2; $i++) {
+        push(@P12, ($P2[$i] - $P1[$i]));
+    };
+    # Find a second non-collinear vector on the plane
+    my $VecMag = 0; # Vector magnitude
+    for (my $i=2;$VecMag < 0.001;$i++) {
+        @P13=();
+        my @P3 = @{$V[$i]}; # Select 3rd point on plane
+        for (my $j=0; $j <=2; $j++) { # Create vector with same origin as P12
+            push(@P13, ($P3[$j] - $P1[$j]));
+        };
+        # Take cross product of vectors
+        my $Res_ref=R3_cross(\@P12,\@P13);
+        my @Res = @$Res_ref;
+        # Get the vector magnitude
+        $VecMag = sqrt(($Res[0]**2)+($Res[1]**2)+($Res[2]**2));
+    };
+    
+    # Determine the normal vector to the plane
+    my $dot = ($P12[1]*$P13[2])-($P12[2]*$P13[1]);
+    push(@n, $dot );
+    $dot = ($P12[2]*$P13[0])-($P12[0]*$P13[2]);
+    push(@n, $dot );
+    $dot = ($P12[0]*$P13[1])-($P12[1]*$P13[0]);
+    push(@n, $dot );
+    my $ax=abs($n[0]);
+    my $ay=abs($n[1]);
+    my $az=abs($n[2]);
+
+    if($ax>$ay) {
+        if($ax>$az){$coord=1}; # ignore x-coord
+    } elsif ($ay>$az) {$coord=2};
+
+    # Compute area of the 2D projection
+    # =======================================================
+    if($coord==1){
+        my $i=1;
+        my $j=2;
+        my $k=0;
+        while($i<$iVer) {
+            $area += ($V[$i][1] * ($V[$j][2] - $V[$k][2]));
+            $i++;
+            $j++;
+            $k++;
+        };
+    
+    } elsif($coord==2) {
+        my $i=1;
+        my $j=2;
+        my $k=0;
+        while($i<$iVer) {
+            $area += ($V[$i][2] * ($V[$j][0] - $V[$k][0]));;
+            $i++;
+            $j++;
+            $k++;
+        };
+
+    } elsif($coord==3) {
+        my $i=1;
+        my $j=2;
+        my $k=0;
+        while($i<$iVer) {
+            $area += ($V[$i][0] * ($V[$j][1] - $V[$k][1]));
+            $i++;
+            $j++;
+            $k++;
+        };
+
+    } else {die "Improper case"};
+
+    # Wrap-around term
+    # =======================================================
+    if($coord==1){
+        $area += ($V[$iVer][1] * ($V[1][2] - $V[($iVer-1)][2]));
+
+    } elsif($coord==2) {
+        $area += ($V[$iVer][2] * ($V[1][0] - $V[($iVer-1)][0]));
+    
+    } elsif($coord==3) {
+        $area += ($V[$iVer][0] * ($V[1][1] - $V[($iVer-1)][1]));
+
+    } else {die "Improper case"};
+    
+    # scale to get area before projection
+    # =======================================================
+    my $an = sqrt( $ax*$ax + $ay*$ay + $az*$az ); # Length of normal vector
+    if($coord==1){
+        $area *= ($an / (2* $n[0]));
+
+    } elsif($coord==2) {
+        $area *= ($an / (2* $n[1]));
+    
+    } elsif($coord==3) {
+        $area *= ($an / (2* $n[2]));
+
+    } else {die "Improper case"};
+
+    return $area;
 };
 
 # Final return value of one to indicate that the perl module is successful
