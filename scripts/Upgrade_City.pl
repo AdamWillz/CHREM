@@ -102,6 +102,8 @@ Hash::Merge::specify_behavior(
 # --------------------------------------------------------------------
 my $hse_type;	# String to hold the house type to be processed
 my $region;	    # String to hold the region to be simulated
+my $hse_type_num;   # String holding the user input for house types
+my $region_num; # String holding the user input for regions
 my $set_name;   # Name of the new set
 my $setPath;    # String holding path to new set
 my $BaseSet;    # Name of the base set being copied
@@ -120,7 +122,9 @@ COMMAND_LINE: {
 	if (@ARGV != 3) {die "Three arguments are required: house_types regions set_name \n";};	# check for proper argument count
 
 	# Pass the input arguments of desired house types and regions to setup the $hse_types and $regions hash references
-	($hse_types, $regions, $BaseSet) = &hse_types_and_regions_and_set_name(shift (@ARGV), shift (@ARGV), shift (@ARGV));
+    $hse_type_num = shift (@ARGV);
+    $region_num = shift (@ARGV);
+	($hse_types, $regions, $BaseSet) = &hse_types_and_regions_and_set_name($hse_type_num, $region_num, shift (@ARGV));
     # Identify this set as an upgrade
 	$set_name = '_UPG_' . $BaseSet;
 
@@ -201,35 +205,49 @@ LOAD_SURF: {
 # --------------------------------------------------------------------
 # Open the appropriate CSDDRD file
 my $CSDDRDfile = '../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region.'.csv';
-APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each record
-    EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
+EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
+    APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each record
         switch ($upg) {
         
-            case "AIM2" {
-                print "Inside case AIM2\n";
+            case "AIM_2" {
+                $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'},$setPath,$UPGrecords);
             }
             case "CEIL_INS" {
+                $UPGrecords->{'CEIL_INS'}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
                 $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
             }
             case "BASE_INS" {
+                $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
+                $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
                 $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
             }
-            case "WALL_INS" {
-                print "Inside case WALL_INS\n";
-            }
+            #case "WALL_INS" {
+            #    print "Inside case WALL_INS\n";
+            #}
             case "GLZ" {
                 print "Inside case GLZ\n";
             }
-            case "HRV" {
-                print "Inside case HRV\n";
+            case "PV_ROOF" {
+                # Upgrade handled by external script
+                if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
+                    next EACH_UPG;
+                } elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) {
+                    my $PVset = $set_name;
+                    $PVset =~s/^_//;
+                    my @PVargs = ("Add_PV.pl", "$hse_type_num", "$region_num","$PVset","0");
+                    system($^X, @PVargs);
+                } else {
+                    print "WARNING: PV_ROOF Input upgrade data bIsAdd value of $Upgrades->{'PV_ROOF'}->{'bIsAdd'} invalid. Skipping\n";
+                    next EACH_UPG;
+                }
             }
-            case "ERV" {
-                print "Inside case ERV\n";
+            case "DH_SYSTEM" {
+                print "Inside case DH_SYSTEM\n";
             }
             else {print "$upg is not a recognized upgrade. Skipping\n";}
         
         };
-    }; # END EACH_UPG
+    }; # END APPL_UPG
 
     ## Collect the CSDDRD data for this dwelling
     ## ----------------------------------------------------------------
@@ -245,7 +263,7 @@ APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each rec
     ## remove the trailing HDF from the house name and check for bad filename
 	#$CSDDRD->{'file_name'} =~ s/.HDF$//;
 
-}; # END APPL_UPG
+}; # END EACH_UPG
 
 print Dumper $UPGrecords;
 
