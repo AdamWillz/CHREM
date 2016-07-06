@@ -19,13 +19,14 @@ use Switch;
 
 use lib qw(./modules);
 use PV;
+use General qw(replace insert);
 
 # Set the package up to export the subroutines for local use within the calling perl script
 require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight);
+our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -303,7 +304,11 @@ sub upgradeAirtight {
     my $FileLine=0;
     my $ThisLine;
     my $recPath = $setPath . "$house_name/";
-    my $iVentType;
+    my $iVentType; # The ventilation system to be upgraded to
+    my $sVentType; # The ventilation system to be upgraded to (string)
+    my $iVentTypeORG; # The original dwelling ventilation system type
+    my $fCurrentVent; # The original dwelling ventilation flow rate
+    my $fVentFlowRequired; # The flow rate required based on ASHRAE Standard 62.2-2016
     
     # Determine the new ACH to achieve
     if($UpgradesAIM2->{'INFIL'}->{'type'} =~ m/default/) {
@@ -313,7 +318,7 @@ sub upgradeAirtight {
     } else {
         die "Invalid AIM-2 upgrade type $UpgradesAIM2->{'type'}. Options are default and custom\n";
     };
-    
+
     # Load the aim2 file
     my $AimFile = $recPath . "$house_name.aim";
     my $fid;
@@ -337,8 +342,7 @@ sub upgradeAirtight {
     
     # Determine if the airtightness needs to be increased
     if($OldACH<=$NewACH) { # Acceptable tightness level already
-        $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_ACH50'} = $OldACH;
-        return $UPGrecords;
+        $NewACH = $OldACH;
     } elsif($UpgradesAIM2->{'INFIL'}->{'type'} =~ m/default/) {
         $lines[$FileLine] = "$UpgradesAIM2->{'INFIL'}->{'level'}\n";
     } else {
@@ -349,27 +353,80 @@ sub upgradeAirtight {
     $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_ACH50'} = $NewACH;
     
     # Print the updated AIM-2 file
-    open my $out, '>', $AimFile or die "Can't write $AimFile: $!";
-    foreach my $ThatData (@lines) {
-        print $out $ThatData;
+    if($OldACH != $NewACH) { # There have been changes to the AIM-2 file
+        open my $out, '>', $AimFile or die "Can't write $AimFile: $!";
+        foreach my $ThatData (@lines) {
+            print $out $ThatData;
+        };
+        close $out;
     };
-    close $out;
     
-    # Update the ventilation
+    #================================================================
+    # VENTILATION
+    #================================================================
+    # What is the required ventilation rate for the dwelling airtightness
+    $fVentFlowRequired = getDwellingVentilationRate($house_name,$recPath);
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'Reqd_Vent_Ls'} = $fVentFlowRequired;
+    
+    # Determine if there is an existing ventilation system
+    $iVentTypeORG = getVentType($house_name,$recPath);
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_CVS'} = $iVentTypeORG;
+
+    # If there is a ventilation system, retrieve the flow rate
+    if($iVentTypeORG>1) {
+        $fCurrentVent = getVentFlowRate($house_name,$recPath,$iVentTypeORG);
+    } else {
+        $fCurrentVent = 0.0;
+    };
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_Vent_Ls'} = $fCurrentVent;
+
+    # Determine the user-prescribed ventilation system type to upgrade to
+    if(defined($UpgradesAIM2->{'HRV'}) && defined($UpgradesAIM2->{'ERV'})) {die "Error: Both an ERV and HRV have been defined in the upgrade input file.\n";}
     if(defined($UpgradesAIM2->{'HRV'})) {
         $iVentType = 2;
+        $sVentType = 'HRV';
     } elsif (defined($UpgradesAIM2->{'ERV'})) {
         $iVentType = 4;
+        $sVentType = 'ERV';
+        die "Currently ERV upgrades are unsupported. ESP-r's moisture balance subroutines are a horrible mess\nThis tool does have the structure in place to add ERVs to the model however\n";
+    } else { # Fans with no heat recovery
+        $iVentType = 3;
+        $sVentType = 'FAN';
     };
-    if(defined($UpgradesAIM2->{'HRV'}) && defined($UpgradesAIM2->{'ERV'})) {die "Error: Both an ERV and HRV have been defined in the upgrade input file.\n";}
+
+    # Determine if an upgrade needs to occur
+    if(($fCurrentVent<$fVentFlowRequired) || ($iVentTypeORG!=$iVentType)) {
+        $UPGrecords = setVNTfile($house_name,$recPath,$iVentType,$sVentType,$fVentFlowRequired,$UpgradesAIM2,$UPGrecords);
+    };
+
+    return $UPGrecords;
+};
+# ====================================================================
+# upgradeDHsystem
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
+#
+# INPUT     numOcc: number of occupants in the house
+#           pdf: probability distribution function HASH (refen
+# OUTPUT    StartActive: number of active occupants 
+# ====================================================================
+sub upgradeDHsystem {
+    # INPUTS
+    my ($house_name,$UpgradesDH,$ThisSurfaces,$setPath,$UPGrecords) = @_;
     
-    $UPGrecords = setVNTfile($house_name,$recPath,$iVentType,$NewACH,$UPGrecords);
+    # INTERMEDIATES
+    
+    # Interrogate this dwellings HVAC file
+    $UPGrecords = getHVACdata($house_name,$setPath,$UPGrecords);
     
     return $UPGrecords;
 };
-
 # ====================================================================
 # *********** PRIVATE METHODS ***************
+# ====================================================================
+
+# ====================================================================
+# *********** CEILING INSULATION SUBROUTINES ***************
 # ====================================================================
 
 # ====================================================================
@@ -694,6 +751,10 @@ sub getCNN {
     return $SurfRec;
 
 }; # END getZoneDataCFG
+# ====================================================================
+# *********** BASEMENT INSULATION SUBROUTINES ***************
+# ====================================================================
+
 # ====================================================================
 # getBSMTType
 #       This subroutine randomly assigns an occupancy start state for the 
@@ -1135,6 +1196,10 @@ sub getNewRSIBsmt {
     return $EquivRSI;
 };
 # ====================================================================
+# *********** AIRTIGHTNESS SUBROUTINES ***************
+# ====================================================================
+
+# ====================================================================
 # getDefaultACH
 #       This subroutine randomly assigns an occupancy start state for the 
 #       dwelling.
@@ -1169,38 +1234,78 @@ sub getDefaultACH {
 # ====================================================================
 sub setVNTfile {
     # INPUTS
-    my ($house_name,$recPath,$iVentTypeUPG,$InfilACH,$UPGrecords) = @_;
+    my ($house_name,$recPath,$iVentTypeUPG,$sVentType,$fVentFlowRequired,$UpgradesAIM2,$UPGrecords) = @_;
     
     # INTERMEDIATES
-    my $iVentTypeUPG;
-    my $iVentTypeORG;
-    my $fVentFlow;
+    my $FileLine=0;
+    my $RVData; # HASH hold the HRV or ERV data
+
+    # Load the mvnt template file
+    my $TmpFile = "../templates/template.mvnt";
+    my $fid;
+    open $fid, $TmpFile or die "Could not open $TmpFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+
+    if ($iVentTypeUPG == 2 || $iVentTypeUPG == 4) {	# Upgrade to HRV or ERV
+        # Determine which device to use for this house
+        my $sDeviceIndex;
+        # Load the device data
+        $RVData = $UpgradesAIM2->{"$sVentType"};
+        # Load the available supply flow rates
+        my @FlowRates = @{$UpgradesAIM2->{"$sVentType"}->{'flowrate'}};
+        my @FlowRates = sort { $a <=> $b } @FlowRates; # Sort the flowrates from high to low
+        # Find a device that meets the ventilation requirements
+        my $i=0;
+        until(($FlowRates[$i]>=$fVentFlowRequired) || ($i==$#FlowRates)){$i++;}
+        $sDeviceIndex = 'Supply_' . "$FlowRates[$i]";
+        $fVentFlowRequired = $FlowRates[$i];
+
+        # Set the CVS system type 
+        &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as HRV
+        
+        # Load the device data
+        my $hsp_T = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_T'};
+        my $hsp_SRE = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_SRE'};
+        my $hsp_P = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_P'};
+        my $vltt_T = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_T'};
+        my $vltt_SRE = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_SRE'};
+        my $vltt_P = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_P'};
+        my $tre = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'tre'};
+        my $Preheat_P = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'Preheat_P'};
+        my $hsp_LRMT;
+        my $vltt_LRMT;
+        if($iVentTypeUPG == 4){ # additional ERV data
+            $hsp_LRMT = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_LRMT'};
+            $vltt_LRMT = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_LRMT'};
+            &insert (\@lines, "#HRV_DATA", 1, 1, 0, "%s\n%s\n", "$hsp_T $hsp_SRE $hsp_LRMT $hsp_P", "$vltt_T $vltt_SRE $vltt_LRMT $vltt_P");	# list efficiency and fan power (W) at cool (0C) and cold (-25C) temperatures. NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        } else {
+            &insert (\@lines, "#HRV_DATA", 1, 1, 0, "%s\n%s\n", "$hsp_T $hsp_SRE $hsp_P", "$vltt_T $vltt_SRE $vltt_P");	# list efficiency and fan power (W) at cool (0C) and cold (-25C) temperatures. NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        };
+        &insert (\@lines, "#HRV_FLOW_RATE", 1, 1, 0, "%s\n", $fVentFlowRequired);	# supply flow rate
+        &insert (\@lines, "#HRV_COOL_DATA", 1, 1, 0, "%s\n", "$tre");	# cool efficiency
+        &insert (\@lines, "#HRV_PRE_HEAT", 1, 1, 0, "%s\n", "$Preheat_P");	# preheat watts
+        &insert (\@lines, "#HRV_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# this is presently not used (7) but can make for controlled HRV by temp
+        &insert (\@lines, "#HRV_DUCT", 1, 1, 0, "%s\n%s\n", "1 1 2 2 152 0.1", "1 1 2 2 152 0.1");	# use the typical duct values
+    }
+    elsif ($iVentTypeUPG == 3) {	# fan only ventilation
+        &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as fan ventilation
+        &insert (\@lines, "#VENT_FLOW_RATE", 1, 1, 0, "%s\n", "$fVentFlowRequired $fVentFlowRequired 0");	# supply and exhaust flow rate (L/s) and fan power (W) NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        &insert (\@lines, "#VENT_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# no temp control
+    };	# no need for an else
     
-    # Determine the ventilation system type for the dwelling
-    $iVentTypeORG = getVentType($house_name,$recPath);
-    # Store in upgrades 
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_CVS'} = $iVentTypeORG;
-    
-    # TODO: IF AIRTIGHTNESS IS INCREASED, VENTILATION MUST ALSO INCREASE
-    if(($iVentTypeORG == 4) || (($iVentTypeORG == 2) && ($iVentTypeUPG == 2))) { # No upgrade if ERV present, or upgrade is HRV and HRV is already present
-        $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_CVS'} = $iVentTypeORG;
-        return $UPGrecords;
+    # Print the new mvnt file
+    my $MvntFile = $recPath . "$house_name.mvnt";
+    unlink $MvntFile; # Clear the old file
+    open my $out, '>', $MvntFile or die "Can't write $MvntFile: $!";
+    foreach my $ThatData (@lines) {
+        print $out $ThatData;
     };
+    close $out;
     
-    # Determine the mechanical ventilation flow rate required
-    $fVentFlow = getDwellingVentilationRate($house_name,$recPath);
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_vent_flow'} = $fVentFlow;
-    
-    # Select a ventilation system
-    
-    # Load the mvnt file
-    #my $MvntFile = $recPath . "$house_name.mvnt";
-    #my $fid;
-    #open $fid, $MvntFile or die "Could not open $MvntFile\n";
-    #my @lines = <$fid>; # Pull entire file into an array
-    #close $fid;
-    
-    
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_CVS'} = $iVentTypeUPG;
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_Vent_Ls'} = $fVentFlowRequired;
+
     return $UPGrecords;
 };
 # ====================================================================
@@ -1539,6 +1644,196 @@ sub getAnnualAverageInfil {
     $fAnnInfil = ($NL*$swf*$fFloor)/1.44;
     
     return $fAnnInfil;
+};
+# ====================================================================
+# getVentFlowRate
+#       This subroutine estimates the average annual infiltration rate
+#       This rate is calculated using ASHRAE Standard 62.2-2016.
+#
+# INPUT     Height: Vertical distance between the lowest and highest
+#                   point in the pressure boundary above grade [m]
+#           ELA: Effective leakage area [m2]
+#           swf: weather and sheilding factor
+#           fFloor: Heated floor area [m2]
+# OUTPUT    fAnnInfil: Annual average infiltration rate [L/s]
+# ====================================================================
+sub getVentFlowRate {
+    # INPUTS
+    my ($house_name,$recPath,$iVentTypeORG) = @_;
+    
+    # OUT
+    my $fVentFlow;
+    
+    # INTERMEDIATES
+    my $FileLine=0;
+    my $DataLine=0;
+    my $StopLine;
+    
+    # Open the mvnt file (again likely...)
+    my $MvntFile = $recPath . "$house_name.mvnt";
+    my $fid;
+    open $fid, $MvntFile or die "Could not open $MvntFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Index the location of the ventilation flowrate
+    if(($iVentTypeORG == 2) || ($iVentTypeORG == 4)) {
+        $StopLine = 4;
+    } elsif($iVentTypeORG == 3) {
+        $StopLine = 2;
+    } else {die"getVentFlowRate: Invalid ventilation system type $iVentTypeORG\n";}
+    until($DataLine == $StopLine) {
+        if($lines[$FileLine] !~ m/^(#)/) {$DataLine++;}
+        $FileLine++;
+    };
+    $FileLine--;
+    
+    # Read the ventilation rate (L/s)
+    $lines[$FileLine] =~ s/^\s+|\s+$//g;
+    my @LineDat = split /[,\s]+/, $lines[$FileLine];
+    $fVentFlow = $LineDat[0];
+    
+    return $fVentFlow;
+};
+
+# ====================================================================
+# *********** DH SYSTEM SUBROUTINES ***************
+# ====================================================================
+
+# ====================================================================
+# getHVACdata
+#       This subroutine opens the dwelling HVAC file, determines the
+#       current system type, and store the data in the upgrade HASH
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub getHVACdata {
+    # INPUTS
+    my ($house_name,$recPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine=0; # Index the file line
+    my $iSystems; # Integer holding number of HVAC systems
+
+    # Load the mvnt file
+    my $HVACFile = $recPath . "$house_name.hvac";
+    my $fid;
+    open $fid, $HVACFile or die "Could not open $HVACFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Get the number of HVAC systems present
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+    my @LineDat = split ' ', $lines[$FileLine];
+    $iSystems = $LineDat[0];
+    $FileLine++;
+    # Store number of HVAC systems
+    $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'Num_HVAC_Sys'} = $iSystems;
+    
+    # Get the HVAC system data
+    for(my $i=1;$i<=$iSystems;$i++) {
+        my $sSysType; # HVAC system type
+        my $iNumZones;   # Number of zones serviced
+        until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+        $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+        my @LineDat = split ' ', $lines[$FileLine];
+        $FileLine++;
+        
+        # What type of system this is
+        if($LineDat[0] == 1) {
+            $sSysType = 'furnace';
+        } elsif($LineDat[0] == 7) {
+            $sSysType = 'AC_HP';
+        } elsif($LineDat[0] == 3) {
+            $sSysType = 'baseboards';
+        } else {
+            die "getHVACdata: Unrecognized HVAC system $LineDat[0]. Should be 1 or 7\n";
+        };
+        if($LineDat[1] != 1) {die "Record $house_name: HVAC has secondary system $LineDat[1]\n";}
+        
+        # How many zones are serviced
+        $iNumZones = $LineDat[2];
+        $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'Num_Zones_Served'} = $iNumZones;
+        
+        # Get the system data
+        until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+        $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+        my @LineDat = split ' ', $lines[$FileLine];
+        $FileLine++;
+        
+        if($sSysType =~ m/furnace/) {
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'Type'} = $LineDat[0];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'energy_src'} = $LineDat[1];
+            my $iData = 2;
+            for(my $j=1;$j<=$iNumZones;$j++){
+                $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{"Zone_$j"}->{'Zone_num'} = $LineDat[$iData];
+                $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{"Zone_$j"}->{'distribution'} = $LineDat[$iData+1];
+                $iData = $iData+2;
+            };
+            $iData--;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'heating_capacity_W'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'efficiency'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'auto_circulation_fan'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'estimate_fan_power'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'draft_fan_power'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'pilot_power'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'duct_system_flag'} = $LineDat[$iData];
+
+        } elsif($sSysType =~ m/AC_HP/) {
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'heating_or_cooling'} = $LineDat[0];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'Type'} = $LineDat[1];
+            my $iData = 2;
+            for(my $j=1;$j<=$iNumZones;$j++){
+                $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{"Zone_$j"}->{'Zone_num'} = $LineDat[$iData];
+                $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{"Zone_$j"}->{'distribution'} = $LineDat[$iData+1];
+                $iData = $iData+2;
+            };
+            
+            # Get the capacity and COP
+            until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+            $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            my @LineDat = split ' ', $lines[$FileLine];
+            $FileLine++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'capacity_W'} = $LineDat[0];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'COP'} = $LineDat[1];
+            
+            # Get fan info
+            until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+            $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            my @LineDat = split ' ', $lines[$FileLine];
+            $FileLine++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'flow_rate'} = $LineDat[0];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'flow_at_rated'} = $LineDat[1];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'circ_fan_mode'} = $LineDat[2];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'circ_fan_position'} = $LineDat[3];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'circ_fan_power'} = $LineDat[4];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'outdoor_fan_power'} = $LineDat[5];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'circ_fan_power_auto_mode'} = $LineDat[6];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'circ_fan_pos_at_rated'} = $LineDat[7];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'circ_fan_power_at_rated'} = $LineDat[8];
+            
+            # Get sensible heat ratio and economizer type
+            until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+            $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            my @LineDat = split ' ', $lines[$FileLine];
+            $FileLine++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'sensible_heat_ratio'} = $LineDat[0];
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'economizer_type'} = $LineDat[1];
+
+        };
+
+    };
+
+    return $UPGrecords;
 };
 
 # Final return value of one to indicate that the perl module is successful

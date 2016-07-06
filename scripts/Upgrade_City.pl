@@ -241,9 +241,9 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
                     next EACH_UPG;
                 }
             }
-            case "DH_SYSTEM" {
-                print "Inside case DH_SYSTEM\n";
-            }
+            #case "DH_SYSTEM" {
+            #    $UPGrecords = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+            #}
             else {print "$upg is not a recognized upgrade. Skipping\n";}
         
         };

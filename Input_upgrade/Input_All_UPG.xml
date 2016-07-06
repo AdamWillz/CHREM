@@ -6,11 +6,19 @@
         <INFIL type="default" level="6"/>
         <!--INFIL type="custom" ACH_50="1.5" ELA_Pa="10"  ELA="342.3" Cd="0.611"/-->
         <HRV>
-            <Supply_22 detail="Venmar 50H"        hsp_T="0.00" hsp_SRE="66.0" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="48.00"/>
-            <Supply_31 detail="Venmar 90HV+"      hsp_T="0.00" hsp_SRE="75.0" hsp_P="54.00" vltt_T="-25.00" vltt_SRE="70.0" vltt_P="72.00"/>
-            <Supply_39 detail="vanEE 200H"        hsp_T="0.00" hsp_SRE="65.0" hsp_P="71.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="114.00"/>
-            <Supply_51 detail="vanEE 2001HRV"     hsp_T="0.00" hsp_SRE="70.0" hsp_P="92.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="104.00"/>
+            <flowrate>22</flowrate>
+            <flowrate>51</flowrate>
+            <flowrate>39</flowrate>
+            <flowrate>31</flowrate>
+            <Supply_22 detail="Venmar 50H"    hsp_T="0.00" hsp_SRE="66.0" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="48.00"  tre="40.0" Preheat_P="0"/>
+            <Supply_31 detail="Venmar 90HV+"  hsp_T="0.00" hsp_SRE="75.0" hsp_P="54.00" vltt_T="-25.00" vltt_SRE="70.0" vltt_P="72.00"  tre="40.0" Preheat_P="0"/>
+            <Supply_39 detail="vanEE 200H"    hsp_T="0.00" hsp_SRE="65.0" hsp_P="71.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="114.00" tre="40.0" Preheat_P="0"/>
+            <Supply_51 detail="vanEE 2001HRV" hsp_T="0.00" hsp_SRE="70.0" hsp_P="92.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="104.00" tre="40.0" Preheat_P="0"/>
         </HRV>
+        <!--ERV>
+            <flowrate>22</flowrate>
+            <Supply_22 detail="Venmar 50H"    hsp_T="0.00" hsp_SRE="66.0" hsp_LRMT="0.45" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" hsp_LRMT="0.45" vltt_LRMT="0.26" vltt_P="48.00"  tre="40.0" Preheat_P="0"/>
+        </ERV-->
     </AIM_2> 
     <!-- Foundation upgrade assumes that new insulation is added to the interior (full height)-->
     <BASE_INS> 
@@ -20,5 +28,27 @@
         <!-- XPS (ASHRAE Fundamentals 2009)-->
         <crawl max_RSI="5.3" ins_k="0.026" ins_rho="33.0" ins_Cp="1470.0"/>
     </BASE_INS>
+    <!-- PV RETROFIT -->
     <PV_ROOF  bIsAdd="0"/>
+    <!-- DISTRICT HEATING -->
+    <DH_SYSTEM>
+        <INPUTS />
+        <!-- Hydronic furnace inputs -->
+        <RATED_13 Output="13.2" Units="kW">
+            <Blower name="Blower"  mass="10.000" Cs="500.000" UA="0.1000E-02" Pin="450.00" Vrated="0.37760" Eff="0.7000" Type="3" Ctl_Vars="1" Ndata="6"/>
+            <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="0.18930E-03" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
+            <Coil name="Hyd_Coil"  mass="15.000" Cs="500.00" Mw="1.7800" Ao="11.500" Ai="0.6500" Af="0.21400" Rm="0.10000E-01" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
+        </RATED_13>
+        <RATED_18 Output="17.6" Units="kW">
+            <Blower name="Blower"  mass="10.000" Cs="500.000" UA="0.1000E-02" Pin="450.00" Vrated="0.56630" Eff="0.7000" Type="3" Ctl_Vars="1" Ndata="6"/>
+            <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="2.20800E-04" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
+            <Coil name="Hyd_Coil"  mass="18.000" Cs="500.00" Mw="2.0100" Ao="15.000" Ai="0.7300" Af="0.24200" Rm="0.10000E-02" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
+        </RATED_18>
+        <RATED_22 Output="22.0" Units="kW">
+            <Blower name="Blower"  mass="10.000" Cs="500.000" UA="0.1000E-02" Pin="500.00" Vrated="0.6610" Eff="0.7000" Type="3" Ctl_Vars="1" Ndata="6"/>
+            <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="2.524E-04" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
+            <Coil name="Hyd_Coil"  mass="26.000" Cs="500.00" Mw="3.2600" Ao="19.500" Ai="1.1900" Af="0.26000" Rm="0.10000E-02" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
+        </RATED_22>
+        
+    </DH_SYSTEM>
 </opt>
