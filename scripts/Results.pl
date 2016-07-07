@@ -115,6 +115,7 @@ foreach my $hse_type (&array_order(values %{$hse_types})) {		#each house type
 		push (my @dirs, <../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
 # 		print Dumper @dirs;
 		CHECK_FOLDER: foreach my $dir (@dirs) {
+            if($dir =~ m/(BCD)$/) {next CHECK_FOLDER;} # Skip the BCD folder
 			# cycle through the desired house names to see if this house matches. If so continue the house build
 			foreach my $desired (@houses_desired) {
 				# it matches, so set the flag
