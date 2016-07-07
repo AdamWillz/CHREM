@@ -1829,6 +1829,21 @@ sub getHVACdata {
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'sensible_heat_ratio'} = $LineDat[0];
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'economizer_type'} = $LineDat[1];
 
+        } elsif($sSysType =~ m/baseboards/) {
+            my $iData = 0;
+            for(my $j=1;$j<=$iNumZones;$j++){
+                $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{"Zone_$j"}->{'Zone_num'} = $LineDat[$iData];
+                $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{"Zone_$j"}->{'distribution'} = $LineDat[$iData+1];
+                $iData = $iData+2;
+            };
+            $iData--;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'heating_capacity_W'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'efficiency'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'auto_circulation_fan'} = $LineDat[$iData];
+            $iData++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'estimate_fan_power'} = $LineDat[$iData];
         };
 
     };
