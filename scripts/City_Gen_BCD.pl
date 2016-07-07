@@ -127,7 +127,7 @@ my @CHREMBulbs    :shared; # Array holding the keys for the CHREM bulb types
 # --------------------------------------------------------------------
 
 COMMAND_LINE: {
-	if (@ARGV == 0 || @ARGV == 4) {die "Five arguments are required: house_types regions set_name simulation_time-step_(minutes) source_list; or \"db\" for database generation\n";};	# check for proper argument count
+	if (@ARGV < 5) {die "Five arguments are required: house_types regions set_name simulation_time-step_(minutes) source_list; or \"db\" for database generation\n";};	# check for proper argument count
 
 	if ($ARGV[0] eq 'db') {&database_XML(); exit;};	# construct the databases and leave the information loaded in the variables for use in house generation
 
