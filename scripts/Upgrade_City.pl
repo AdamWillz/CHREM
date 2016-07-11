@@ -178,6 +178,13 @@ COPY_BASE: {
     
     &setBCDpath(\@houses_desired,$BCDPath,$setPath);
     
+    # Sim control requires a house generation issues report to exist in order to run simulations
+    # Create a dummy file
+    my $DummyFile = "../summary_files/Hse_Gen_$BaseSet" . "_Issues.txt";
+    open (my $DumFID, '>', $DummyFile) or die ("Can't open dummy file: $DummyFile");	# open writeable file
+    print $DumFID "\n";
+    close $DumFID;
+    
     print "Done\n";
 }; # END COPY_BASE
 
@@ -265,5 +272,15 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
 
 }; # END EACH_UPG
 
-print Dumper $UPGrecords;
+# --------------------------------------------------------------------
+# Save the upgrades info
+# --------------------------------------------------------------------
+UPG_OUT: {
+    my $xmlOut = "../summary_files/UPG_$BaseSet" . "_Info.xml";
+    open (my $outFID, '>', $xmlOut) or die ("Can't open datafile: $xmlOut");	# open writeable file
+    print $outFID XMLout($UPGrecords, keyattr => []);	# printout the XML data
+    close $outFID;
+    #print Dumper $UPGrecords;
+};
+
 
