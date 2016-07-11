@@ -322,11 +322,7 @@ sub collect_results_data {
 			$results_all->{'parameter'}->{'Cooling_Sys/Calc/COP'} = 'COP';
 			
 			# Check the Cooling COP range (note it should be negative)
-            # ADW: Because the electrical consumption for ventilation fans was lumped into space cooling, the COP calculated here is a gross underestimate.
-            # The minimum was reset to 0.75
-            # TODO: Segregate ventilation and space cooling
-			#if ($results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'} < 1.5 || $results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'} > 8) {
-            if ($results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'} < 0.75 || $results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'} > 8) {
+			if ($results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'} < 1.5 || $results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'} > 8) {
 				# Store the house name so we no it is bad - with a note
 				$results_all->{'bad_houses'}->{$region}->{$province[0]}->{$hse_type}->{$hse_name} = "Bad Cooling COP - $results_all->{'house_results'}->{$hse_name}->{'Cooling_Sys/Calc/COP'}";
 				# Delete this house so it does not affect the multiplier

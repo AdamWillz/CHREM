@@ -52,7 +52,9 @@ sub check_add_house_result {
 
 		# To account for ventilation fans, CHREM incorporated these into CHREM_AL. With the exception for space_cooling. As such the fan power for heating fans was set to zero, but the fan power for cooling fans was not. Therefore, any consumption for ventilation is actually associated with space cooling. Rather than have an extra consumption end-use associated with ventilation, this incorporates such consumption into the space_cooling
 		my $var = $param; # Declare a variable the same as res_total to support changing the name without affecting the original
-		$var =~ s/ventilation/space_cooling/; # Check for 'ventilation' and replace with 'space cool
+        # ADW JUL 2016: Ventilation should have it's own end use category. Adding ventilation power to space cooling skews the space cooling COP 
+        #               post-processing calculation
+		#$var =~ s/ventilation/space_cooling/; # Check for 'ventilation' and replace with 'space cool
 
 		# Check to see if we have already defined this parameter. If not, then set it equal to the units. Later the parameter list will be used as a key to print everything out and provide info on the units
 		unless (defined($results_all->{'parameter'}->{$var . '/' . $val_type})) {
