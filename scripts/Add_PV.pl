@@ -1072,6 +1072,12 @@ MAIN: {
                         foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out
                     };
 				};
+                # Update the XML reports
+                my $ThisXMLPath = "$dir" . "/input.xml";
+                rename $ThisXMLPath, "$ThisXMLPath.orig";
+                unlink $ThisXMLPath;
+                copy("../Input_upgrade/h3k_PV.xml",$ThisXMLPath) or die "Copy of $ThisXMLPath failed: $!";
+                
 			};
         };
         };  # end of EACHHSE

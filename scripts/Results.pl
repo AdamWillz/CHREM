@@ -302,11 +302,15 @@ sub collect_results_data {
 		if ($zones_heat > 0) {
 			$results_all->{'house_results'}->{$hse_name}->{'Zone_heat/energy/integrated'} = sprintf($units->{'GJ'}, $zones_heat);
 			$results_all->{'parameter'}->{'Zone_heat/energy/integrated'} = 'GJ';
-			$results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} = sprintf($units->{'COP'}, $zones_heat / $results_all->{'house_results'}->{$hse_name}->{'use/space_heating/energy/integrated'});
+            if (defined ($results_all->{'house_results'}->{$hse_name}->{'use/space_heating/energy/integrated'})) {
+                $results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} = sprintf($units->{'COP'}, $zones_heat / $results_all->{'house_results'}->{$hse_name}->{'use/space_heating/energy/integrated'});
+            } else {
+                $results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} = sprintf($units->{'COP'}, 0.0);
+            };
 			$results_all->{'parameter'}->{'Heating_Sys/Calc/COP'} = 'COP';
 			
 			# Check the Heating COP range
-			if ($results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} > 7 || $results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} < 0.15) {
+			if (($results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} > 7 || $results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'} < 0.15) && (defined ($results_all->{'house_results'}->{$hse_name}->{'use/space_heating/energy/integrated'}))) {
 				# Store the house name so we no it is bad - with a note
 				$results_all->{'bad_houses'}->{$region}->{$province[0]}->{$hse_type}->{$hse_name} = "Bad Cooling COP - $results_all->{'house_results'}->{$hse_name}->{'Heating_Sys/Calc/COP'}";
 				# Delete this house so it does not affect the multiplier

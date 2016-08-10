@@ -12,6 +12,7 @@ package UpgradeCity;
 
 # Declare packages used by this perl module
 use strict;
+use warnings;
 use CSV;	# CSV-2 (for CSV split and join, this works best)
 use Cwd;
 use Data::Dumper;
@@ -418,6 +419,15 @@ sub upgradeDHsystem {
     
     # Interrogate this dwellings HVAC file
     $UPGrecords = getHVACdata($house_name,$setPath,$UPGrecords);
+    
+    # Interrogate this dwelling's DHW system
+    $UPGrecords = getDHWdata($house_name,$setPath,$UPGrecords);
+    
+    # Remove the heating system from dwelling
+    setHVACfileDH($house_name,$setPath,$UPGrecords);
+    
+    # Remove the DHW system from dwelling
+    setDHWfileDH($house_name,$setPath,$UPGrecords);
     
     return $UPGrecords;
 };
@@ -1254,7 +1264,7 @@ sub setVNTfile {
         $RVData = $UpgradesAIM2->{"$sVentType"};
         # Load the available supply flow rates
         my @FlowRates = @{$UpgradesAIM2->{"$sVentType"}->{'flowrate'}};
-        my @FlowRates = sort { $a <=> $b } @FlowRates; # Sort the flowrates from high to low
+        @FlowRates = sort { $a <=> $b } @FlowRates; # Sort the flowrates from high to low
         # Find a device that meets the ventilation requirements
         my $i=0;
         until(($FlowRates[$i]>=$fVentFlowRequired) || ($i==$#FlowRates)){$i++;}
@@ -1716,11 +1726,12 @@ sub getHVACdata {
     # INTERMEDIATES
     my $FileLine=0; # Index the file line
     my $iSystems; # Integer holding number of HVAC systems
+    my $fAltitude; # Altitude of system [m]
 
     # Load the mvnt file
-    my $HVACFile = $recPath . "$house_name.hvac";
+    my $HVACFile = $recPath . "$house_name/$house_name.hvac";
     my $fid;
-    open $fid, $HVACFile or die "Could not open $HVACFile\n";
+    open $fid, $HVACFile or die "getHVACdata: Could not open $HVACFile\n";
     my @lines = <$fid>; # Pull entire file into an array
     close $fid;
     
@@ -1729,9 +1740,11 @@ sub getHVACdata {
     $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
     my @LineDat = split ' ', $lines[$FileLine];
     $iSystems = $LineDat[0];
+    $fAltitude = $LineDat[1];
     $FileLine++;
     # Store number of HVAC systems
     $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'Num_HVAC_Sys'} = $iSystems;
+    $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'altitude'} = $fAltitude;
     
     # Get the HVAC system data
     for(my $i=1;$i<=$iSystems;$i++) {
@@ -1749,10 +1762,23 @@ sub getHVACdata {
             $sSysType = 'AC_HP';
         } elsif($LineDat[0] == 3) {
             $sSysType = 'baseboards';
+        } elsif($LineDat[0] == 8) {
+            $sSysType = 'GSHP';
+            print "getHVACdata: Record $house_name, warning record has GSHP system. This type is not handled by Upgrade script\n";
+        } elsif($LineDat[0] == 9) {
+            $sSysType = 'GCEP';
+             print "getHVACdata: Record $house_name, warning record has GCEP system. This type is not handled by Upgrade script\n";
         } else {
-            die "getHVACdata: Unrecognized HVAC system $LineDat[0]. Should be 1 or 7\n";
+            die "getHVACdata: Unrecognized HVAC system $LineDat[0]. Should be 1,3 or 7,8,9\n";
         };
-        if($LineDat[1] != 1) {die "Record $house_name: HVAC has secondary system $LineDat[1]\n";}
+        #if($LineDat[1] != 1) {die "Record $house_name: HVAC has secondary system $LineDat[1]\n";}
+        if($LineDat[1] == 1) {
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'priority'} = 'primary';
+        } elsif ($LineDat[1] == 2) {
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'priority'} = 'secondary';
+        } else {
+            die "getHVACdata: Record $house_name, unrecognized system priority $LineDat[1]\n";
+        };
         
         # How many zones are serviced
         $iNumZones = $LineDat[2];
@@ -1761,7 +1787,7 @@ sub getHVACdata {
         # Get the system data
         until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
         $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-        my @LineDat = split ' ', $lines[$FileLine];
+        @LineDat = split ' ', $lines[$FileLine];
         $FileLine++;
         
         if($sSysType =~ m/furnace/) {
@@ -1788,7 +1814,7 @@ sub getHVACdata {
             $iData++;
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'duct_system_flag'} = $LineDat[$iData];
 
-        } elsif($sSysType =~ m/AC_HP/) {
+        } elsif(($sSysType =~ m/AC_HP/) || ($sSysType =~ m/GSHP/) || ($sSysType =~ m/GCEP/)) {
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'heating_or_cooling'} = $LineDat[0];
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'Type'} = $LineDat[1];
             my $iData = 2;
@@ -1809,7 +1835,7 @@ sub getHVACdata {
             # Get fan info
             until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
             $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-            my @LineDat = split ' ', $lines[$FileLine];
+            @LineDat = split ' ', $lines[$FileLine];
             $FileLine++;
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'flow_rate'} = $LineDat[0];
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'flow_at_rated'} = $LineDat[1];
@@ -1824,7 +1850,7 @@ sub getHVACdata {
             # Get sensible heat ratio and economizer type
             until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
             $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-            my @LineDat = split ' ', $lines[$FileLine];
+            @LineDat = split ' ', $lines[$FileLine];
             $FileLine++;
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'sensible_heat_ratio'} = $LineDat[0];
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'economizer_type'} = $LineDat[1];
@@ -1849,6 +1875,273 @@ sub getHVACdata {
     };
 
     return $UPGrecords;
+};
+# ====================================================================
+# getDHWdata
+#       This subroutine opens the dwelling DHW file, determines the
+#       current system type, and store the data in the upgrade HASH
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub getDHWdata {
+    # INPUTS
+    my ($house_name,$recPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine=0; # Index the file line
+    my $DataLine = 0; # Number of lines with data read
+    my $iTanks; # Integer holding number of tanks
+    my $BDCmult; # BCD multiplier
+
+    # Load the dhw file
+    my $DHWFile = $recPath . "$house_name/$house_name.dhw";
+    my $fid;
+    open $fid, $DHWFile or die "Could not open $DHWFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Get the number of tanks present
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $FileLine++;
+    $DataLine++; # Skip file version
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+    my @LineDat = split ' ', $lines[$FileLine];
+    $iTanks = $LineDat[0];
+    $FileLine++;
+    $DataLine++;
+    # Store number of tanks
+    $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'DHW'}->{'Num_Tanks'} = $iTanks;
+    
+    # Get the BCD multiplier
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $FileLine++;
+    $DataLine++; # Skip the number of occupants
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+    @LineDat = split ' ', $lines[$FileLine];
+    $BDCmult = $LineDat[0];
+    $FileLine++;
+    $DataLine++;
+    $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'DHW'}->{'BCD_Mult'} = $BDCmult;
+    
+    # Supply temperature (The supply temperature is hard coded to 60oC in ESP-r)
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $FileLine++;
+    $DataLine++;
+    $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'DHW'}->{'T_supply'} = 60.0;
+
+    
+    # Get the tank data
+    my @sDHWKeys = qw(DHW_zone energy_src tank_type fDOEEF fHeatInjectorPower fPilotEnergyRate fTankSize fTemperatureBand fBlanketRSI);
+    for(my $i=1;$i<=$iTanks;$i++) { # For each tank
+        foreach my $dataa (@sDHWKeys) {
+            my $ThisDHWdata;
+            until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+            $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @LineDat = split ' ', $lines[$FileLine];
+            $ThisDHWdata = $LineDat[0];
+            $DataLine++;
+            $FileLine++;
+            $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'DHW'}->{"$dataa"}->{'DHW_zone'} = $ThisDHWdata;
+        };
+    };
+
+    return $UPGrecords;
+};
+# ====================================================================
+# setHVACfileDH
+#       This subroutine removes the heating system from the .hvac
+#       file
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub setHVACfileDH {
+    # INPUTS
+    my ($house_name,$recPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine=0; # Index the file line
+    my $iSystems; # Integer holding number of HVAC systems
+    my $fAltitude; # Altitude of system [m]
+    my $iLineTop; # Marks the upper boundary of data to be retained
+    my $iNewSystems;
+    my @sNewHVAC;
+
+    # Load the hvac file
+    my $HVACFile = $recPath . "$house_name/$house_name.hvac";
+    my $fid;
+    open $fid, $HVACFile or die "Could not open $HVACFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Load number of HVAC systems
+    $iSystems = $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'Num_HVAC_Sys'};
+    $fAltitude = $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'altitude'};
+    $iNewSystems = $iSystems;
+    
+    # Get the top of the hvac file
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $iLineTop = $FileLine;
+    $FileLine++;
+    @sNewHVAC = @lines[0..$iLineTop]; # Store the top of the hvac file
+    
+    # Begin cycling through the hvac systems, removing heating
+    for(my $i=1;$i<=$iSystems;$i++) {
+        my $iSysType;
+        my $ThisHVACstart = $FileLine; # marks the start of this HVAC system data
+        my $iTHisData = 0; # Data lines read in for this HVAC system
+        my $iThisNumData = 0; # Number of data lines for this hvac type
+        # Get the info for this system
+        until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+        $lines[$FileLine] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+        my @LineDat = split ' ', $lines[$FileLine];
+        $FileLine++;
+        $iTHisData++;
+        $iSysType = $LineDat[0];
+
+        if (($iSysType == 1) || ($iSysType == 3)) { # Furnace or baseboard. Remove
+            $iThisNumData = 2; # Both furnaces and baseboards have only 2 data lines
+            until($iTHisData == $iThisNumData) {
+                if ($lines[$FileLine] !~ m/^(#)/) {$iTHisData++;}
+                $FileLine++;
+            };
+
+            # Decrement the number of HVAC systems
+            $iNewSystems--;
+            
+        } elsif ($iSysType == 7) { # air-source heat pump
+            my $iUnitFunction;
+        
+            # Determine if this heating or cooling
+            until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+            my $DummyLine = $lines[$FileLine];
+            $DummyLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @LineDat = split ' ', $DummyLine;
+            $iUnitFunction = $LineDat[0];
+            
+            if($iUnitFunction == 2) { # Cooling
+                $iThisNumData = 9;
+                my $ThisHVACstop;
+                until($iTHisData == $iThisNumData) {
+                    if ($lines[$FileLine] !~ m/^(#)/) {$iTHisData++;}
+                    $FileLine++;
+                };
+                
+                # Grab the control data
+                $DummyLine = $lines[$FileLine-1];
+                $DummyLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+                @LineDat = split ' ', $DummyLine;
+                my $iCoolCtrl = $LineDat[1];
+                $lines[$FileLine-1] = sprintf("0 %d # heating_control_function cooling_control_function (in CTL file)\n", $iCoolCtrl);
+                
+                # Add this system to the new hvac file
+                $ThisHVACstop = $FileLine;
+                push(@sNewHVAC,@lines[$ThisHVACstart..$ThisHVACstop]); # Add the cooling system to the new hvac file
+                
+            } elsif($iUnitFunction == 1) { # Heating
+                $iThisNumData = 5;
+                until(($lines[$FileLine] !~ m/^(#)/) || ($iTHisData == $iThisNumData)) {
+                    if ($lines[$FileLine] !~ m/^(#)/) {$iTHisData++;}
+                    $FileLine++;
+                };
+                # Decrement the number of HVAC systems
+                $iNewSystems--;
+            } else {
+                die "setHVACfileDH: Record $house_name, unknown heat pump unit function $iUnitFunction\n";
+            }; 
+
+        } else {
+            die "setHVACfileDH: Unrecognized HVAC system $iSysType. Should be 1,3 or 7\n";
+        };
+
+    
+    }; # End of HVAC systems loop
+    
+    # Update the number of hvac systems
+    $sNewHVAC[$iLineTop] = sprintf("%d %.2f # number of systems and altitude (m)\n", $iNewSystems, $fAltitude);
+    push(@sNewHVAC,"\n");
+
+    # Print the new hvac file
+    PRINT_HVAC: {
+        unlink $HVACFile; # Clear old file
+        open my $out, '>', $HVACFile or die "Can't write $HVACFile: $!";
+        foreach my $ThatData (@sNewHVAC) {
+            print $out $ThatData;
+        };
+        close $out;
+    };
+
+    return 1;
+};
+# ====================================================================
+# setDHWfileDH
+#       This subroutine removes the dhw system from the .dhw
+#       file
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub setDHWfileDH {
+    # INPUTS
+    my ($house_name,$recPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine=0; # Index the file line
+    my $DataLine=0;
+    my $iTanks; # Integer holding number of tanks
+
+    # Load the dhw file
+    my $DHWFile = $recPath . "$house_name/$house_name.dhw";
+    my $fid;
+    open $fid, $DHWFile or die "Could not open $DHWFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Load the number of tanks
+    $iTanks = $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{'DHW'}->{'Num_Tanks'};
+    
+    # FFWD over the header data
+    until($DataLine == 5) {
+        if ($lines[$FileLine] !~ m/^(#)/) {$DataLine++;}
+        $FileLine++;
+    };
+
+    # Loop through each tank and update the fuel and tank type
+    for (my $i=1;$i<=$iTanks;$i++) {
+        until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;} # Zone with tank
+        $FileLine++;
+        until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;} # Energy source
+        $lines[$FileLine] = sprintf("7 # Fictitious fuel\n");
+        $FileLine++;
+        until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;} # Tank type
+        $lines[$FileLine] = sprintf("21 # Fictitious tank\n");
+        $FileLine++;
+        
+        my $iSkip = 0;
+        
+        until(($iSkip == 6) || ($FileLine == ($#lines-1))) {
+            if($lines[$FileLine] !~ m/^(#)/) {$iSkip++;}
+            $FileLine++;
+        };
+    };
+
+    # Print the new hvac file
+    PRINT_DHW: {
+        unlink $DHWFile; # Clear old file
+        open my $out, '>', $DHWFile or die "Can't write $DHWFile: $!";
+        foreach my $ThatData (@lines) {
+            print $out $ThatData;
+        };
+        close $out;
+    };
+
+    return 1;
 };
 
 # Final return value of one to indicate that the perl module is successful

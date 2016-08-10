@@ -29,9 +29,9 @@
         <crawl max_RSI="5.3" ins_k="0.026" ins_rho="33.0" ins_Cp="1470.0"/>
     </BASE_INS>
     <!-- PV RETROFIT -->
-    <PV_ROOF  bIsAdd="0"/>
+    <PV_ROOF  bIsAdd="1"/>
     <!-- DISTRICT HEATING -->
-    <DH_SYSTEM>
+    <DH_SYSTEM bIsAdd="1">
         <INPUTS />
         <!-- Hydronic furnace inputs -->
         <RATED_13 Output="13.2" Units="kW">

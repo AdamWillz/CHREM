@@ -50,6 +50,7 @@ use strict;
 
 use Data::Dumper;
 use Parallel::ForkManager;
+use XML::Simple;	# to parse the XML databases
 
 # CHREM modules
 use lib ('./modules');
@@ -66,9 +67,12 @@ my $cores;	# store the input core info
 my @houses_desired; # declare an array to store the house names or part of to look
 my @folders;	#declare an array to store the path to each hse which will be simulated
 my $interval; # Number of houses to simulate on each core
+my $Upgrades;   # HASH holding all the upgrade info
+my $CurrentOS = $^O; # String naming the current 
 
 my $hse_type_num;
 my $region_num;
+my $bRunTRNSYS = 0; # boolean to signal to run TRNSYS
 
 #--------------------------------------------------------------------
 # Read the command line input arguments
@@ -111,14 +115,19 @@ COMMAND_LINE: {
     $set_name = "_UPG_$set_name";
 };
 
+# --------------------------------------------------------------------
+# Load the upgrade inputs. If there is no upgrades, die
+# --------------------------------------------------------------------
+$Upgrades = XMLin("../Input_upgrade/Input_All_UPG.xml", keyattr => [], forcearray => 0);
+
 #--------------------------------------------------------------------
 # Apply the upgrades to the set
 #--------------------------------------------------------------------
 APPL_UP:{
-    print "Applying Upgrades\n";
+    print "  =====        Calling Upgrades Script       =====\n\n";
     my @PVargs = ("Upgrade_City.pl", "$hse_type_num", "$region_num","$InputSet");
     system($^X, @PVargs);
-    print "Done\n";
+    print "\n  =====                  Done                =====\n\n";
 };
 
 #--------------------------------------------------------------------
@@ -127,7 +136,7 @@ APPL_UP:{
 FIND_FOLDERS: foreach my $hse_type (&array_order(values %{$hse_types})) {		#each house type
 	foreach my $region (&array_order(values %{$regions})) {		#each region
 		push (my @dirs, <../$hse_type$set_name/$region/*>);	#read all hse directories and store them in the array
-# 		print Dumper @dirs;
+ 		#print Dumper @dirs;
 		CHECK_FOLDER: foreach my $dir (@dirs) {
 			# cycle through the desired house names to see if this house matches. If so continue the house build
 			foreach my $desired (@houses_desired) {
@@ -144,7 +153,7 @@ FIND_FOLDERS: foreach my $hse_type (&array_order(values %{$hse_types})) {		#each
 #--------------------------------------------------------------------
 # Determine how many houses go to each core for core usage balancing
 #--------------------------------------------------------------------
-$interval = int(@folders/$cores->{'num'}) + 1;	#round up to the nearest integer
+$interval = int(@folders/$cores->{'num'});	#round up to the nearest integer
 
 #--------------------------------------------------------------------
 # Delete old simulation summary files
@@ -176,52 +185,165 @@ SIMULATION_LIST: {
 #--------------------------------------------------------------------
 # Call the simulations.
 #--------------------------------------------------------------------
-SIMULATION_1: {
-    print "Multithreading the ESP-r simulations\n";
-    my $n_processes = $cores->{'num'};
-    my $pm = Parallel::ForkManager->new( $n_processes );
-	foreach my $core ($cores->{'low'}..$cores->{'high'}) {	#simulate the appropriate list (i.e. QC2 goes from 9 to 16)
-		my $file = '../summary_files/Sim' . $set_name . '_Core-Output_Core-' . $core . '.txt';
-        $pm->start and next;
-		system ("./Core_Sim.pl $core $set_name > $file");	#pass the argument $core so the program knows which set to simulate
-        $pm->finish;
-	}
-    $pm->wait_all_children;
-	print "THE SIMULATION OUTPUTS FOR EACH CORE ARE LOCATED IN ../summary_files/\n";
-};
-
-#--------------------------------------------------------------------
-# TODO: Post-process and save the data
-#--------------------------------------------------------------------
-
-#--------------------------------------------------------------------
-# Call the simulations again to retrieve the timestep reports
-#--------------------------------------------------------------------
-SIMULATION_2: {
-    # Run the timestep modifier
-    my @PVargs = ("Timestep.pl", "$hse_type_num", "$region_num","$InputSet","0");
-    system($^X, @PVargs);
+SIMULATION: {
+    print "  ===== Multithreading the ESP-r simulations =====\n\n";
+    my $sCoreSim;
+    # Determine which simulation core script to use based on OS
+    if($CurrentOS =~ m/MSWin32/) { # Windows
+        $sCoreSim = "perl Core_Sim.pl";
+    } else { # linux
+        $sCoreSim = "./Core_Sim.pl";
+    };
     
     my $n_processes = $cores->{'num'};
     my $pm = Parallel::ForkManager->new( $n_processes );
 	foreach my $core ($cores->{'low'}..$cores->{'high'}) {	#simulate the appropriate list (i.e. QC2 goes from 9 to 16)
 		my $file = '../summary_files/Sim' . $set_name . '_Core-Output_Core-' . $core . '.txt';
         $pm->start and next;
-		system ("./Core_Sim.pl $core $set_name > $file");	#call nohup of simulation program script and pass the argument $core so the program knows which set to simulate
+		system ("$sCoreSim $core $set_name > $file");	#pass the argument $core so the program knows which set to simulate
         $pm->finish;
 	}
     $pm->wait_all_children;
-	print "THE SIMULATION OUTPUTS FOR EACH CORE ARE LOCATED IN ../summary_files/\n";
+	print "     - THE SIMULATION OUTPUTS FOR EACH CORE ARE LOCATED IN ../summary_files/\n";
+    print "\n  =====                  Done                =====\n\n";
 };
 
 #--------------------------------------------------------------------
-# TODO: Post-process and save the data
+# Aggregate the electrical and thermal demands
 #--------------------------------------------------------------------
+AGGREGATE: if(($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 1) || ($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1)) {
+     print "  =====          Aggregating the loads       =====\n\n";
+     setAggregateLoads(\@folders,$set_name);
+     print "\n  =====                  Done                =====\n\n";
+};
 
 #--------------------------------------------------------------------
-# TODO: Call TRNSYS simulation
+# Post-process and save the data
 #--------------------------------------------------------------------
+#ESPrPost: {
+#    # Run the base CHREM results
+#    print "  =====    Running CHREM Results Processor   =====\n";
+#    my @RESargs = ("Results.pl", "$hse_type_num", "$region_num","UPG_$InputSet", "1/1/1");
+#    system($^X, @RESargs);
+#    print "  =====                  Done                =====\n\n";
+#};
 
+
+#--------------------------------------------------------------------
+# Call TRNSYS simulation (if required)
+#--------------------------------------------------------------------
+#TRNSYS: {
+#    # Check if we need to run TRNSYS
+#    if ($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 1) {
+#        $bRunTRNSYS = 1;
+#    };
+#    if($bRunTRNSYS){};
+#};
 #--------------------------------------------------------------------
 # TODO: Post-process and report performance metrics
 #--------------------------------------------------------------------
+
+#--------------------------------------------------------------------
+# SUBROUTINES
+#--------------------------------------------------------------------
+SUBROUTINES: {
+    sub setAggregateLoads{
+        # INPUTS
+        
+        my $ref_Folder = shift;
+        my $setName = shift;
+        my @folders = @$ref_Folder;
+        
+        # INTERMEDIATES
+        my @Time; # Present day of the year
+        my @DHW; # Community aggregated DHW demand [W]
+        my @Heat; # Community-aggregated heating demand [W]
+        my @Elec; # Community-aggregated electrical demand [W] (Negative=import, Positive=export)
+        my $bStoreTime=1;
+        
+        # Loop through each record
+        foreach my $record (@folders) {
+            my $hse_name = $record;
+            $hse_name =~ s{.*/}{};
+            
+            my $sThisOut = $record . "/$hse_name.csv";
+            
+            # Open the timestep data
+            open my $fid, $sThisOut or die "setAggregateLoads: Could not open $sThisOut\n";
+            my @lines = <$fid>; # Pull entire file into an array
+            close $fid;
+            
+            # Process the header
+            my $iTime;
+            my $iDHW;
+            my @iHeat;
+            my $iImport;
+            my $iExport;
+            my @Headers = split ',', $lines[0];
+            for(my $i=0; $i<=$#Headers;$i++) {
+                if($Headers[$i] =~ m/(present)/) {
+                    $iTime = $i;
+                } elsif($Headers[$i] =~ m/(water)/) {
+                    $iDHW = $i;
+                } elsif($Headers[$i] =~ m/(GN Heat)/) {
+                    push(@iHeat,$i);
+                } elsif($Headers[$i] =~ m/(net import)/) {
+                    $iImport = $i;
+                } elsif($Headers[$i] =~ m/(net export)/) {
+                    $iExport = $i;
+                };
+            };
+            
+            # Initialize arrays (if first pass)
+            if($bStoreTime) { 
+                @DHW = (0) x $#lines;
+                @Heat = (0) x $#lines;
+                @Elec = (0) x $#lines;
+            };
+            
+            # Loop through all the data
+            for(my $i=1; $i<=$#lines;$i++) {
+                my @LineData = split ',', $lines[$i];
+                
+                # Store the time data (if first pass)
+                if($bStoreTime) {push(@Time, $LineData[$iTime]);}
+                
+                # Update the DHW load of the community (W)
+                $DHW[$i-1] += $LineData[$iDHW];
+                
+                # Update community electrical consumption (W)
+                $Elec[$i-1] = $Elec[$i-1] + $LineData[$iExport] - $LineData[$iImport];
+                
+                # Update community heating demand (W)
+                my $ThisHeat = 0;
+                foreach my $zone (@iHeat) {
+                    $ThisHeat += $LineData[$zone];
+                };
+                $Heat[$i-1] += $ThisHeat;
+            };
+            
+            $bStoreTime = 0; # Signal that at least one pass of the loop has occurred 
+        };
+        
+        # Save the aggregated load
+        PRINT_AGG: {
+            my $sAggPath = "../summary_files/Aggregate_$setName.csv";
+            unlink $sAggPath;
+            open my $out, '>', $sAggPath or die "Can't write $sAggPath: $!";
+            
+            # Determine the timestep
+            my $fTStep = ($Time[1]-$Time[0])*1440; # Timestep [min]
+            $fTStep = sprintf "%.0f", $fTStep;
+            print $out "timestep [min],$fTStep\n";
+            
+            # Print the headers
+            print $out "present day,DHW Demand [W],Heating Demand [W],Electric Export [W]\n";
+            for(my $i=0; $i<$#Time;$i++) {
+                print $out "$Time[$i],$DHW[$i],$Heat[$i],$Elec[$i]\n";
+            };
+            close $out;
+        };
+        
+    }; # END sub setAggregateLoads
+
+}; # END SUBROUTINES

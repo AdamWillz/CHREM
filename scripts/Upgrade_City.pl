@@ -52,7 +52,7 @@ use CSV;	# CSV-2 (for CSV split and join, this works best)
 # use Array::Compare;	# Array-Compare-1.15
 use threads;	# threads-1.89 (to multithread the program)
 use threads::shared;
-use File::Path;	# File-Path-2.04 (to create directory trees)
+use File::Path qw(make_path remove_tree);	# File-Path-2.04 (to create directory trees)
 use File::Copy;	# (to copy the input.xml file)
 use File::Copy::Recursive qw(fcopy rcopy dircopy fmove rmove dirmove);
 use XML::Simple qw(:strict);	# to parse the XML databases for esp-r and for Hse_Gen
@@ -110,6 +110,8 @@ my $BaseSet;    # Name of the base set being copied
 my $Upgrades;   # HASH holding all the upgrade info
 my $Surface;    # HASH holding all the surface area data for the community [m2]
 my $UPGrecords; # HASH to hold upgrade report data
+my $isPVupgrade = 0; # Boolean indicating if PV is to be added
+my $isDHupgrade = 0; # Boolean indicating if district heating is to be added
 my @houses_desired = (); # declare an array to store the house names or part of to look
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+UPG_(.+)_Surfaces.xml/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -155,6 +157,10 @@ $Upgrades = XMLin("../Input_upgrade/Input_All_UPG.xml", keyattr => [], forcearra
 # Copy over the base model for upgrades
 # --------------------------------------------------------------------
 COPY_BASE: {
+
+    # Clean up any old results files
+    unlink "../summary_files/UPG_$BaseSet" . "_Info.xml";
+    
     my $BCDPath = "../$hse_type". "_$BaseSet/$region/BCD"; # Path to the BCD files
     print "Copying over the base files\n";
     # Get all the house names in the base set
@@ -169,7 +175,9 @@ COPY_BASE: {
     closedir $DIR;
     
     # Create new folder for set
-    mkpath($setPath);
+    remove_tree("../$hse_type$set_name/"); # Clear the way if an old folder is there
+    unlink "../summary_files/Add_PV_UPG_$BaseSet" . '_Houses.csv'; # Clear any PV upgrade data
+    make_path($setPath);
     
     foreach my $record (@houses_desired) {
         my $OldPath = "../$hse_type"."_$BaseSet/$region/$record";
@@ -180,7 +188,7 @@ COPY_BASE: {
     
     # Sim control requires a house generation issues report to exist in order to run simulations
     # Create a dummy file
-    my $DummyFile = "../summary_files/Hse_Gen_$BaseSet" . "_Issues.txt";
+    my $DummyFile = "../summary_files/Hse_Gen_UPG_$BaseSet" . "_Issues.txt";
     open (my $DumFID, '>', $DummyFile) or die ("Can't open dummy file: $DummyFile");	# open writeable file
     print $DumFID "\n";
     close $DumFID;
@@ -228,49 +236,75 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
                 $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
                 $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
             }
-            #case "WALL_INS" {
-            #    print "Inside case WALL_INS\n";
-            #}
-            case "GLZ" {
-                print "Inside case GLZ\n";
+            case "WALL_INS" {
+                print "Inside case WALL_INS\n";
             }
+            #case "GLZ" {
+            #    print "Inside case GLZ\n";
+            #}
             case "PV_ROOF" {
                 # Upgrade handled by external script
                 if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
                     next EACH_UPG;
                 } elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) {
-                    my $PVset = $set_name;
-                    $PVset =~s/^_//;
-                    my @PVargs = ("Add_PV.pl", "$hse_type_num", "$region_num","$PVset","0");
-                    system($^X, @PVargs);
+                    $isPVupgrade = 1;
                 } else {
                     print "WARNING: PV_ROOF Input upgrade data bIsAdd value of $Upgrades->{'PV_ROOF'}->{'bIsAdd'} invalid. Skipping\n";
                     next EACH_UPG;
                 }
             }
-            #case "DH_SYSTEM" {
-            #    $UPGrecords = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-            #}
+            case "DH_SYSTEM" {
+                if($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 0) {
+                    next EACH_UPG;
+                } elsif($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 1) {
+                    $UPGrecords = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    $isDHupgrade = 1;
+                } else {
+                    print "WARNING: DH_SYSTEM Input upgrade data bIsAdd value of $Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} invalid. Skipping\n";
+                    next EACH_UPG;
+                };
+            }
             else {print "$upg is not a recognized upgrade. Skipping\n";}
         
         };
     }; # END APPL_UPG
-
-    ## Collect the CSDDRD data for this dwelling
-    ## ----------------------------------------------------------------
-    #open (my $CSDDRD_fid, '<', $CSDDRDfile) or die ("Can't open datafile: $CSDDRDfile");	# open readable file
-    ## cycle through the CSDDRD records to match house record
-    #my $CSDDRD;
-    #while ($CSDDRD = &one_data_line($CSDDRD_fid, $CSDDRD)) {
-    #    if ($CSDDRD->{'file_name'} =~ /^$house_name/) {
-    #        # Found corresponding record, stop reading records and jump out of loop
-    #        last;
-    #    }
-    #}
-    ## remove the trailing HDF from the house name and check for bad filename
-	#$CSDDRD->{'file_name'} =~ s/.HDF$//;
-
 }; # END EACH_UPG
+
+# --------------------------------------------------------------------
+# Apply PV upgrade to all eligible dwellings (if requested)
+# --------------------------------------------------------------------
+ADD_PV: if ($isPVupgrade) {
+    print "Calling PV upgrade script\n";
+    # Clear any summary files
+    unlink "../summary_files/Add_PV_UPG_$BaseSet" . '_Houses.csv';
+    
+    # Call script to add PV upgrade
+    my $PVset = $set_name;
+    $PVset =~s/^_//;
+    my @PVargs = ("Add_PV.pl", "$hse_type_num", "$region_num","UPG_$BaseSet","0");
+    system($^X, @PVargs);
+};
+
+
+# If required, update the input.xml
+UPDATE_XML: {
+    my $XMLTemplate;
+    if (($isDHupgrade) && ($isPVupgrade)) {
+        $XMLTemplate =  'h3k_DH_PV.xml';
+    } elsif($isDHupgrade) {
+        $XMLTemplate =  'h3k_DH_PV.xml';
+    #} elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) { # THIS IS DONE IN THE Add_PV.pl script
+    #    $XMLTemplate =  'h3k_PV.xml';
+    } else { # No change to input.xml
+        last UPDATE_XML;
+    };
+    foreach my $house_name (@houses_desired){
+        my $ThisXMLPath = "$setPath" . "$house_name" . "/input.xml";
+        rename $ThisXMLPath, "$ThisXMLPath.orig";
+        unlink $ThisXMLPath;
+        copy("../Input_upgrade/$XMLTemplate",$ThisXMLPath) or die "Copy of $XMLTemplate failed: $!";
+    };
+};
 
 # --------------------------------------------------------------------
 # Save the upgrades info
@@ -282,5 +316,3 @@ UPG_OUT: {
     close $outFID;
     #print Dumper $UPGrecords;
 };
-
-
