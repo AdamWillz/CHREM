@@ -1035,7 +1035,7 @@ sub CycleLength {
     # each static cycle
     } elsif ($item =~ m/Clothes_Washer/) {
         $CycleLen=40;
-    } elsif ($item =~ m/Clothes_Dryer/) {
+    } elsif (($item =~ m/Clothes_Dryer/) || ($item =~ m/Clothes_Dryer_CREST/)) {
         $CycleLen=75;
     } elsif ($item =~ m/Dishwasher/) {
         $CycleLen=124;
@@ -1061,7 +1061,7 @@ sub GetPowerUsage {
     
     if($item =~ m/Clothes_Washer/) { # If the appliance is a washer (peak 500 W)
         $PowerUsage=GetPowerWasher($iRatedPower,$iCycleTimeLeft,$iStandbyPower);
-    } elsif($item =~ m/Clothes_Dryer/) { # If the appliance is a dryer (peak 5535 W)
+    } elsif(($item =~ m/Clothes_Dryer/) || ($item =~ m/Clothes_Dryer_CREST/)) { # If the appliance is a dryer (peak 5535 W)
         $PowerUsage=GetPowerDryer($iRatedPower,$iCycleTimeLeft,$iStandbyPower);
     } elsif($item =~ m/Dishwasher/) { # If the appliance is a dishwasher (peak 1300 W)
         $PowerUsage=GetPowerDish($iRatedPower,$iCycleTimeLeft,$iStandbyPower);
