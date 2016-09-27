@@ -19,8 +19,8 @@
         <_2-DR Calibration="1.000" Baseload="100" BaseStdDev="70"/>
     </_2-QC>
     <_3-OT> 
-        <_1-SD Calibration="0.3749" Baseload="150" BaseStdDev="125"/>
-        <_2-DR Calibration="1.4618131056587" Baseload="100" BaseStdDev="70"/>
+        <_1-SD Calibration="2.05118980357457" Baseload="250" BaseStdDev="125"/>
+        <_2-DR Calibration="0.740765546866251" Baseload="200" BaseStdDev="70"/>
     </_3-OT>
     <_4-PR> 
         <_1-SD Calibration="1.3421" Baseload="150" BaseStdDev="125"/>
