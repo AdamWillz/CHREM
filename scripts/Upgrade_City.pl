@@ -236,12 +236,12 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
                 $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
                 $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
             }
-            case "WALL_INS" {
-                print "Inside case WALL_INS\n";
-            }
-            #case "GLZ" {
-            #    print "Inside case GLZ\n";
+            #case "WALL_INS" {
+            #    print "Inside case WALL_INS\n";
             #}
+            case "GLZ" {
+                $UPGrecords = &upgradeGLZ($house_name,$Upgrades->{'GLZ'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+            }
             case "PV_ROOF" {
                 # Upgrade handled by external script
                 if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
@@ -295,8 +295,8 @@ UPDATE_XML: {
         $XMLTemplate =  'h3k_DH_PV.xml';
     #} elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) { # THIS IS DONE IN THE Add_PV.pl script
     #    $XMLTemplate =  'h3k_PV.xml';
-    } else { # No change to input.xml
-        last UPDATE_XML;
+    } else { # Just get the baseline results
+        $XMLTemplate =  'h3k.xml';
     };
     foreach my $house_name (@houses_desired){
         my $ThisXMLPath = "$setPath" . "$house_name" . "/input.xml";

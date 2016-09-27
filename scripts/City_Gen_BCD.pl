@@ -4475,7 +4475,7 @@ MAIN: {
 					foreach my $line (@{$hse_file->{$ext}}) {print $FILE "$line";};	# loop through each element of the array (i.e. line of the final file) and print each line out
                     close $FILE;
 				};
-				copy ("../templates/h3k.xml", "$folder/input.xml") or die ("can't copy file: ../templates/input.xml to $folder/input.xml");	# add an input.xml file to the house for XML reporting of results
+				copy ("../templates/input.xml", "$folder/input.xml") or die ("can't copy file: ../Input_upgrade/input.xml to $folder/input.xml");	# add an input.xml file to the house for XML reporting of results
 			};
 
 # 			print Dumper $record_indc;
