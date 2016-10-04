@@ -49,6 +49,44 @@
             <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="2.524E-04" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
             <Coil name="Hyd_Coil"  mass="26.000" Cs="500.00" Mw="3.2600" Ao="19.500" Ai="1.1900" Af="0.26000" Rm="0.10000E-02" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
         </RATED_22>
-        
     </DH_SYSTEM>
+    <!-- Glazing type to upgrade to. See Sara Nikoofard's thesis for details-->
+    <GLZ GlzSystem="1">
+        <!-- Glazing System 1-->
+        <GLZ_1 glaze_type="2" coating="2" fill_gas="0" gap_width="1" numLayers="3" numGaps="1" description="WNDW UPG1">
+            <GAPS gapPos_1="2" gapRSI_1="0.15"/>
+            <CONS>
+                <Layer_1>1.05 2500 750 0.003 0 0 0 0 # pane_outside - Glass_Float_UPG; RSI = 0.0; U value = 350.000 (W/m^2K)</Layer_1>
+                <Layer_2>0 0 0 0.013 0 0 0 0 # gap_1 - Gap; RSI = 0.19; U value = 5.263 (W/m^2K)</Layer_2>
+                <Layer_3>1.05 2500 750 0.003 0 0 0 0 # pane_inside - Glass_Float_UPG; RSI = 0.0; U value = 350.000 (W/m^2K)</Layer_3>
+            </CONS>
+            <EMIS>
+                <inside>0.75</inside>
+                <outside>0.87</outside>
+            </EMIS>
+            <SLR_ASB>
+                <inside>0.66</inside>
+                <outside>0.45</outside>
+            </SLR_ASB>
+            <frame numLayers="3" numGaps="1" description="Frm UPG1">
+                <GAPS gapPos_1="2" gapRSI_1="0.15" gapPos_2="3" gapRSI_2="0.75"/>
+                <CONS>
+                    <Layer_1>0.16 1380 1000 0.003 0 0 0 0 # outside - Vinyl; RSI = 0.0; U value = 53.333 (W/m^2K)</Layer_1>
+                    <Layer_2>0 0 0 0.02 0 0 0 0 # gap_1 - Gap; RSI = 0.13; U value = 7.692 (W/m^2K)</Layer_2>
+                    <Layer_3>0.16 1380 1000 0.003 0 0 0 0 # inside - Vinyl; RSI = 0.0; U value = 53.333 (W/m^2K)</Layer_3>
+                </CONS>
+                <EMIS>
+                    <inside>0.75</inside>
+                    <outside>0.87</outside>
+                </EMIS>
+                <SLR_ASB>
+                    <inside>0.66</inside>
+                    <outside>0.45</outside>
+                </SLR_ASB>
+            </frame>
+        </GLZ_1>
+        <!-- Glazing System 2-->
+        <!-- Glazing System 3-->
+        <!-- Glazing System 4-->
+    </GLZ>
 </opt>

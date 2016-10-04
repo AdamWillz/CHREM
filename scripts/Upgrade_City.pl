@@ -224,46 +224,48 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
     APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each record
         switch ($upg) {
         
-            case "AIM_2" {
-                $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'},$setPath,$UPGrecords);
-            }
-            case "CEIL_INS" {
-                $UPGrecords->{'CEIL_INS'}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
-                $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-            }
-            case "BASE_INS" {
-                $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
-                $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
-                $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-            }
+            #case "AIM_2" {
+            #    $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'},$setPath,$UPGrecords);
+            #}
+            #case "CEIL_INS" {
+            #    $UPGrecords->{'CEIL_INS'}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
+            #    $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+            #}
+            #case "BASE_INS" {
+            #    $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
+            #    $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
+            #    $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+            #}
             #case "WALL_INS" {
             #    print "Inside case WALL_INS\n";
             #}
             case "GLZ" {
-                $UPGrecords = &upgradeGLZ($house_name,$Upgrades->{'GLZ'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                my $GlazeSystem = $Upgrades->{'GLZ'}->{'GlzSystem'};
+                $GlazeSystem = 'GLZ_' . "$GlazeSystem";
+                $UPGrecords = &upgradeGLZ($house_name,$Upgrades->{'GLZ'}->{"$GlazeSystem"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
             }
-            case "PV_ROOF" {
-                # Upgrade handled by external script
-                if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
-                    next EACH_UPG;
-                } elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) {
-                    $isPVupgrade = 1;
-                } else {
-                    print "WARNING: PV_ROOF Input upgrade data bIsAdd value of $Upgrades->{'PV_ROOF'}->{'bIsAdd'} invalid. Skipping\n";
-                    next EACH_UPG;
-                }
-            }
-            case "DH_SYSTEM" {
-                if($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 0) {
-                    next EACH_UPG;
-                } elsif($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 1) {
-                    $UPGrecords = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-                    $isDHupgrade = 1;
-                } else {
-                    print "WARNING: DH_SYSTEM Input upgrade data bIsAdd value of $Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} invalid. Skipping\n";
-                    next EACH_UPG;
-                };
-            }
+            #case "PV_ROOF" {
+            #    # Upgrade handled by external script
+            #    if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
+            #        next EACH_UPG;
+            #    } elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) {
+            #        $isPVupgrade = 1;
+            #    } else {
+            #        print "WARNING: PV_ROOF Input upgrade data bIsAdd value of $Upgrades->{'PV_ROOF'}->{'bIsAdd'} invalid. Skipping\n";
+            #        next EACH_UPG;
+            #    }
+            #}
+            #case "DH_SYSTEM" {
+            #    if($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 0) {
+            #        next EACH_UPG;
+            #    } elsif($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 1) {
+            #        $UPGrecords = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+            #        $isDHupgrade = 1;
+            #    } else {
+            #        print "WARNING: DH_SYSTEM Input upgrade data bIsAdd value of $Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} invalid. Skipping\n";
+            #        next EACH_UPG;
+            #    };
+            #}
             else {print "$upg is not a recognized upgrade. Skipping\n";}
         
         };

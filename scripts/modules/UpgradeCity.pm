@@ -27,7 +27,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem);
+our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -429,6 +429,70 @@ sub upgradeDHsystem {
     # Remove the DHW system from dwelling
     setDHWfileDH($house_name,$setPath,$UPGrecords);
     
+    return $UPGrecords;
+};
+# ====================================================================
+# upgradeGLZ
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
+#
+# INPUT     numOcc: number of occupants in the house
+#           pdf: probability distribution function HASH (refen
+# OUTPUT    StartActive: number of active occupants 
+# ====================================================================
+sub upgradeGLZ {
+    # Inputs: Name of dwelling, Maximum ceiling insulation (RSI), path to the set, HASH holding upgrade data
+    my ($house_name,$UpgradesWindow,$thisHouse,$setPath,$UPGrecords) = @_;
+    
+    # Intermediates
+    my @ZonesWithGlz;
+    my $ZonesGlz; # HASH of arrays to hold names of all glazing surfaces
+    
+    
+    
+    # Store the surface index for each glazing surface and associated frame surface
+    SCANSURF: foreach my $zones (keys (%{$thisHouse})) {
+        foreach my $surfs (keys (%{$thisHouse->{$zones}->{'Surfaces'}})) {
+            if($surfs =~ m/aper$/) {
+                push(@ZonesWithGlz,$zones);
+                next SCANSURF;
+                
+            } elsif($surfs =~ m/frame$/) {
+                push(@ZonesWithGlz,$zones);
+                next SCANSURF;
+            };
+        };
+    };
+
+    # Gather the window codes
+    $ZonesGlz = getWindowCodes($house_name,$setPath,\@ZonesWithGlz);
+    
+    # Determine eligible windows for upgrades
+    foreach my $zones (keys (%{$ZonesGlz})) {
+        foreach my $parent (keys (%{$ZonesGlz->{$zones}})) {
+            if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'} <= $UpgradesWindow->{'glaze_type'}){
+                if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'} <= $UpgradesWindow->{'coating'}){
+                    # This glazing system is eligible for upgrade
+                    $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'glaze_type'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'};
+                    $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'coating'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'};
+                    $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'fill_gas'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'fill_gas'};
+                    $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'gap_width_code'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'gap_width_code'};
+                    
+                    # Get the construction file coordinates for the glazing and frame
+                    $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'surf_num'} = $thisHouse->{$zones}->{'Surfaces'}->{"$parent"."-aper"}->{'surf_num'};
+                    $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'surf_num_frame'} = $thisHouse->{$zones}->{'Surfaces'}->{"$parent"."-frame"}->{'surf_num'};
+                };
+            };
+        };
+    };
+    # Clear the memory
+    undef $ZonesGlz;
+    
+    # Update the construction files with the new glazing (if any new glazing is to be applies)
+    if(exists($UPGrecords->{'GLZ'}->{"$house_name"})) {
+        $UPGrecords = setNewWindows($house_name,$setPath,$UpgradesWindow,$UPGrecords->{'GLZ'});
+    };
+
     return $UPGrecords;
 };
 # ====================================================================
@@ -2144,5 +2208,488 @@ sub setDHWfileDH {
     return 1;
 };
 
+# ====================================================================
+# *********** GLAZING SUBROUTINES ***************
+# ====================================================================
+
+# ====================================================================
+# getWindowCodes
+#       Retrieves the CHREM 3-digit window codes for each glazing
+#       surface
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub getWindowCodes {
+    # Inputs
+    my ($house_name,$setPath,$Zones_ref) = @_;
+    my @ZonesWithGlz = @$Zones_ref;
+    
+    # Output
+    my $ZonesGlz;
+
+    # Interrogate the con file for zones with glazing
+    foreach my $zones (@ZonesWithGlz) {
+        # Set the path to the constructions file
+        my $thisCONpath = $setPath . "$house_name/$house_name." . "$zones.con";
+        
+        # File indexers
+        my $DataLine=0;
+        my $FileLine=0;
+        
+        # Open and slurp the file
+        my $ConFID;
+        open $ConFID, $thisCONpath or die "Could not open $thisCONpath\n";
+        my @CONlines = <$ConFID>; # Pull entire file into an array
+        close $ConFID;
+    
+        # Get layer and gap data
+        until ($CONlines[$FileLine] !~ m/^(#)/i) { # FFWD past header comments
+            $FileLine++;
+        };
+        while ($CONlines[$FileLine] !~ m/^(#)/i) { # Scan the first block of data
+            $DataLine++;
+            if($CONlines[$FileLine] =~ m/aper{1}/) {
+                my $thisdata = $CONlines[$FileLine];
+                $thisdata =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+                my @LineDat = split /[(#)\s]+/, $thisdata;
+                
+                # Get surface type and parent. Record number of gaps and layers
+                my @Dat2 = split /[-]+/, $LineDat[2];
+                my $parent = "$Dat2[0]";
+                
+                # Determine the 3-digit window code
+                @Dat2 = split /[_]+/, $LineDat[3];
+                $ZonesGlz->{$zones}->{$parent}->{'aper'}->{'glaze_type'}=substr $Dat2[1], 0,1;
+                $ZonesGlz->{$zones}->{$parent}->{'aper'}->{'coating'}=substr $Dat2[1], 1,1;
+                my $gap_fill = substr $Dat2[1], 2,1;
+                my($GasFill,$GapWidthCode) = getGasFillWidth($gap_fill);
+                $ZonesGlz->{$zones}->{$parent}->{'aper'}->{'fill_gas'}=$GasFill;
+                $ZonesGlz->{$zones}->{$parent}->{'aper'}->{'gap_width_code'}=$GapWidthCode;
+            };
+            $FileLine++;
+            if($FileLine>$#CONlines) {die "upgradeGLZ: Record $house_name, could not find end of layer and gaps data\n";}
+        };
+    };
+    
+    return $ZonesGlz;
+};
+# ====================================================================
+# getGasFillWidth
+#       Converts from CSDDRD 3-digit window code to Nikoofard's
+#       4-digit code
+#
+# INPUT     gap_fill: The gap thickness and fill gas code
+# OUTPUT    GasFill: The gas fill code (0=air, 1=argon)
+#           GapWidth: Gap width code (0=13mm, 1=9mm, 2=6mm)
+# ====================================================================
+sub getGasFillWidth {
+    # Inputs
+    my $gap_fill = shift @_;
+    
+    # Outputs
+    my $GasFill;
+    my $GapWidth;
+    
+    switch ($gap_fill) {
+    
+        case 0 {
+            $GasFill=0;
+            $GapWidth=0;
+        }
+        case 1 {
+            $GasFill=0;
+            $GapWidth=1;
+        }
+        case 2 {
+            $GasFill=0;
+            $GapWidth=2;
+        }
+        case 3 {
+            $GasFill=1;
+            $GapWidth=0;
+        }
+        case 4 {
+            $GasFill=1;
+            $GapWidth=1;
+        }
+        else {die "getGasFillWidth: $gap_fill is not a valide gap_fill code in the CSDDRD\n";}
+    };
+    return($GasFill,$GapWidth);
+}
+# ====================================================================
+# setNewWindows
+#       Applies the window upgrades to the ESP-r input files
+#
+# INPUT     gap_fill: The gap thickness and fill gas code
+# OUTPUT    GasFill: The gas fill code (0=air, 1=argon)
+#           GapWidth: Gap width code (0=13mm, 1=9mm, 2=6mm)
+# ====================================================================
+sub setNewWindows {
+    # Inputs
+    my ($house_name,$setPath,$UpgradesWindow,$UPGglaze) = @_;
+    
+    # Intermediates
+    # Glazing data
+    my $NewGlzLayers = $UpgradesWindow->{'numLayers'};
+    my $NewGlzGaps = $UpgradesWindow->{'numGaps'};
+    my $NewGlzDesc = $UpgradesWindow->{'description'};
+
+    my $NewGlzEMin = $UpgradesWindow->{'EMIS'}->{'inside'};
+    my $NewGlzEMout = $UpgradesWindow->{'EMIS'}->{'outside'};
+    my $NewGlzSLRin = $UpgradesWindow->{'SLR_ASB'}->{'inside'};
+    my $NewGlzSLRout = $UpgradesWindow->{'SLR_ASB'}->{'outside'};
+    
+    # Frame data
+    my $NewFrmLayers = $UpgradesWindow->{'frame'}->{'numLayers'};
+    my $NewFrmGaps = $UpgradesWindow->{'frame'}->{'numGaps'};
+    my $NewFrmDesc = $UpgradesWindow->{'frame'}->{'description'};
+    
+    my $NewFrmEMin = $UpgradesWindow->{'frame'}->{'EMIS'}->{'inside'};
+    my $NewFrmEMout = $UpgradesWindow->{'frame'}->{'EMIS'}->{'outside'};
+    my $NewFrmSLRin = $UpgradesWindow->{'frame'}->{'SLR_ASB'}->{'inside'};
+    my $NewFrmSLRout = $UpgradesWindow->{'frame'}->{'SLR_ASB'}->{'outside'};
+    
+    # For each zone with new glazing
+    ZONAL: foreach my $zones (keys (%{$UPGglaze->{"$house_name"}})) {
+        # Set the path to the constructions file
+        my $thisCONpath = $setPath . "$house_name/$house_name." . "$zones.con";
+        
+        # Set the path to the transparent material constructions file
+        my $thisTMCpath = $setPath . "$house_name/$house_name." . "$zones.tmc";
+        
+        #### Updating the Construction File ####
+        #=======================================
+        ########################################
+        # Open and slurp the construction file
+        my $ConFID;
+        open $ConFID, $thisCONpath or die "Could not open $thisCONpath\n";
+        my @CONlines = <$ConFID>; # Pull entire file into an array
+        close $ConFID;
+        
+        # File indexers
+        my $FileLine=0;
+        my $StartHere=0;
+        
+        # Emissivity and absorptivity
+        my @EMinside;
+        my @EMoutside;
+        my @SLRinside;
+        my @SLRoutside;
+
+        # Update the GAPS
+        #=======================================
+        NUM_GAPS: foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+            until ($CONlines[$FileLine] =~ m/$GlazeName/i) { # Find the aperture gaps
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find aperture gap data $house_name $zones\n";}
+            };
+            # Update the gap data for the window
+            $CONlines[$FileLine] = "$NewGlzLayers $NewGlzGaps # $GlazeName $NewGlzDesc\n";
+            
+            # Enter the frame data
+            my @ParentData = split '-', $GlazeName;
+            my $FrameName = $ParentData[0];
+            $FrameName = $FrameName . "-frame"; # Set the name of the frame surface
+            
+            $FileLine=0; # RWD file
+            until ($CONlines[$FileLine] =~ m/$FrameName/i) { # Find the aperture gaps
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find frame gap data $house_name $zones\n";}
+            };
+            # Update the gap data for the frame
+            $CONlines[$FileLine] = "$NewFrmLayers $NewFrmGaps # $FrameName $NewFrmDesc\n";
+            $FileLine=0; # RWD file
+        }; # END NUM_GAPS
+        
+        # Update GAP info
+        #=======================================
+        GAP_INFO: {
+            until ($CONlines[$FileLine] =~ m/^(#GAP_POS_AND_RSI)/i) { # Find the aperture gaps
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find gap info data $house_name\n";}
+            };
+            $FileLine++;
+            $StartHere=$FileLine;
+            
+            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                until ($CONlines[$FileLine] =~ m/$GlazeName/i) { # Find the aperture gap info
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find aperture gap info lines $house_name $zones\n";}
+                };
+                # Update the gap data for the window
+                my $NewGapDataLine="";
+                for (my $i=1;$i<=$NewGlzGaps;$i++) {
+                    my $GappyPos = $UpgradesWindow->{'GAPS'}->{"gapPos_$i"};
+                    my $GappyRSI = $UpgradesWindow->{'GAPS'}->{"gapRSI_$i"};
+                    $NewGapDataLine = $NewGapDataLine . "$GappyPos $GappyRSI ";
+                };
+                $CONlines[$FileLine] = "$NewGapDataLine # $GlazeName $NewGlzDesc\n";
+                
+                # Enter the frame data
+                my @ParentData = split '-', $GlazeName;
+                my $FrameName = $ParentData[0];
+                $FrameName = $FrameName . "-frame"; # Set the name of the frame surface
+                
+                $FileLine=$StartHere; # RWD file to start of GAPS data
+                until ($CONlines[$FileLine] =~ m/$FrameName/i) { # Find the frame gap info
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find frame gap info lines $house_name $zones\n";}
+                };
+                # Update the gap data for the frame
+                $NewGapDataLine="";
+                for (my $i=1;$i<=$NewFrmGaps;$i++) {
+                    my $GappyPos = $UpgradesWindow->{'frame'}->{'GAPS'}->{"gapPos_$i"};
+                    my $GappyRSI = $UpgradesWindow->{'frame'}->{'GAPS'}->{"gapRSI_$i"};
+                    $NewGapDataLine = $NewGapDataLine . "$GappyPos $GappyRSI ";
+                };
+                $CONlines[$FileLine] = "$NewGapDataLine # $FrameName $NewFrmDesc\n";
+                
+                $FileLine=$StartHere; # RWD file to start of GAPS data
+            };
+        }; # END GAP_INFO
+        
+        # Update the construction data
+        #=======================================
+        CONS_INFO: {
+            until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) { # Find the beginning of the constructions
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find start of CONSTRUCTION $house_name $zones\n";}
+            };
+            $StartHere=$FileLine; # Index the beginning of the construction data
+            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                until ($CONlines[$FileLine] =~ m/$GlazeName/i) { # Find the aperture gap info
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find Construction data gap info lines $house_name $zones $GlazeName\n";}
+                };
+                # Update the glazing construction header
+                $CONlines[$FileLine] = "# CONSTRUCTION: $GlazeName - $NewGlzDesc\n"; # TODO: Add longer description
+                my @UpdatedCONlines = @CONlines[0..$FileLine]; # Trim off everything from below
+                $FileLine++; # Advance the file to clear the comments
+                for (my $i=1;$i<=$NewGlzLayers;$i++) {
+                    my $newLine = $UpgradesWindow->{'CONS'}->{"Layer_$i"};
+                    $newLine = $newLine . "\n";
+                    push(@UpdatedCONlines,$newLine);
+                };
+                until ($CONlines[$FileLine] =~ m/^(#)/i) { # FFWD to end of old glazing constructions in 
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not end of constgruction data $house_name $zones $GlazeName\n";}
+                };
+                push(@UpdatedCONlines,@CONlines[$FileLine..$#CONlines]); # Attach the rest of the file
+                @CONlines = @UpdatedCONlines; # Reset the construction lines
+                undef @UpdatedCONlines;
+                
+                # Update the associated frame
+                my @ParentData = split '-', $GlazeName;
+                my $FrameName = $ParentData[0];
+                $FrameName = $FrameName . "-frame"; # Set the name of the frame surface
+                
+                $FileLine = $StartHere; # RWD file to beginning of construction data
+                until ($CONlines[$FileLine] =~ m/$FrameName/i) { # Find the aperture gap info
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find Construction data gap info lines $house_name $zones $FrameName\n";}
+                };
+                # Update the frame construction header
+                $CONlines[$FileLine] = "# CONSTRUCTION: $FrameName - $NewFrmDesc\n"; # TODO: Add longer description
+                @UpdatedCONlines = @CONlines[0..$FileLine]; # Trim off everything from below
+                $FileLine++; # Advance the file to clear the comments
+                for (my $i=1;$i<=$NewFrmLayers;$i++) {
+                    my $newLine = $UpgradesWindow->{'frame'}->{'CONS'}->{"Layer_$i"};
+                    $newLine = $newLine . "\n";
+                    push(@UpdatedCONlines,$newLine);
+                };
+                until ($CONlines[$FileLine] =~ m/^(#)/i) { # FFWD to end of old glazing constructions in 
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not end of constgruction data $house_name $zones $FrameName\n";}
+                };
+                push(@UpdatedCONlines,@CONlines[$FileLine..$#CONlines]); # Attach the rest of the file
+                @CONlines = @UpdatedCONlines; # Reset the construction lines
+                undef @UpdatedCONlines;
+                
+                # RWD to the top of the construction for next iteration
+                $FileLine = $StartHere;
+            };
+        }; # END CONS_INFO
+        
+        # Update the emissivity
+        #=======================================
+        EMIS: {
+            ###### INSIDE ######
+            until ($CONlines[$FileLine] =~ m/^(#EM_INSIDE)/i) { # Find the beginning of the inside emissivity data
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find inside emissivity $house_name $zones\n";}
+            };
+            $FileLine++;
+            my $LineData = $CONlines[$FileLine]; # Grab the emissivity data
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @EMinside = split / /, $LineData;
+            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                # Retrieve the aperture surface number and update inside emissivity
+                my $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num'};
+                $EMinside[$ThisSurfNum-1] = $NewGlzEMin;
+                
+                # Retrieve the frame surface number and update inside emissivity
+                $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num_frame'};
+                $EMinside[$ThisSurfNum-1] = $NewFrmEMin;
+            };
+            $LineData = ""; # Clear the line data
+            for (my $i=0;$i<=$#EMinside;$i++) {
+                $LineData = $LineData . " $EMinside[$i]";
+            };
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            $LineData = $LineData . "\n";
+            # Update the construction file
+            $CONlines[$FileLine] = $LineData;
+            
+            ###### OUTSIDE ######
+            until ($CONlines[$FileLine] =~ m/^(#EM_OUTSIDE)/i) { # Find the beginning of the inside emissivity data
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find outside emissivity $house_name $zones\n";}
+            };
+            $FileLine++;
+            my $LineData = $CONlines[$FileLine]; # Grab the emissivity data
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @EMoutside = split / /, $LineData;
+            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                # Retrieve the aperture surface number and update inside emissivity
+                my $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num'};
+                $EMoutside[$ThisSurfNum-1] = $NewGlzEMout;
+                
+                # Retrieve the frame surface number and update inside emissivity
+                $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num_frame'};
+                $EMoutside[$ThisSurfNum-1] = $NewFrmEMout;
+            };
+            $LineData = ""; # Clear the line data
+            for (my $i=0;$i<=$#EMoutside;$i++) {
+                $LineData = $LineData . " $EMoutside[$i]";
+            };
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            $LineData = $LineData . "\n";
+            # Update the construction file
+            $CONlines[$FileLine] = $LineData;
+        }; # END EMIS
+        
+        # Update the solar absorptivity
+        #=======================================
+        SLR_ABS: {
+            ###### INSIDE ######
+            until ($CONlines[$FileLine] =~ m/^(#SLR_ABS_INSIDE)/i) { # Find the beginning of the inside solar absorptivity data
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find inside solar absorptivity $house_name $zones\n";}
+            };
+            $FileLine++;
+            my $LineData = $CONlines[$FileLine]; # Grab the solar absorptivity data
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @SLRinside = split / /, $LineData;
+            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                # Retrieve the aperture surface number and update inside solar absorptivity
+                my $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num'};
+                $SLRinside[$ThisSurfNum-1] = $NewGlzSLRin;
+                
+                # Retrieve the frame surface number and update inside solar absorptivity
+                $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num_frame'};
+                $SLRinside[$ThisSurfNum-1] = $NewFrmSLRin;
+            };
+            $LineData = ""; # Clear the line data
+            for (my $i=0;$i<=$#SLRinside;$i++) {
+                $LineData = $LineData . " $SLRinside[$i]";
+            };
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            $LineData = $LineData . "\n";
+            # Update the construction file
+            $CONlines[$FileLine] = $LineData;
+            
+            ###### OUTSIDE ######
+            until ($CONlines[$FileLine] =~ m/^(#SLR_ABS_OUTSIDE)/i) { # Find the beginning of the outside solar absorptivity data
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find outside solar absorptivity $house_name $zones\n";}
+            };
+            $FileLine++;
+            my $LineData = $CONlines[$FileLine]; # Grab the solar absorptivity data
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @SLRoutside = split / /, $LineData;
+            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                # Retrieve the aperture surface number and update outside solar absorptivity
+                my $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num'};
+                $SLRoutside[$ThisSurfNum-1] = $NewGlzSLRout;
+                
+                # Retrieve the frame surface number and update outside solar absorptivity
+                $ThisSurfNum = $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num_frame'};
+                $SLRoutside[$ThisSurfNum-1] = $NewFrmSLRout;
+            };
+            $LineData = ""; # Clear the line data
+            for (my $i=0;$i<=$#SLRoutside;$i++) {
+                $LineData = $LineData . " $SLRoutside[$i]";
+            };
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            $LineData = $LineData . "\n";
+            # Update the construction file
+            $CONlines[$FileLine] = $LineData;
+        }; # END SLR_ABS
+        
+        # Print the new con file for this zone
+        unlink $thisCONpath; # Clear the old file
+        open my $out, '>', $thisCONpath or die "Can't write $thisCONpath: $!";
+        foreach my $ThatData (@CONlines) {
+            print $out $ThatData;
+        };
+        close $out;
+        undef @CONlines; # Clear the CONlines array
+        
+            #### Updating the TMC File ####
+        #=======================================
+        ########################################
+        UPG_TMC: {
+            # Locals
+            my @TMCindices;
+            my @Updatedindices; # TMC indices that are to be modified
+            my @DontUpdate;
+            
+            # Open and slurp the construction file
+            my $tmcFID;
+            open $tmcFID, $thisTMCpath or die "Could not open $thisTMCpath\n";
+            @CONlines = <$tmcFID>; # Pull entire file into an array
+            close $tmcFID;
+            
+            # Reset the indexers
+            $FileLine=0;
+            $StartHere=0;
+            
+            # Load the TMC surface indices
+            until ($CONlines[$FileLine] =~ m/^(#TMC_INDEX)/i) {
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find TMC indices $house_name $zones\n";}
+            };
+            $FileLine++;
+            my $LineData = $CONlines[$FileLine];
+            $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @TMCindices = split / /, $LineData;
+            
+            # Determine...
+            INDX_LOOP: for(my $i=0;$i<=$#TMCindices;$i++) {
+                if($TMCindices[$i]<1){next INDX_LOOP;}
+                my $CurrentSurf = $i+1;
+                # Determine if this surface has been upgraded
+                foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                    if($UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num'} == $CurrentSurf) { 
+                        # This optical type is being updated
+                        if(not @Updatedindices) { # Array is empty
+                            push(@Updatedindices,$TMCindices[$i]);
+                        } else {
+                            
+                        };
+                    };
+                    
+                    print Dumper $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"};
+                    sleep;
+                };
+            }; # END INDX_LOOP
+            
+        }; # END UPG_TMC
+    }; # END ZONAL
+    
+    
+};
 # Final return value of one to indicate that the perl module is successful
 1;
