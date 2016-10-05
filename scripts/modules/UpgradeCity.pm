@@ -440,7 +440,7 @@ sub upgradeDHsystem {
 #           pdf: probability distribution function HASH (refen
 # OUTPUT    StartActive: number of active occupants 
 # ====================================================================
-sub upgradeGLZ {
+sub upgradeGLZ { # TODO: This subroutine needs to ignore PV zones!!!!
     # Inputs: Name of dwelling, Maximum ceiling insulation (RSI), path to the set, HASH holding upgrade data
     my ($house_name,$UpgradesWindow,$thisHouse,$setPath,$UPGrecords) = @_;
     
@@ -472,6 +472,13 @@ sub upgradeGLZ {
         foreach my $parent (keys (%{$ZonesGlz->{$zones}})) {
             if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'} <= $UpgradesWindow->{'glaze_type'}){
                 if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'} <= $UpgradesWindow->{'coating'}){
+                
+                    print Dumper $house_name;
+                    print Dumper $zones;
+                    print Dumper $parent;
+                    print Dumper $ZonesGlz->{$zones}->{"$parent"}->{'aper'};
+                    print "=================\n";
+                    
                     # This glazing system is eligible for upgrade
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'glaze_type'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'};
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'coating'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'};
@@ -2548,7 +2555,7 @@ sub setNewWindows {
                 if ($FileLine>$#CONlines){die "setNewWindows: Could not find outside emissivity $house_name $zones\n";}
             };
             $FileLine++;
-            my $LineData = $CONlines[$FileLine]; # Grab the emissivity data
+            $LineData = $CONlines[$FileLine]; # Grab the emissivity data
             $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
             @EMoutside = split / /, $LineData;
             foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
@@ -2606,7 +2613,7 @@ sub setNewWindows {
                 if ($FileLine>$#CONlines){die "setNewWindows: Could not find outside solar absorptivity $house_name $zones\n";}
             };
             $FileLine++;
-            my $LineData = $CONlines[$FileLine]; # Grab the solar absorptivity data
+            $LineData = $CONlines[$FileLine]; # Grab the solar absorptivity data
             $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
             @SLRoutside = split / /, $LineData;
             foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
@@ -2643,8 +2650,12 @@ sub setNewWindows {
         UPG_TMC: {
             # Locals
             my @TMCindices;
-            my @Updatedindices; # TMC indices that are to be modified
-            my @DontUpdate;
+            my @TMCUpdate; # TMC indices that are to be updated
+            my @TMCkeep; # TMC indices that are to be kept
+            
+            my @bSurfUpdate; # Index of array corresponds to surface number, boolean indicates if surface is updated
+            
+            my $TMCkeepData; # Hash of arrays to hold the TMC data that is to be kept
             
             # Open and slurp the construction file
             my $tmcFID;
@@ -2655,7 +2666,8 @@ sub setNewWindows {
             # Reset the indexers
             $FileLine=0;
             $StartHere=0;
-            
+            my $TMCindex=0;
+
             # Load the TMC surface indices
             until ($CONlines[$FileLine] =~ m/^(#TMC_INDEX)/i) {
                 $FileLine++;
@@ -2665,27 +2677,148 @@ sub setNewWindows {
             my $LineData = $CONlines[$FileLine];
             $LineData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
             @TMCindices = split / /, $LineData;
+            $TMCindex = $FileLine; # Store the line number the TMC indexes are held on
             
-            # Determine...
+            @bSurfUpdate = (0) x (scalar @TMCindices); # Initialize array to 0
+            
+            # Determine if any of the glass types are being kept
             INDX_LOOP: for(my $i=0;$i<=$#TMCindices;$i++) {
-                if($TMCindices[$i]<1){next INDX_LOOP;}
+                if($TMCindices[$i]<1){next INDX_LOOP;} # a zero, go to the next index
                 my $CurrentSurf = $i+1;
                 # Determine if this surface has been upgraded
-                foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+                FIND_SURF: foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
                     if($UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"}->{'surf_num'} == $CurrentSurf) { 
-                        # This optical type is being updated
-                        if(not @Updatedindices) { # Array is empty
-                            push(@Updatedindices,$TMCindices[$i]);
-                        } else {
-                            
+                        # This surface is being updated
+                        $bSurfUpdate[$i] = 1;
+                        
+                        # Determine if we've already encountered this index
+                        if(not @TMCUpdate) {
+                            push(@TMCUpdate,$TMCindices[$i]); # Store the TMC index
+                            next INDX_LOOP;
+                        } else { # Check if we've already flagged this index
+                            foreach my $index (@TMCUpdate) {
+                                if($index==$TMCindices[$i]) {
+                                    # Already have this index flagged for update
+                                    next INDX_LOOP;
+                                };
+                            };
+                            push(@TMCUpdate,$TMCindices[$i]); # New index, store
+                            next INDX_LOOP;
                         };
                     };
-                    
-                    print Dumper $UPGglaze->{"$house_name"}->{"$zones"}->{"$GlazeName"};
-                    sleep;
+                }; # END FIND_SURF
+                
+                # If we get here, that means there is no upgraded surface associated with the glass type
+                if(not @TMCkeep) {
+                    push(@TMCkeep,$TMCindices[$i]);
+                } else {
+                    foreach my $index (@TMCkeep) {
+                        if($index==$TMCindices[$i]) {
+                            # Already have this index flagged to keep
+                            next INDX_LOOP;
+                        }
+                    };
+                    push(@TMCkeep,$TMCindices[$i]);
                 };
             }; # END INDX_LOOP
             
+            # FFWD to the start of the detailed TMC Data
+            until ($CONlines[$FileLine] =~ m/^(# optical)/i) { # Find the beginning of the optical data
+                $FileLine++;
+                if ($FileLine>$#CONlines){die "setNewWindows: Could not find outside solar absorptivity $house_name $zones\n";}
+            };
+            $StartHere=$FileLine; # Store header data of 
+
+            # Store the data for the TMCs that are being retained
+            my $iOldTMCdata=0; # Number of old glazing systems to be saved
+            STORE_OLD: foreach my $index (@TMCkeep) {
+                my @StringStuff=();
+                $FileLine = $StartHere+1; # RWD to start of TMC data
+
+                # Locate the data to save
+                my $DataGroup=1; # First set of data
+                until ($DataGroup==$index) {
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not TMC data to keep $house_name $zones\n";}
+                    if($CONlines[$FileLine] =~ m/[a-zA-Z]/) {$DataGroup++;} # The start of each data group has characters in the line
+                };
+                # Store the first line of this data
+                push(@StringStuff,$CONlines[$FileLine]);
+                $FileLine++;
+                
+                # Store the rest of the TMC data to be saved
+                until ($CONlines[$FileLine] =~ m/[a-zA-Z]/) { # Find the beginning of the optical data
+                    push(@StringStuff,$CONlines[$FileLine]);
+                    $FileLine++;
+                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find outside solar absorptivity $house_name $zones\n";}
+                };
+                $iOldTMCdata++;
+                
+                # Store data in the HASH
+                $TMCkeepData->{"$iOldTMCdata"}->{'orig_index'} = $index;
+                $TMCkeepData->{"$iOldTMCdata"}->{'data'} = \@StringStuff;
+            };
+            
+            # Trim out the old TMC data
+            @CONlines = @CONlines[0..$StartHere];
+            
+            # Add the new TMC data (will become glazing index 1)
+            push(@CONlines, "$NewGlzLayers Optic_UPG\n");
+            push(@CONlines,($UpgradesWindow->{'TMC'}->{"trans"} . "\n"));
+            for(my $i=1;$i<=$NewGlzLayers;$i++) {
+                push(@CONlines,($UpgradesWindow->{'TMC'}->{"Layer_$i"} . "\n"));
+            };
+            push(@CONlines, "0\n");
+            
+            # Add the old TMC data
+            my $ReorderGlazeIndex=2; # New index for the old TMC data
+            for(my $i=1;$i<=$iOldTMCdata;$i++) {
+                my @LocalData = @{$TMCkeepData->{"$i"}->{'data'}};
+                foreach my $LocalLine (@LocalData) {
+                    push(@CONlines,$LocalLine);
+                };
+                $TMCkeepData->{"$i"}->{'new_index'} = $ReorderGlazeIndex;
+                $ReorderGlazeIndex++;
+            };
+            
+            # Finish off the file
+            push(@CONlines,"#END_TMC_DATA\n");
+            
+            # Update the TMC index
+            UPDATE_INDEX: for(my $i=0;$i<=$#TMCindices;$i++) { # Update 
+                if($TMCindices[$i]<1){next UPDATE_INDEX;}
+                
+                # Determine if this surface is being updated
+                if($bSurfUpdate[$i]>0) {
+                    $TMCindices[$i] = 1; # New glazing is always first
+                    next UPDATE_INDEX;
+                } else { # Glaze is old system, update index
+                    foreach my $CrossReff (keys (%{$TMCkeepData})) {
+                        if($TMCkeepData->{"$CrossReff"}->{'orig_index'} == $TMCindices[$i]) {
+                            $TMCindices[$i] = $TMCkeepData->{"$CrossReff"}->{'new_index'};
+                            next UPDATE_INDEX;
+                        };
+                    };
+                    die "setNewWindows: Unable to update index $TMCindices[$i], $house_name $zones\n";
+                };
+            }; # END UPDATE_INDEX
+            
+            # Print the updated indices
+            my $NewIndexStrings="";
+            foreach my $ind (@TMCindices) {
+                $NewIndexStrings = $NewIndexStrings . "$ind ";
+            };
+            $NewIndexStrings =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            $NewIndexStrings = $NewIndexStrings . "\n";
+            $CONlines[$TMCindex] = $NewIndexStrings;
+            
+            # Print the new tmc file for this zone
+            unlink $thisTMCpath; # Clear the old file
+            open my $fidout, '>', $thisTMCpath or die "Can't write $thisTMCpath: $!";
+            foreach my $ThatData (@CONlines) {
+                print $fidout $ThatData;
+            };
+            close $fidout;
         }; # END UPG_TMC
     }; # END ZONAL
     

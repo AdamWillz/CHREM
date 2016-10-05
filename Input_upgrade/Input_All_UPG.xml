@@ -68,6 +68,12 @@
                 <inside>0.66</inside>
                 <outside>0.45</outside>
             </SLR_ASB>
+            <TMC>
+                <trans>0.705 0.678 0.6115 0.436 0.204 0.81</trans>
+                <Layer_1>0.090 0.100 0.115 0.125 0.133</Layer_1>
+                <Layer_2>0.008 0.006 0.007 0.005 0.003</Layer_2>
+                <Layer_3>0.070 0.082 0.082 0.071 0.050</Layer_3>
+            </TMC>
             <frame numLayers="3" numGaps="1" description="Frm UPG1">
                 <GAPS gapPos_1="2" gapRSI_1="0.15" gapPos_2="3" gapRSI_2="0.75"/>
                 <CONS>
