@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(organize_xml_log zone_energy_balance zone_temperatures secondary_consumption GHG_conversion organize_xml_log_tree site_balance);
+our @EXPORT = qw(organize_xml_log zone_energy_balance zone_temperatures secondary_consumption GHG_conversion site_balance);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -145,7 +145,6 @@ sub organize_xml_log {
 		$XML->{'zone_name_num'} = dclone($zone_name_num);
 		$XML->{'province'} = $province;
 
-		
 #
 		# The above has been replaced with this call to do the GHG Conversion. It will save time and is required because we regenerate the new XML file every time we run Results.pl
 		&GHG_conversion($house_name, $coordinates, $XML);
@@ -582,13 +581,26 @@ sub GHG_conversion {
 	my $INP = XMLin($filename); # Readin the XML data from the orig file
 	if ($INP->{'hierarchy'} =~ /tree/) {
 		# To access these sorted results at a later point, output them in XML format to a file
-		open (my $XML_file, '>', $file) or die ("\n\nERROR: can't open $file to rewrite xml log in sorted form\n"); # Open a writeout file
-		print $XML_file XMLout($XML);	# printout the XML data
-		close $XML_file;
-		&organize_xml_log_tree ($file);
-		$XML = XMLin ($file);
+        # OCT 13 2016, ADW:  organize_xml_log_tree is only called in this module. No longer exported. Instead of receiving file path, receives the HASH
+		#open (my $XML_file, '>', $file) or die ("\n\nERROR: can't open $file to rewrite xml log in sorted form\n"); # Open a writeout file
+		#print $XML_file XMLout($XML);	# printout the XML data
+		#close $XML_file;
+		#&organize_xml_log_tree ($file);
+        #$XML = XMLin ($file);
+        
+        # Organize the HASH
+        $XML = organize_xml_log_tree ($XML);
+
+        # print the new XML file
+        open (my $XML_file, '>', $file) or die ("\n\nERROR: can't open $file to rewrite xml log in sorted form\n"); # Open a writeout file
+        print $XML_file XMLout($XML);	# printout the XML data
+        close $XML_file;
+        
+        # Reload the XML (XML simple will clean up the file a bit)
+        undef $XML;
+        $XML = XMLin ($file);
 	}
-	
+
     $XML = &site_balance($house_name, $XML, $coordinates); #Interpret the site balance
 # 		
 	my $ghg_file;
@@ -706,9 +718,12 @@ sub GHG_conversion {
 
 sub organize_xml_log_tree {
 	
-	my $XML_file = shift;
+	#my $XML_file = shift;
 
-	my $list = XMLin ($XML_file);
+	#my $list = XMLin ($XML_file);
+    # OCT 13 2016, ADW: subroutine now accepts the HASH directly
+    my $list = shift;
+    
 	my $parameters = $list->{'CHREM'}; # Create a reference to the XML parameters
 
 	my $new_par_for;
@@ -1345,12 +1360,13 @@ sub organize_xml_log_tree {
 	  
 	}
 	$array->{'zone_name_num'} = dclone($list->{'zone_name_num'});
-
-	open (my $XML_file2, '>', $XML_file) or die ("\n\nERROR: can't open $XML_file to rewrite xml log in sorted form\n"); # Open a writeout file
-	print $XML_file2 XMLout($array);	# printout the XML data
-	close $XML_file2;
+    
+	#open (my $XML_file2, '>', $XML_file) or die ("\n\nERROR: can't open $XML_file to rewrite xml log in sorted form\n"); # Open a writeout file
+	#print $XML_file2 XMLout($array);	# printout the XML data
+	#close $XML_file2;
 	
-	return (1);
+	#return (1);
+    return ($array);
 };
 
 # ====================================================================
@@ -1365,6 +1381,7 @@ sub site_balance {
 	my $coordinates = shift; # House coordinate information for error reporting
     
 	my $parameters = $XMLMOD->{'parameter'}; # Create a HASH reference
+
 	my $file = $house_name . '.xml'; # Create a complete filename with extension
     
     foreach my $key (keys %{$parameters}) {
@@ -1372,7 +1389,7 @@ sub site_balance {
             delete $parameters->{$key};
         };
     };
-
+    
 	# If the xml.orig file exists
 	if (-e "$file.orig") {
         my $XML = XMLin("$file.orig"); # Readin the XML data from the orig file
