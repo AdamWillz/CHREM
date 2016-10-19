@@ -413,9 +413,10 @@ sub upgradeAirtight {
 # ====================================================================
 sub upgradeDHsystem {
     # INPUTS
-    my ($house_name,$UpgradesDH,$ThisSurfaces,$setPath,$UPGrecords) = @_;
+    my ($house_name,$UpgradesDH,$ThisSurfaces,$set_name,$setPath,$UPGrecords) = @_;
     
-    # INTERMEDIATES
+    # OUTPUTS
+    my $bPrintDHW=0;  # Boolean to indicate if the DHW loads are to be printed
     
     # Interrogate this dwellings HVAC file
     $UPGrecords = getHVACdata($house_name,$setPath,$UPGrecords);
@@ -426,14 +427,16 @@ sub upgradeDHsystem {
     # Remove the heating system from dwelling
     setHVACfileDH($house_name,$setPath,$UPGrecords);
     
-    # Remove the DHW system from dwelling
-    # OCT 18 2016, ADW: Originally, the DHW subroutines were still called, and a load was passed as
-    #                   output. This load is occupant dependent and will not change. There is no
-    #                   need to simulate it repeatedly in ESP-r
-    #setDHWfileDH($house_name,$setPath,$UPGrecords);
-    setCFGnoDHW($house_name,$setPath);
+    # Determine if the DHW loads have previously been determined
+    my $possible_set_names = {map {$_, 1} grep(s/.+Aggregate_DHW(.+).csv/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
+    if (defined($possible_set_names->{$set_name})) { # DHW loads have been calculated previously
+		setCFGnoDHW($house_name,$setPath);
+	} else { # Generate the DHW loads using ESP-r
+		setDHWfileDH($house_name,$setPath,$UPGrecords);
+        $bPrintDHW=1; # Indicate that the DHW loads need to be printed
+	};
     
-    return $UPGrecords;
+    return ($UPGrecords,$bPrintDHW);
 };
 # ====================================================================
 # upgradeGLZ

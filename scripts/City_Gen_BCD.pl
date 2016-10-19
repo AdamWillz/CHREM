@@ -3217,7 +3217,7 @@ MAIN: {
                 # intialize an array to store the best BCD filename and the difference between its annual consumption and house's annual consumption
 				my $bcd_match;
 				foreach my $field (@bcd_fields) {
-					$bcd_match->{$field} = {'filename' => 'big-example', 'difference' => 1e9, 'multipler' => 1, 'source' => 'origin'};
+					$bcd_match->{$field} = {'filename' => 'big-example', 'difference' => 1e9, 'source' => 'origin'};
 				};
                 
                 # Determine an appropriate DHW profile
@@ -3236,13 +3236,13 @@ MAIN: {
 
                             # Update the file name
                             if($DHWrec =~ m/^(WEL)/) { # Data from Dalhousie
-                                $bcd_match->{'DHW_LpY'}->{'filename'} = $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . "_Data_sorted.csv";
+                                $bcd_match->{'DHW_LpY'}->{'filename'} = "/" . $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . "_Data_sorted.txt";
                             } elsif($DHWrec =~ m/^(H)/) { # Data from SBES
-                                $bcd_match->{'DHW_LpY'}->{'filename'} = $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . ".txt";
+                                $bcd_match->{'DHW_LpY'}->{'filename'} = "/" . $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . ".txt";
                             } else {die "Unable to determine DHW profile for $CSDDRD->{'file_name'}. Matched to record $DHWrec\n";}
                             
                             # Determine the DHW multiplier
-                            $bcd_match->{'DHW_LpY'}->{'multipler'} = $ThisDHWann/($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365);
+                            $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'multiplier'} = $ThisDHWann/($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365);
                         
                         } elsif($difference == $bcd_match->{'DHW_LpY'}->{'difference'}) {
                             next FIND_DHW_REC;
@@ -3250,9 +3250,6 @@ MAIN: {
                             last FIND_DHW_REC;
                         };
                     }; # END FIND_DHW_REC 
-                    print Dumper $bcd_match;
-                    print Dumper $dhw_al->{'data'}->{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'};
-                    sleep;
                     
                     # Load the DHW data
                     my ($ref_DHW,$MeasTstep,$shiftProfile) = &GetDHWData($bcd_match->{'DHW_LpY'}->{'filename'},$bcd_match->{'DHW_LpY'}->{'source'}, $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'});
@@ -3266,8 +3263,12 @@ MAIN: {
                             next RECORD;
                         };
                         @DHW_Draw = @$CondensedDHW;
-                    } elsif($time_step<$MeasTstep) {
-                    
+                    } elsif($time_step<$MeasTstep) { # Timestep requested is less than measured timestep
+                        my ($CondensedDHW, $Errr) = &StretchProfile(\@DHW_Draw,$MeasTstep,$time_step);
+                        if(!$Errr) {
+                            $issues = set_issue("%s", $issues, 'DHW', 'Timestep averaging', "Could not stretch DHW data. Skipping", $coordinates);
+                            next RECORD;
+                        };
                     };
                     
                     
@@ -3276,10 +3277,6 @@ MAIN: {
 				$BCD_characteristics->{$CSDDRD->{'file_name'}}->{'hse_type'} = $hse_type;
 				$BCD_characteristics->{$CSDDRD->{'file_name'}}->{'region'} = $region;
                 $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'filename'} = $bcd_match->{'DHW_LpY'}->{'filename'};
-
-				#foreach my $field (@bcd_fields) {	# the DHW and AL fields
-				#	$BCD_characteristics->{$CSDDRD->{'file_name'}}->{$field}->{'filename'} = $bcd_match->{$field}->{'filename'};
-				#};
 
                 SYNTH_AL: {
                     my $ThisBaseStDev = $App->{"_$region"}->{"_$hse_type"}->{'BaseStdDev'}; # Constant baseload power standard deviation [W]
@@ -3299,14 +3296,14 @@ MAIN: {
                     
                     my $MeanActOcc=0;
                     my $DayWeekStart = 5; # CHREM cfg template sets the assessment year to 2009, which started on Thursday
-
+                
                     # --------------------------------------------------------------------
                     # Get climate file for this house
                     # --------------------------------------------------------------------
                     $loc = $climate_ref->{'data'}->{$CSDDRD->{'HOT2XP_CITY'}}->{'CWEC_FILE'};  # Determine climate for this dwelling
                     $loc =~ s{\.[^.]+$}{}; # Remove extension
                     $loc = $loc . '.out'; # Name of irradiance file
-
+                
                     # --------------------------------------------------------------------
                     # Load in the irradiance data
                     # --------------------------------------------------------------------
@@ -3417,7 +3414,7 @@ MAIN: {
                                 my $CalibCyc = $App->{'Types_Cold'}->{$cType}->{'Base_cycles'}; # Calibrated mean cycles per year
                                 my $Cold_Ref = &setColdProfile($UEC,$CalibCyc,$App->{'Types_Cold'}->{$cType}->{'Mean_cycle_L'},$App->{'Types_Cold'}->{$cType}->{'Restart_Delay'});
                                 my @ThisCold = @$Cold_Ref;
-            
+                
                                 # Update the total cold appliance power draw [W]
                                 for (my $k=0; $k<=$#ThisCold;$k++) {
                                     $TotalCold[$k]=$TotalCold[$k]+$ThisCold[$k];
@@ -3444,11 +3441,11 @@ MAIN: {
                         my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
                         my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
                         my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
-               
+                
                         # Call the appliance simulation
                         my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
                         my @ThisApp = @$ThisApp_ref;
-               
+                
                         # Update the TotalOther array [W]
                         for(my $k=0;$k<=$#TotalOther;$k++) {
                             $TotalOther[$k]=$TotalOther[$k]+$ThisApp[$k];
@@ -3534,7 +3531,7 @@ MAIN: {
                         
                 
                     }; # END DRY
-
+                
                     # --------------------------------------------------------------------
                     # Adjust the timestep of the data if required
                     # --------------------------------------------------------------------
@@ -3561,14 +3558,6 @@ MAIN: {
                         @TotalCook = @$TOther_ref;
                     };
 
-                    # -----------------------------------------------
-                    # Update the BCD file with synthetic data
-                    # -----------------------------------------------
-                    # Load the recommended BCD file
-                    
-                    
-                    
-
                 }; # END SYNTH_AL
                 
                 WRITE_BCD: {
@@ -3582,11 +3571,30 @@ MAIN: {
                     $SamplingFreq = sprintf("%d", $SamplingFreq);
                     &replace ($hse_file->{'bcd'}, "# period frequency", 1, 1, "%s\n", "*frequency $SamplingFreq");
                     
-                    my($StoveE,$DryerE,$OtherE) = &UpdateBCD ($hse_file->{'bcd'},\@TotalCook,\@TotalDry,\@TotalOther,\@DHW_Draw,$CSDDRD->{'stove_fuel_use'},$time_step);    # Insert the new AL data
+                    #my($StoveE,$DryerE,$OtherE) = &UpdateBCD ($hse_file->{'bcd'},\@TotalCook,\@TotalDry,\@TotalOther,$CSDDRD->{'stove_fuel_use'},$time_step);    # Insert the new AL data
+                    my($StoveE,$DryerE,$OtherE,$DhwYrL) = &FindAnnualALandDHW (\@TotalCook,\@TotalDry,\@TotalOther,\@DHW_Draw,$time_step);
+
+                    $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'unmultiplied'} = $DhwYrL;
+                    $ThisBase=sprintf("%.2f",$ThisBase);
+                    &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# DHW source: $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'filename'}");
+                    &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# DHW conumption: $DhwYrL [L/Yr] (unmultiplied)");
                     &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# Stove Annual Energy: $StoveE kWh");
                     &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# Dryer Annual Energy: $DryerE kWh");
                     &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# Other Energy: $OtherE kWh");
                     &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# AL loads synthetically generated with baseload $ThisBase W");
+
+                    # Write the BCD Data
+                    for(my $k=0;$k<=$#TotalCook;$k++) {
+                        # Populate new line
+                        $TotalCook[$k]=sprintf("%d",$TotalCook[$k]);
+                        $TotalDry[$k]=sprintf("%d",$TotalDry[$k]);
+                        $TotalOther[$k]=sprintf("%d",$TotalOther[$k]);
+                        $DHW_Draw[$k]=sprintf("%d",$DHW_Draw[$k]);
+                        
+                        my $newline = sprintf "%26s %15s %15s %10s %15s\n", $DHW_Draw[$k], $TotalCook[$k],$TotalCook[$k],$TotalDry[$k],$TotalOther[$k];
+                        push(@{$hse_file->{'bcd'}},$newline);
+                    };
+                    push(@{$hse_file->{'bcd'}},"*data_end\n"); # Add the end statement to the data
                 }; # END WRITE_BCD
 
                 # replace the bcd filename in the cfg file
@@ -3856,13 +3864,9 @@ MAIN: {
 						unless ($CSDDRD->{'DHW_energy_src'} == 1) {
 							$dhw_flue = 76; # Assume 76 mm (3 in.)
 						};
-						
-						
-						#my $multiplier = $dhw_al->{'data'}{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'} / $BCD_dhw_al_ann->{'data'}->{$bcd_file}->{'DHW_LpY'};
-                        my $multiplier = 1.0; # TODO: Remove!!!!
-						$BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'multiplier'} = $multiplier;
 
-						#&replace ($hse_file->{"dhw"}, "#BCD_MULTIPLIER", 1, 1, "%.2f # %s\n", $multiplier, "House annual draw = $dhw_al->{'data'}{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'} LpY; BCD annual draw = $BCD_dhw_al_ann->{'data'}->{$bcd_file}->{'DHW_LpY'} LpY");	# DHW multiplier
+                        my $multiplier = $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'multiplier'}; 
+						&replace ($hse_file->{"dhw"}, "#BCD_MULTIPLIER", 1, 1, "%.2f # %s\n", $multiplier, "House annual draw = $dhw_al->{'data'}{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'} LpY; Source profile annual draw = $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'unmultiplied'} LpY");	# DHW multiplier
 						if ($zones->{'name->num'}->{'bsmt'}) {&replace ($hse_file->{"dhw"}, "#ZONE_WITH_TANK", 1, 1, "%s\n", $zones->{'name->num'}->{'bsmt'});}	# tank is in bsmt zone
 						else {&replace ($hse_file->{"dhw"}, "#ZONE_WITH_TANK", 1, 1, "%s\n", $zones->{'name->num'}->{'main_1'});};	# tank is in main_1 zone
 

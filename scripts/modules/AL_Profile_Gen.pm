@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData StretchProfile FindAnnualALandDHW);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -1265,26 +1265,35 @@ sub GetDHWData {
         
         # Grab the file header
         my $sHeader = shift @FileLines;
-        my @Headers = split ',', $sHeader;
-        my $iColData;
-        for(my $i=0;$i<=$#Headers;$i++){
-            if($Headers[$i] =~ m/(Water Draw Adjusted)/i){
-                $iColData=$i;
-                last;
-            };
-            if($i==$#Headers){die "GetDHWData: Could not find header for $sFullPath\n";}
-        };
         
         foreach my $data (@FileLines) {
             $data  =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-            my @items = split ',', $data;
-            $items[$iColData] = $items[$iColData]*60.0; # Convert L/min to L/hr
-            push(@DHW_Draw,$items[$iColData]);
+            $data = $data*60.0; # Convert L/min to L/hr
+            push(@DHW_Draw,$data);
         };
         
         $iTsteps = scalar @DHW_Draw;
         if($iTsteps != 525600) {die "GetDHWData: $iTsteps instead of 525600 timesteps were found for George data\n";}
         
+        # TODO: Determine if shifting profile by a week is appropriate
+        # Shift the profile ahead or back a week to induce variation
+        #if($shift == 0) {
+        #    $shift++;
+        #} elsif($shift == 1) { # Shift forward one week
+        #    my @Top = @DHW_Draw[10080..$#DHW_Draw];
+        #    my @Bottom = @DHW_Draw[0..10079];
+        #    @DHW_Draw=();
+        #    push(@DHW_Draw,@Top);
+        #    push(@DHW_Draw,@Bottom);
+        #    $shift++;
+        #} else { # Shift backward one week, reset to 0
+        #    my @Top = @DHW_Draw[10080..$#DHW_Draw];
+        #    my @Bottom = @DHW_Draw[0..10079];
+        #    @DHW_Draw=();
+        #    push(@DHW_Draw,@Top);
+        #    push(@DHW_Draw,@Bottom);
+        #    $shift=0;
+        #};
         
     } elsif($source =~ m/^(H)/) { # Data from SBES
         $DataTstep = 5;
@@ -1306,6 +1315,82 @@ sub GetDHWData {
     
     return(\@DHW_Draw,$DataTstep,$shift);
 }; # END GetDHWData
+
+# ====================================================================
+# StretchProfile
+#   Power or flow rates. Assumes constant flowrate across the new 
+#   profile segments 
+# ====================================================================
+sub StretchProfile {
+    # INPUTS
+    my $ref_DHW = shift;
+    my $MeasTstep = shift; 
+    my $time_step = shift;
+    my @Profile = @$ref_DHW;
+    
+    # OUTPUTS
+    my @New=();
+    
+    if($MeasTstep<$time_step){
+        return(\@Profile,0);
+    } elsif($MeasTstep % $time_step) { # Does not divide cleanly
+        return(\@Profile,0);
+    };
+    
+    foreach my $item (@Profile) {
+        for(my $i=0;$i<($MeasTstep/$time_step);$i++) {
+            push(@New,$item);
+        };
+    };
+    
+    return(\@New,1); 
+};
+
+# ====================================================================
+# FindAnnualALandDHW
+#   Randomly select an integer between two defined integers
+# ====================================================================
+sub FindAnnualALandDHW {	# subroutine to perform a simple element replace (house file to read/write, keyword to identify row, rows below keyword to replace, replacement text)
+	my $Stove_ref = shift (@_);	# Stove power profile [W]
+    my $Dryer_ref = shift (@_);	# Dryer power profile [W]
+	my $Other_ref = shift (@_);	# Other AL power profile [W]
+    my $DHW_ref = shift (@_);	# DHW draw profile [L/hr]
+    my $TStep = shift (@_);	# timestep of the simulation [min]
+    my @Stove = @$Stove_ref;
+    my @Dryer = @$Dryer_ref;
+    my @Other = @$Other_ref;
+    my @DHW = @$DHW_ref;
+    
+    if(($#Stove != $#Dryer) && ($#Dryer != $#Other)) {
+        die "FindAnnualALandDHW: Electric profiles different lengths\n";
+    } elsif($#Stove != $#DHW) {
+        die "FindAnnualALandDHW: Electric and DHW profiles different lengths\n";
+    };
+    
+    # Declare outputs
+    my $StoveE=0.0; # Stove energy [kWh/yr]
+    my $DryerE=0.0; # Dryer energy [kWh/yr]
+    my $OtherE=0.0; # Other energy [kWh/yr]
+    my $DhwYrL=0.0; # DHW consumption [L/yr]
+    
+    for(my $k=0;$k<=$#Stove;$k++) {
+
+        # Update the energy counts
+        $StoveE=$StoveE+(($Stove[$k]*$TStep)/60000.0);
+        $DryerE=$DryerE+(($Dryer[$k]*$TStep)/60000.0);
+        $OtherE=$OtherE+(($Other[$k]*$TStep)/60000.0);
+        $DhwYrL=$DhwYrL+(($DHW[$k]*$TStep)/60.0);
+
+    };
+    
+    $StoveE=sprintf("%.2f",$StoveE);
+    $DryerE=sprintf("%.2f",$DryerE);
+    $OtherE=sprintf("%.2f",$OtherE);
+    $DhwYrL=sprintf("%.2f",$DhwYrL);
+    
+
+	return($StoveE,$DryerE,$OtherE,$DhwYrL);
+};
 
 # Final return value of one to indicate that the perl module is successful
 1;

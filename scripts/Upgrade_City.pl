@@ -112,6 +112,7 @@ my $Surface;    # HASH holding all the surface area data for the community [m2]
 my $UPGrecords; # HASH to hold upgrade report data
 my $isPVupgrade = 0; # Boolean indicating if PV is to be added
 my $isDHupgrade = 0; # Boolean indicating if district heating is to be added
+my $bPrintDHW = 0; # Boolean indicating if DHW loads are to be reported
 my @houses_desired = (); # declare an array to store the house names or part of to look
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+UPG_(.+)_Surfaces.xml/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -224,59 +225,59 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
     APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each record
         switch ($upg) {
         
-            #case "AIM_2" {
-            #    if($Upgrades->{'AIM_2'}->{'bIsAdd'} == 0) {
-            #        next EACH_UPG;
-            #    } else {
-            #        $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'},$setPath,$UPGrecords);
-            #    };
-            #}
-            #case "CEIL_INS" {
-            #    if($Upgrades->{'CEIL_INS'}->{'bIsAdd'} == 0) {
-            #        next EACH_UPG;
-            #    } else {
-            #        $UPGrecords->{'CEIL_INS'}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
-            #        $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-            #    };
-            #}
-            #case "BASE_INS" {
-            #    if($Upgrades->{'BASE_INS'}->{'bIsAdd'} == 0) {
-            #        next EACH_UPG;
-            #    } else {
-            #        $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
-            #        $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
-            #        $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-            #    };
-            #}
+            case "AIM_2" {
+                if($Upgrades->{'AIM_2'}->{'bIsAdd'} == 0) {
+                    next EACH_UPG;
+                } else {
+                    $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'},$setPath,$UPGrecords);
+                };
+            }
+            case "CEIL_INS" {
+                if($Upgrades->{'CEIL_INS'}->{'bIsAdd'} == 0) {
+                    next EACH_UPG;
+                } else {
+                    $UPGrecords->{'CEIL_INS'}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
+                    $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                };
+            }
+            case "BASE_INS" {
+                if($Upgrades->{'BASE_INS'}->{'bIsAdd'} == 0) {
+                    next EACH_UPG;
+                } else {
+                    $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
+                    $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
+                    $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                };
+            }
             #case "WALL_INS" {
             #    print "Inside case WALL_INS\n";
             #}
-            #case "GLZ" {
-            #    my $GlazeSystem = $Upgrades->{'GLZ'}->{'GlzSystem'};
-            #    if($GlazeSystem < 1) {
-            #        next EACH_UPG;
-            #    } else {
-            #        $GlazeSystem = 'GLZ_' . "$GlazeSystem";
-            #        $UPGrecords = &upgradeGLZ($house_name,$Upgrades->{'GLZ'}->{"$GlazeSystem"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-            #    };
-            #}
-            #case "PV_ROOF" {
-            #    # Upgrade handled by external script
-            #    if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
-            #        next EACH_UPG;
-            #    } elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) {
-            #        $isPVupgrade = 1;
-            #    } else {
-            #        print "WARNING: PV_ROOF Input upgrade data bIsAdd value of $Upgrades->{'PV_ROOF'}->{'bIsAdd'} invalid. Skipping\n";
-            #        next EACH_UPG;
-            #    }
-            #}
+            case "GLZ" {
+                my $GlazeSystem = $Upgrades->{'GLZ'}->{'GlzSystem'};
+                if($GlazeSystem < 1) {
+                    next EACH_UPG;
+                } else {
+                    $GlazeSystem = 'GLZ_' . "$GlazeSystem";
+                    $UPGrecords = &upgradeGLZ($house_name,$Upgrades->{'GLZ'}->{"$GlazeSystem"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                };
+            }
+            case "PV_ROOF" {
+                # Upgrade handled by external script
+                if($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 0) {
+                    next EACH_UPG;
+                } elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) {
+                    $isPVupgrade = 1;
+                } else {
+                    print "WARNING: PV_ROOF Input upgrade data bIsAdd value of $Upgrades->{'PV_ROOF'}->{'bIsAdd'} invalid. Skipping\n";
+                    next EACH_UPG;
+                }
+            }
             case "DH_SYSTEM" {
                 my $DHsysNumber = $Upgrades->{'DH_SYSTEM'}->{'SysNumber'};
                 if($DHsysNumber < 1) {
                     next EACH_UPG;
                 } else { # There is a district heating system, update the ESP-r files
-                    $UPGrecords = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    ($UPGrecords,$bPrintDHW) = &upgradeDHsystem($house_name,$Upgrades->{'DH_SYSTEM'},$Surface->{"_$house_name"},$set_name,$setPath,$UPGrecords);
                     $isDHupgrade = 1;
                 };
             }
@@ -305,14 +306,14 @@ ADD_PV: if ($isPVupgrade) {
 # If required, update the input.xml
 UPDATE_XML: {
     my $XMLTemplate;
-    if (($isDHupgrade) && ($isPVupgrade)) {
-        $XMLTemplate =  'h3k_DH_PV.xml';
-    } elsif($isDHupgrade) {
+    if ((($isPVupgrade) && ($bPrintDHW)) || $bPrintDHW){
         $XMLTemplate =  'h3k_DH_PV.xml';
     #} elsif($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1) { # THIS IS DONE IN THE Add_PV.pl script
     #    $XMLTemplate =  'h3k_PV.xml';
-    } else { # Just get the baseline results
-        $XMLTemplate =  'h3k.xml';
+    } elsif($isDHupgrade) { # Just space heating and electrical demands
+        $XMLTemplate =  'h3k_SH_PV.xml';
+    } else { # Just electrical community demands
+        $XMLTemplate =  'h3k_PV.xml';
     };
     foreach my $house_name (@houses_desired){
         my $ThisXMLPath = "$setPath" . "$house_name" . "/input.xml";
