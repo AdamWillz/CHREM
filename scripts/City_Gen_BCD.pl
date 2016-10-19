@@ -254,21 +254,27 @@ else {
 # -----------------------------------------------
 # Read in the annual consumption information of the DHW and AL annual energy consumption profile from the BCD files
 # -----------------------------------------------	
-my @BCD_dhw_al_ann_files;
-if ($time_step < 5) {
-	@BCD_dhw_al_ann_files = <../bcd/ANNUAL_5*>;	# only find cross referencing files that have the correct time-step in minutes
-}
-else {
-	@BCD_dhw_al_ann_files = <../bcd/ANNUAL_$time_step*>;	# only find cross referencing files that have the correct time-step in minutes
-}
-# check that there are not two different cross references for the same timestep (i.e. they came from different source timesteps though)
-if (@BCD_dhw_al_ann_files != 1) {
-	# Either two solutions exist, or none exist, so report and die
-	die "BCD data at a timestep of $time_step minutes is either missing or has the potential to come from multiple sources - Either create BCD files for this timestep or delete one 'ANNUAL' from the ../bcd folder\n";
-}
+#my @BCD_dhw_al_ann_files;
+#if ($time_step < 5) {
+#	@BCD_dhw_al_ann_files = <../bcd/ANNUAL_5*>;	# only find cross referencing files that have the correct time-step in minutes
+#}
+#else {
+#	@BCD_dhw_al_ann_files = <../bcd/ANNUAL_$time_step*>;	# only find cross referencing files that have the correct time-step in minutes
+#}
+## check that there are not two different cross references for the same timestep (i.e. they came from different source timesteps though)
+#if (@BCD_dhw_al_ann_files != 1) {
+#	# Either two solutions exist, or none exist, so report and die
+#	die "BCD data at a timestep of $time_step minutes is either missing or has the potential to come from multiple sources - Either create BCD files for this timestep or delete one 'ANNUAL' from the ../bcd folder\n";
+#}
+#
+#my $BCD_dhw_al_ann = &cross_ref_readin($BCD_dhw_al_ann_files[0]);	# create an DHW and AL annual consumption reference crosslisting hash
+# Load in the measured DHW profiles
+my $DHW_XML = "../bcd/DHW_AL_source/Measured_DHW_Files.xml";
+my $MeasuredFlow = XMLin($DHW_XML, keyattr => [], forcearray => 0);
 
-my $BCD_dhw_al_ann = &cross_ref_readin($BCD_dhw_al_ann_files[0]);	# create an DHW and AL annual consumption reference crosslisting hash
-
+foreach my $xmlRecs (keys (%{$MeasuredFlow})) { # Initialize profile shifting
+    $MeasuredFlow->{"$xmlRecs"}->{'shift'}=0;
+};
 
 # -----------------------------------------------
 # Declare important variables for file generation
@@ -3209,76 +3215,68 @@ MAIN: {
 			my $dhw_flue = 0; # Initialize here to provide the DHW flue size to AIM-2
 			my $bcd_sdhw;
 			BCD: {
-				# The following logic selects the most appropriate BCD file for the house.
-				
-				# Define the array of fields to check for. Note that the AL components Stove and Other are combined here because we cannot differentiate them with the NN
+                # Declare major variables
+                my @TotalCook=(0) x 525600; # Array to hold the annual power draw of range and oven (base electric) [W]
+                my @TotalDry=(0) x 525600; # Array to hold the annual power draw of dryer (base electric) [W]
+                my @TotalOther=(); # Array to hold the total power draw of all other appliances [W]
+                my @DHW_Draw;
+                
+                my $bcd_file;	# declare a string to store the name of the BCD file for this record
+                
+            
+                # Define the array of fields to check for. Note that the AL components Stove and Other are combined here because we cannot differentiate them with the NN
 				my @bcd_fields = ('DHW_LpY', 'AL-Stove-Other_GJpY', 'AL-Dryer_GJpY');
-
-				# intialize an array to store the best BCD filename and the difference between its annual consumption and house's annual consumption
+                
+                # intialize an array to store the best BCD filename and the difference between its annual consumption and house's annual consumption
 				my $bcd_match;
 				foreach my $field (@bcd_fields) {
-					$bcd_match->{$field} = {'filename' => 'big-example', 'difference' => 1e9};
+					$bcd_match->{$field} = {'filename' => 'big-example', 'difference' => 1e9, 'multipler' => 1, 'source' => 'origin'};
 				};
+                
+                # Determine an appropriate DHW profile
+                MATCH_DHW: {
+                    # Load the annual DHW consumption for this dwelling
+                    my $ThisDHWann = $dhw_al->{'data'}->{$CSDDRD->{'file_name'}.'.HDF'}->{'DHW_LpY'}; # Litres per year
 
+                    # Identify the measured profile with a similar consumption
+                    # Loop through all available DHW profiles from smallest to largest measured consumers
+                    FIND_DHW_REC: foreach my $DHWrec (sort { $MeasuredFlow->{$a}->{'daily_consump'} <=> $MeasuredFlow->{$b}->{'daily_consump'} } keys $MeasuredFlow) {
+                        my $difference = abs ($ThisDHWann - ($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365));
+                        if($difference < $bcd_match->{'DHW_LpY'}->{'difference'}) {
+                            # update the value
+                            $bcd_match->{'DHW_LpY'}->{'difference'} = $difference;
+                            $bcd_match->{'DHW_LpY'}->{'source'} = $DHWrec;
 
-				# cycle through all of the available annual BCD files (typically 3 * 3 * 3 = 27 files)
-				foreach my $bcd (keys (%{$BCD_dhw_al_ann->{'data'}})) {	# each bcd filename
-				
-					# Set a value for AL Stove and Other because we cannot differentiate between them with the NN
-					$BCD_dhw_al_ann->{'data'}->{$bcd}->{'AL-Stove-Other_GJpY'} = $BCD_dhw_al_ann->{'data'}->{$bcd}->{'AL-Stove_GJpY'} + $BCD_dhw_al_ann->{'data'}->{$bcd}->{'AL-Other_GJpY'};
-					
-					foreach my $field (@bcd_fields) {	# the DHW and AL fields
-						# record the absolute difference between the BCD annual value and the house's annual value
-						my $difference = abs ($dhw_al->{'data'}->{$CSDDRD->{'file_name'}.'.HDF'}->{$field} - $BCD_dhw_al_ann->{'data'}->{$bcd}->{$field});
-
-						# if the difference is less than previously noted, replace the filename and update the difference
-						if ($difference < $bcd_match->{$field}->{'difference'}) {
-							$bcd_match->{$field}->{'difference'} = $difference;	# update the value
-							
-							# check which field because they have difference search functions
-							if ($field eq 'DHW_LpY') {
-								# record the important portion of the bcd filename
-								($bcd_match->{$field}->{'filename'}) = ($bcd =~ /^(DHW_\d+_Lpd)\..+$/);
-							}
-							elsif ($field eq "AL-Dryer_GJpY") {
-								($bcd_match->{$field}->{'filename'}) = ($bcd =~ /^.+_(Dryer-\w+)_Other.+$/);
-							}
-							# because Stove and Other are linked in their level, we only record the Stove level
-							elsif ($field eq "AL-Stove-Other_GJpY") {
-								($bcd_match->{$field}->{'filename'}) = ($bcd =~ /^.+\.AL_(Stove-\w+)_Dryer.+$/);
-							}
-							else {&die_msg ("BCD ISSUE: there is no search defined for this field", $field, $coordinates);};
-						};
-					};
-				};
+                            # Update the file name
+                            if($DHWrec =~ m/^(WEL)/) { # Data from Dalhousie
+                                $bcd_match->{'DHW_LpY'}->{'filename'} = $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . "_Data.csv";
+                            } elsif($DHWrec =~ m/^(H)/) { # Data from SBES
+                                $bcd_match->{'DHW_LpY'}->{'filename'} = $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . ".txt";
+                            } else {die "Unable to determine DHW profile for $CSDDRD->{'file_name'}. Matched to record $DHWrec\n";}
+                            
+                            # Determine the DHW multiplier
+                            $bcd_match->{'DHW_LpY'}->{'multipler'} = $ThisDHWann/($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365);
+                            
+                        } else {
+                            last FIND_DHW_REC;
+                        };
+                    }; # END FIND_DHW_REC
+                    
+                    
+                    # Load the DHW data
+                    my ($ref_DHW, $shiftProfile) = GetDHWData($bcd_match->{'DHW_LpY'}->{'filename'},$bcd_match->{'DHW_LpY'}->{'source'}, $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'});
+                    @DHW_Draw = @$ref_DHW;
+                    $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'} = $shiftProfile;
+                    
+                }; # END MATCH_DHW
 				
 				$BCD_characteristics->{$CSDDRD->{'file_name'}}->{'hse_type'} = $hse_type;
 				$BCD_characteristics->{$CSDDRD->{'file_name'}}->{'region'} = $region;
+                $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'filename'} = $bcd_match->{'DHW_LpY'}->{'filename'};
 
-				
-				foreach my $field (@bcd_fields) {	# the DHW and AL fields
-					$BCD_characteristics->{$CSDDRD->{'file_name'}}->{$field}->{'filename'} = $bcd_match->{$field}->{'filename'};
-				};
-				
-				
-				my $bcd_file;	# declare a scalar to store the name of the most appropriate bcd file
-				
-				# cycle through the bcd filenames and look for one that matches the most applicable filename for both the DHW and AL 
-				foreach my $bcd (keys (%{$BCD_dhw_al_ann->{'data'}})) {
-					my $found = 1;	# set an indicator variable to true, if the bcd filename does not match this is turned off
-					foreach my $field (@bcd_fields) {	# cycle through DHW and AL
-						# check for a match. If there is one then $found is true and if it does not match then false.
-						# The logical return is trying to find the bcd_match filename string within the bcd filename
-						# Note that in the case of 'AL-Stove-Other_GJpY' we check for the Stove level because it is the same as the Other level
-						unless ($bcd =~ $bcd_match->{$field}->{'filename'}) {$found = 0;};
-					};
-					
-					# Check to see if both filename parts were satisfied
-					if ($found == 1) {
-						$bcd_file = $bcd;
-						$bcd_sdhw = $bcd;};
-					
-				};
+				#foreach my $field (@bcd_fields) {	# the DHW and AL fields
+				#	$BCD_characteristics->{$CSDDRD->{'file_name'}}->{$field}->{'filename'} = $bcd_match->{$field}->{'filename'};
+				#};
 
                 SYNTH_AL: {
                     my $ThisBase = $App->{"_$region"}->{"_$hse_type"}->{'Baseload'}; # Constant baseload power [W]
@@ -3295,9 +3293,8 @@ MAIN: {
                     my @Irr;
                     my @Light; # Array to hold the total power draw of all lights [kW]
                     my @TotalCold=(0) x 525600; # Array to hold the total power draw of all cold appliances [W]
-                    my @TotalOther=($ThisBase) x 525600; # Array to hold the total power draw of all other appliances [W]
-                    my @TotalCook=(0) x 525600; # Array to hold the annual power draw of range and oven (base electric) [W]
-                    my @TotalDry=(0) x 525600;; # Array to hold the annual power draw of dryer (base electric) [W]
+                    @TotalOther=($ThisBase) x 525600; # Array to hold the total power draw of all other appliances [W]
+                    
                     my $MeanActOcc=0;
                     my $DayWeekStart = 5; # CHREM cfg template sets the assessment year to 2009, which started on Thursday
 
@@ -3561,21 +3558,18 @@ MAIN: {
                         };
                         @TotalCook = @$TOther_ref;
                     };
-                    
-                    #my $OUT = "Dumped.csv";
-                    #my @ResOut=("Other,Dry,Cook\n");
-                    #
-                    #for (my $k=0;$k<=$#TotalOther;$k++) {
-                    #    push(@ResOut, "$TotalOther[$k],$TotalDry[$k],$TotalCook[$k]\n");
-                    #};
-                    #open (my $FILE, '>', $OUT) or die ("\n\nERROR: can't open $OUT\n");
-                    #print $FILE @ResOut;
-                    #close($FILE);
 
                     # -----------------------------------------------
                     # Update the BCD file with synthetic data
                     # -----------------------------------------------
                     # Load the recommended BCD file
+                    
+                    
+                    
+
+                }; # END SYNTH_AL
+                
+                WRITE_BCD: {
                     my $bcd_copy = "../bcd/" . $bcd_file;
                     open (my $GETBCD, '<', $bcd_copy) or die ("can't open template: $bcd_copy");	# open the template
                     $hse_file->{'bcd'} = [<$GETBCD>];	# Slurp the entire file with one line per array element
@@ -3586,8 +3580,7 @@ MAIN: {
                     &replace($hse_file->{'bcd'},"#NOTES",1,4,"%s\n","# Dryer Annual Energy: $DryerE kWh");
                     &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# Other Energy: $OtherE kWh");
                     &insert($hse_file->{'bcd'},"#END_NOTES",1,0,0,"%s\n","# AL loads synthetically generated with baseload $ThisBase W");
-
-                }; # END SYNTH_AL
+                }; # END WRITE_BCD
 
                 # replace the bcd filename in the cfg file
                 &replace ($hse_file->{'cfg'}, "#BCD", 1, 1, "%s\n", "*bcd ../BCD/$house_name.bcd");	# boundary condition path

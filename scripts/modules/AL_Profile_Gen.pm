@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -1242,7 +1242,27 @@ sub ApplianceCalibrationScalar {
     return($fAppCalib);
 };
 
-
+sub GetDHWData {
+    # INPUTS
+    my $DataFile = shift; # Path to the DHW data file
+    my $source = shift; # Source of the measured DHW data
+    my $shift = shift; # indicate if data is to be moved ahead a week or not
+    
+    # OUTPUTS
+    my @DHW_Draw; # DHW draw [L/hr]
+    
+    # Intermediates
+    my $fTstep; # Timestep of the measured data [min]
+    
+    if($source =~ m/^(WEL)/) { # Data from Dalhousie
+        $fTstep = 1;
+    } elsif($source =~ m/^(H)/) { # Data from SBES
+        $fTstep = 5;
+    } else {die "GetDHWData: $source is not from a valid DHW data source\n";}
+    
+    
+    return(\@DHW_Draw,$shift);
+}; # END GetDHWData
 
 # Final return value of one to indicate that the perl module is successful
 1;

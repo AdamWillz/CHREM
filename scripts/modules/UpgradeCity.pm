@@ -427,7 +427,11 @@ sub upgradeDHsystem {
     setHVACfileDH($house_name,$setPath,$UPGrecords);
     
     # Remove the DHW system from dwelling
-    setDHWfileDH($house_name,$setPath,$UPGrecords);
+    # OCT 18 2016, ADW: Originally, the DHW subroutines were still called, and a load was passed as
+    #                   output. This load is occupant dependent and will not change. There is no
+    #                   need to simulate it repeatedly in ESP-r
+    #setDHWfileDH($house_name,$setPath,$UPGrecords);
+    setCFGnoDHW($house_name,$setPath);
     
     return $UPGrecords;
 };
@@ -440,18 +444,17 @@ sub upgradeDHsystem {
 #           pdf: probability distribution function HASH (refen
 # OUTPUT    StartActive: number of active occupants 
 # ====================================================================
-sub upgradeGLZ { # TODO: This subroutine needs to ignore PV zones!!!!
+sub upgradeGLZ {
     # Inputs: Name of dwelling, Maximum ceiling insulation (RSI), path to the set, HASH holding upgrade data
     my ($house_name,$UpgradesWindow,$thisHouse,$setPath,$UPGrecords) = @_;
     
     # Intermediates
     my @ZonesWithGlz;
     my $ZonesGlz; # HASH of arrays to hold names of all glazing surfaces
-    
-    
-    
+
     # Store the surface index for each glazing surface and associated frame surface
     SCANSURF: foreach my $zones (keys (%{$thisHouse})) {
+        if($zones =~ m/(PV)$/) {next FIND_ELIGIBLE;} # Ignore PV zones
         foreach my $surfs (keys (%{$thisHouse->{$zones}->{'Surfaces'}})) {
             if($surfs =~ m/aper$/) {
                 push(@ZonesWithGlz,$zones);
@@ -468,38 +471,46 @@ sub upgradeGLZ { # TODO: This subroutine needs to ignore PV zones!!!!
     $ZonesGlz = getWindowCodes($house_name,$setPath,\@ZonesWithGlz);
     
     # Determine eligible windows for upgrades
-    foreach my $zones (keys (%{$ZonesGlz})) {
+    FIND_ELIGIBLE: foreach my $zones (keys (%{$ZonesGlz})) {
         foreach my $parent (keys (%{$ZonesGlz->{$zones}})) {
             if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'} <= $UpgradesWindow->{'glaze_type'}){
-                if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'} <= $UpgradesWindow->{'coating'}){
-                
-                    print Dumper $house_name;
-                    print Dumper $zones;
-                    print Dumper $parent;
-                    print Dumper $ZonesGlz->{$zones}->{"$parent"}->{'aper'};
-                    print "=================\n";
-                    
+                if($ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'} < 1){ # This is a clear glass system
                     # This glazing system is eligible for upgrade
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'glaze_type'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'};
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'coating'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'};
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'fill_gas'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'fill_gas'};
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'original'}->{'gap_width_code'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'gap_width_code'};
-                    
+
                     # Get the construction file coordinates for the glazing and frame
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'surf_num'} = $thisHouse->{$zones}->{'Surfaces'}->{"$parent"."-aper"}->{'surf_num'};
                     $UPGrecords->{'GLZ'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'surf_num_frame'} = $thisHouse->{$zones}->{'Surfaces'}->{"$parent"."-frame"}->{'surf_num'};
+                    
+                    # Clear this key
+                    delete $ZonesGlz->{$zones}->{"$parent"};
                 };
             };
         };
-    };
-    # Clear the memory
-    undef $ZonesGlz;
+    }; # END FIND_ELIGIBLE
     
-    # Update the construction files with the new glazing (if any new glazing is to be applies)
-    if(exists($UPGrecords->{'GLZ'}->{"$house_name"})) {
-        $UPGrecords = setNewWindows($house_name,$setPath,$UpgradesWindow,$UPGrecords->{'GLZ'});
+    # Store the un-upgraded glazing
+    foreach my $zones (keys (%{$ZonesGlz})) {
+        foreach my $parent (keys (%{$ZonesGlz->{$zones}})) {
+            $UPGrecords->{'GLZ'}->{'not_upgraded'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'glaze_type'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'glaze_type'};
+            $UPGrecords->{'GLZ'}->{'not_upgraded'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'coating'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'coating'};
+            $UPGrecords->{'GLZ'}->{'not_upgraded'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'fill_gas'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'fill_gas'};
+            $UPGrecords->{'GLZ'}->{'not_upgraded'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'gap_width_code'} = $ZonesGlz->{$zones}->{"$parent"}->{'aper'}->{'gap_width_code'};
+            
+            # Get the construction file coordinates for the glazing and frame
+            $UPGrecords->{'GLZ'}->{'not_upgraded'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'surf_num'} = $thisHouse->{$zones}->{'Surfaces'}->{"$parent"."-aper"}->{'surf_num'};
+            $UPGrecords->{'GLZ'}->{'not_upgraded'}->{"$house_name"}->{"$zones"}->{"$parent"."-aper"}->{'surf_num_frame'} = $thisHouse->{$zones}->{'Surfaces'}->{"$parent"."-frame"}->{'surf_num'};
+        };
     };
 
+    # Update the construction files with the new glazing (if any new glazing is to be applies)
+    if(exists($UPGrecords->{'GLZ'}->{"$house_name"})) {
+        setNewWindows($house_name,$setPath,$UpgradesWindow,$UPGrecords->{'GLZ'});
+    };
+    
     return $UPGrecords;
 };
 # ====================================================================
@@ -2214,6 +2225,63 @@ sub setDHWfileDH {
 
     return 1;
 };
+# ====================================================================
+# setCFGnoDHW
+#       This subroutine removes the dhw system from the .cfg
+#       file
+#
+# INPUT     house_name: name of the dwelling of interest
+#           setPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub setCFGnoDHW {
+    # INPUTS
+    my $house_name = shift;
+    my $setPath = shift;
+    
+    # INTERMEDIATES
+    my $FileLine = 0; # File indexer
+    my @NewLines=();
+    
+    # Load the cfg file
+    my $CFGFile = $setPath . "$house_name/$house_name.cfg";
+    my $fid;
+    open $fid, $CFGFile or die "setCFGnoDHW: Could not open $CFGFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Delete the old cfg file
+    unlink $CFGFile;
+    
+    # Scan the cfg file and remove the DHW reference
+    until ($lines[$FileLine] =~ m/^(\*dhw)/) { # FFWD to the DHW line
+        $FileLine++;
+        if($FileLine>$#lines) {die "setCFGnoDHW: Could not find *dhw for $house_name.cfg\n";}
+    };
+    
+    # Store the top half of the cfg file
+    @NewLines = @lines[0..($FileLine-1)];
+    if($NewLines[$#NewLines] =~ m/^(#DHW)/) {pop @NewLines;} # Remove the comment for DHW if it is there
+    
+    # Append the rest of the file
+    $FileLine++;
+    push(@NewLines,@lines[$FileLine..$#lines]);
+    
+    # Print the new cfg file
+    DHWCFG: {
+        open my $out, '>', $CFGFile or die "setCFGnoDHW: Can't write $CFGFile: $!";
+        foreach my $ThatData (@NewLines) {
+            print $out $ThatData;
+        };
+        close $out;
+    };
+    
+    # Remove the dhw file
+    my $OldDHW = $setPath . "$house_name/$house_name.dhw";
+    unlink $OldDHW;
+
+    return 1;
+}
 
 # ====================================================================
 # *********** GLAZING SUBROUTINES ***************
@@ -2821,8 +2889,7 @@ sub setNewWindows {
             close $fidout;
         }; # END UPG_TMC
     }; # END ZONAL
-    
-    
+   return 1; 
 };
 # Final return value of one to indicate that the perl module is successful
 1;

@@ -211,7 +211,7 @@ SIMULATION: {
 #--------------------------------------------------------------------
 # Aggregate the electrical and thermal demands
 #--------------------------------------------------------------------
-AGGREGATE: if(($Upgrades->{'DH_SYSTEM'}->{'bIsAdd'} == 1) || ($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1)) {
+AGGREGATE: if(($Upgrades->{'DH_SYSTEM'}->{'SysNumber'} > 0) || ($Upgrades->{'PV_ROOF'}->{'bIsAdd'} == 1)) {
      print "  =====          Aggregating the loads       =====\n\n";
      setAggregateLoads(\@folders,$set_name);
      print "\n  =====                  Done                =====\n\n";
