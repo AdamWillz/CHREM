@@ -1,8 +1,8 @@
 <opt>
     <!-- Ceiling upgrade assume that blown in insulation is just placed on top of existing insulation-->
-    <CEIL_INS max_RSI="8.8" ins_k="0.043" ins_rho="16.0" ins_Cp="835.0"/>
+    <CEIL_INS max_RSI="8.8" ins_k="0.043" ins_rho="16.0" ins_Cp="835.0" bIsAdd="0"/>
     <!-- AIM-2 upgrade parameters-->
-    <AIM_2> 
+    <AIM_2 bIsAdd="0"> 
         <INFIL type="default" level="6"/>
         <!--INFIL type="custom" ACH_50="1.5" ELA_Pa="10"  ELA="342.3" Cd="0.611"/-->
         <HRV>
@@ -21,7 +21,7 @@
         </ERV-->
     </AIM_2> 
     <!-- Foundation upgrade assumes that new insulation is added to the interior (full height)-->
-    <BASE_INS> 
+    <BASE_INS bIsAdd="0"> 
         <bsmt max_RSI="3.5"/>
         <!-- EPS: (ASHRAE Fundamentals 2009)-->
         <!--crawl max_RSI="3.17" ins_k="0.036" ins_rho="20.0" ins_Cp="1470.0"/-->
@@ -29,29 +29,14 @@
         <crawl max_RSI="5.3" ins_k="0.026" ins_rho="33.0" ins_Cp="1470.0"/>
     </BASE_INS>
     <!-- PV RETROFIT -->
-    <PV_ROOF  bIsAdd="1"/>
+    <PV_ROOF  bIsAdd="0"/>
     <!-- DISTRICT HEATING -->
-    <DH_SYSTEM bIsAdd="1">
-        <INPUTS />
-        <!-- Hydronic furnace inputs -->
-        <RATED_13 Output="13.2" Units="kW">
-            <Blower name="Blower"  mass="10.000" Cs="500.000" UA="0.1000E-02" Pin="450.00" Vrated="0.37760" Eff="0.7000" Type="3" Ctl_Vars="1" Ndata="6"/>
-            <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="0.18930E-03" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
-            <Coil name="Hyd_Coil"  mass="15.000" Cs="500.00" Mw="1.7800" Ao="11.500" Ai="0.6500" Af="0.21400" Rm="0.10000E-01" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
-        </RATED_13>
-        <RATED_18 Output="17.6" Units="kW">
-            <Blower name="Blower"  mass="10.000" Cs="500.000" UA="0.1000E-02" Pin="450.00" Vrated="0.56630" Eff="0.7000" Type="3" Ctl_Vars="1" Ndata="6"/>
-            <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="2.20800E-04" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
-            <Coil name="Hyd_Coil"  mass="18.000" Cs="500.00" Mw="2.0100" Ao="15.000" Ai="0.7300" Af="0.24200" Rm="0.10000E-02" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
-        </RATED_18>
-        <RATED_22 Output="22.0" Units="kW">
-            <Blower name="Blower"  mass="10.000" Cs="500.000" UA="0.1000E-02" Pin="500.00" Vrated="0.6610" Eff="0.7000" Type="3" Ctl_Vars="1" Ndata="6"/>
-            <Pump name="Circ_Pump" mass="5.0000" Cs="22.000 " UA="0.1000E-02" Pin="150.00" Vrated="2.524E-04" Eff="0.7500" Type="15" Ctl_Vars="1" Ndata="6"/>
-            <Coil name="Hyd_Coil"  mass="26.000" Cs="500.00" Mw="3.2600" Ao="19.500" Ai="1.1900" Af="0.26000" Rm="0.10000E-02" Di="0.10920E-01" Type="21" Ctl_Vars="0" Ndata="9"/>
-        </RATED_22>
+    <DH_SYSTEM SysNumber="1">
+        <System_1 description="CHP microturbine"/>
+        <System_2 description="DH GSHP"/>
     </DH_SYSTEM>
     <!-- Glazing type to upgrade to. See Sara Nikoofard's thesis for details-->
-    <GLZ GlzSystem="1">
+    <GLZ GlzSystem="0">
         <!-- Glazing System 1-->
         <GLZ_1 glaze_type="2" coating="2" fill_gas="0" gap_width="1" numLayers="3" numGaps="1" description="WNDW UPG1">
             <GAPS gapPos_1="2" gapRSI_1="0.15"/>
