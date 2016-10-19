@@ -841,6 +841,7 @@ sub UpdateBCD {	# subroutine to perform a simple element replace (house file to 
 	my $Stove_ref = shift (@_);	# Stove power profile [W]
     my $Dryer_ref = shift (@_);	# Dryer power profile [W]
 	my $Other_ref = shift (@_);	# Other AL power profile [W]
+    my $DHW_ref = shift (@_);	# DHW draw profile [L/hr]
     my $Stovefuel = shift (@_);	# the house file to read/write
     my $TStep = shift (@_);	# timestep of the simulation [min]
     my @Stove = @$Stove_ref;
@@ -1250,18 +1251,60 @@ sub GetDHWData {
     
     # OUTPUTS
     my @DHW_Draw; # DHW draw [L/hr]
+    my $DataTstep; # Measured data timestep [min]
     
     # Intermediates
-    my $fTstep; # Timestep of the measured data [min]
+    my $iTsteps; # Number of timestep of the measured data
+    my $sFullPath = "../bcd" . $DataFile; # Relative path to the data
     
     if($source =~ m/^(WEL)/) { # Data from Dalhousie
-        $fTstep = 1;
+        $DataTstep = 1;
+        open my $fid, $sFullPath or die "GetDHWData: Could not find $sFullPath\n";
+        my @FileLines = <$fid>; # slurp the file
+        close $fid;
+        
+        # Grab the file header
+        my $sHeader = shift @FileLines;
+        my @Headers = split ',', $sHeader;
+        my $iColData;
+        for(my $i=0;$i<=$#Headers;$i++){
+            if($Headers[$i] =~ m/(Water Draw Adjusted)/i){
+                $iColData=$i;
+                last;
+            };
+            if($i==$#Headers){die "GetDHWData: Could not find header for $sFullPath\n";}
+        };
+        
+        foreach my $data (@FileLines) {
+            $data  =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            my @items = split ',', $data;
+            $items[$iColData] = $items[$iColData]*60.0; # Convert L/min to L/hr
+            push(@DHW_Draw,$items[$iColData]);
+        };
+        
+        $iTsteps = scalar @DHW_Draw;
+        if($iTsteps != 525600) {die "GetDHWData: $iTsteps instead of 525600 timesteps were found for George data\n";}
+        
+        
     } elsif($source =~ m/^(H)/) { # Data from SBES
-        $fTstep = 5;
+        $DataTstep = 5;
+        open my $fid, $sFullPath or die "GetDHWData: Could not find $sFullPath\n";
+        my @FileLines = <$fid>; # slurp the file
+        close $fid;
+        
+        foreach my $data (@FileLines) {
+            $data  =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            $data = ($data/5.0)*60.0; # Determine the average flowrate over the 5 minute interval. Convert L/min to L/hr
+            push(@DHW_Draw,$data);
+        };
+        
+        $iTsteps = scalar @DHW_Draw;
+        if($iTsteps != 105120) {die "GetDHWData: $iTsteps instead of 105120 timesteps were found for George data\n";}
+        
     } else {die "GetDHWData: $source is not from a valid DHW data source\n";}
     
     
-    return(\@DHW_Draw,$shift);
+    return(\@DHW_Draw,$DataTstep,$shift);
 }; # END GetDHWData
 
 # Final return value of one to indicate that the perl module is successful
