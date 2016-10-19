@@ -296,9 +296,9 @@ SUBROUTINES: {
             
             # Initialize arrays (if first pass)
             if($bStoreTime) { 
-                @DHW = (0) x $#lines;
-                @Heat = (0) x $#lines;
-                @Elec = (0) x $#lines;
+                if(defined $iDHW) {@DHW = (0) x $#lines;}
+                if(@iHeat) {@Heat = (0) x $#lines;}
+                if((defined $iExport) && (defined $iExport)){@Elec = (0) x $#lines;}
             };
             
             # Loop through all the data
@@ -309,25 +309,27 @@ SUBROUTINES: {
                 if($bStoreTime) {push(@Time, $LineData[$iTime]);}
                 
                 # Update the DHW load of the community (W)
-                $DHW[$i-1] += $LineData[$iDHW];
+                if(defined $iDHW) {$DHW[$i-1] += $LineData[$iDHW];}
                 
                 # Update community electrical consumption (W)
-                $Elec[$i-1] = $Elec[$i-1] + $LineData[$iExport] - $LineData[$iImport];
+                if((defined $iExport) && (defined $iExport)){$Elec[$i-1] = $Elec[$i-1] + $LineData[$iExport] - $LineData[$iImport];}
                 
                 # Update community heating demand (W)
-                my $ThisHeat = 0;
-                foreach my $zone (@iHeat) {
-                    $ThisHeat += $LineData[$zone];
+                if(@iHeat) {
+                    my $ThisHeat = 0;
+                    foreach my $zone (@iHeat) {
+                        $ThisHeat += $LineData[$zone];
+                    };
+                    $Heat[$i-1] += $ThisHeat;
                 };
-                $Heat[$i-1] += $ThisHeat;
             };
             
             $bStoreTime = 0; # Signal that at least one pass of the loop has occurred 
         };
         
-        # Save the aggregated load
-        PRINT_AGG: {
-            my $sAggPath = "../summary_files/Aggregate_$setName.csv";
+        # Save the aggregated  electrical load
+        PRINT_AGG_ELEC: if(@Elec) {
+            my $sAggPath = "../summary_files/Aggregate_Electrical$setName.csv";
             unlink $sAggPath;
             open my $out, '>', $sAggPath or die "Can't write $sAggPath: $!";
             
@@ -337,12 +339,59 @@ SUBROUTINES: {
             print $out "timestep [min],$fTStep\n";
             
             # Print the headers
-            print $out "present day,DHW Demand [W],Heating Demand [W],Electric Export [W]\n";
+            print $out "present day,Electric Export [W]\n";
             for(my $i=0; $i<$#Time;$i++) {
-                print $out "$Time[$i],$DHW[$i],$Heat[$i],$Elec[$i]\n";
+                print $out "$Time[$i],$Elec[$i]\n";
+            };
+            close $out;
+            
+            # Print the headers
+            #print $out "present day,DHW Demand [W],Heating Demand [W],Electric Export [W]\n";
+            #for(my $i=0; $i<$#Time;$i++) {
+            #    print $out "$Time[$i],$DHW[$i],$Heat[$i],$Elec[$i]\n";
+            #};
+            #close $out;
+        };
+        
+        # Save the aggregated space heating load
+        PRINT_AGG_SH: if(@Heat) {
+            my $sAggPath = "../summary_files/Aggregate_SpaceHeat$setName.csv";
+            unlink $sAggPath;
+            open my $out, '>', $sAggPath or die "Can't write $sAggPath: $!";
+            
+            # Determine the timestep
+            my $fTStep = ($Time[1]-$Time[0])*1440; # Timestep [min]
+            $fTStep = sprintf "%.0f", $fTStep;
+            print $out "timestep [min],$fTStep\n";
+            
+            # Print the headers
+            print $out "present day,Heating Demand [W]\n";
+            for(my $i=0; $i<$#Time;$i++) {
+                print $out "$Time[$i],$Heat[$i]\n";
             };
             close $out;
         };
+        
+        # Save the aggregated space heating load
+        PRINT_AGG_DHW: if(@DHW) {
+            my $sAggPath = "../summary_files/Aggregate_DHW$setName.csv";
+            unlink $sAggPath;
+            open my $out, '>', $sAggPath or die "Can't write $sAggPath: $!";
+            
+            # Determine the timestep
+            my $fTStep = ($Time[1]-$Time[0])*1440; # Timestep [min]
+            $fTStep = sprintf "%.0f", $fTStep;
+            print $out "timestep [min],$fTStep\n";
+            
+            # Print the headers
+            print $out "present day,DHW Demand [W]\n";
+            for(my $i=0; $i<$#Time;$i++) {
+                print $out "$Time[$i],$DHW[$i]\n";
+            };
+            close $out;
+        };
+        
+        
         
     }; # END sub setAggregateLoads
 
