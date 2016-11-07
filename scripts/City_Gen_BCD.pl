@@ -3228,6 +3228,7 @@ MAIN: {
                     # Identify the measured profile with a similar consumption
                     # Loop through all available DHW profiles from smallest to largest measured consumers
                     FIND_DHW_REC: foreach my $DHWrec (sort { $MeasuredFlow->{$a}->{'daily_consump'} <=> $MeasuredFlow->{$b}->{'daily_consump'} } keys $MeasuredFlow) {
+                        if($MeasuredFlow->{$DHWrec}->{'shift'}>2) {next FIND_DHW_REC;}
                         my $difference = abs ($ThisDHWann - ($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365));
                         if($difference < $bcd_match->{'DHW_LpY'}->{'difference'}) {
                             # update the value
@@ -3249,12 +3250,22 @@ MAIN: {
                         } else {
                             last FIND_DHW_REC;
                         };
-                    }; # END FIND_DHW_REC 
+                    }; # END FIND_DHW_REC
+                    if(not defined $bcd_match->{'DHW_LpY'}->{'source'}) {
+                        $issues = set_issue("%s", $issues, 'DHW', 'Profile Matching', "Could not match to a profile. Skipping", $coordinates);
+                        next RECORD;
+                    };
                     
                     # Load the DHW data
-                    my ($ref_DHW,$MeasTstep,$shiftProfile) = &GetDHWData($bcd_match->{'DHW_LpY'}->{'filename'},$bcd_match->{'DHW_LpY'}->{'source'}, $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'});
+                    my ($ref_DHW,$MeasTstep) = &GetDHWData($bcd_match->{'DHW_LpY'}->{'filename'},$bcd_match->{'DHW_LpY'}->{'source'}, $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'});
                     @DHW_Draw = @$ref_DHW;
-                    $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'} = $shiftProfile;
+                    
+                    # Advance the DHW profile shift counter
+                    $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'} = $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'}+1;
+                    #if($MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}}->{'shift'}>2) {
+                    #    # This has been shifted forward and back. Delete from selection pool
+                    #    delete $MeasuredFlow->{$bcd_match->{'DHW_LpY'}->{'source'}};
+                    #};
                     
                     if($time_step>$MeasTstep) {
                         my ($CondensedDHW, $Errr) = &IncreaseTimestepPower(\@DHW_Draw,$MeasTstep,$time_step);

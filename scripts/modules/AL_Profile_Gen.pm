@@ -1275,26 +1275,6 @@ sub GetDHWData {
         $iTsteps = scalar @DHW_Draw;
         if($iTsteps != 525600) {die "GetDHWData: $iTsteps instead of 525600 timesteps were found for George data\n";}
         
-        # TODO: Determine if shifting profile by a week is appropriate
-        # Shift the profile ahead or back a week to induce variation
-        #if($shift == 0) {
-        #    $shift++;
-        #} elsif($shift == 1) { # Shift forward one week
-        #    my @Top = @DHW_Draw[10080..$#DHW_Draw];
-        #    my @Bottom = @DHW_Draw[0..10079];
-        #    @DHW_Draw=();
-        #    push(@DHW_Draw,@Top);
-        #    push(@DHW_Draw,@Bottom);
-        #    $shift++;
-        #} else { # Shift backward one week, reset to 0
-        #    my @Top = @DHW_Draw[10080..$#DHW_Draw];
-        #    my @Bottom = @DHW_Draw[0..10079];
-        #    @DHW_Draw=();
-        #    push(@DHW_Draw,@Top);
-        #    push(@DHW_Draw,@Bottom);
-        #    $shift=0;
-        #};
-        
     } elsif($source =~ m/^(H)/) { # Data from SBES
         $DataTstep = 5;
         open my $fid, $sFullPath or die "GetDHWData: Could not find $sFullPath\n";
@@ -1312,8 +1292,26 @@ sub GetDHWData {
         
     } else {die "GetDHWData: $source is not from a valid DHW data source\n";}
     
+    # Shift the profile
+    if(($shift==1) || ($shift==2)) {
+        my @Top;
+        my @Bottom;
+        
+        if($shift==1) { # Advance a week
+            @Top = @DHW_Draw[(10080/$DataTstep)..$#DHW_Draw];
+            @Bottom = @DHW_Draw[0..((10080/$DataTstep)-1)];
+        } else { # Rewind a week
+            @Top = @DHW_Draw[($#DHW_Draw-(10080/$DataTstep))..$#DHW_Draw];
+            @Bottom = @DHW_Draw[0..(($#DHW_Draw-(10080/$DataTstep))-1)];
+        };
+        # Clear and update the draw profile
+        @DHW_Draw=();
+        push(@DHW_Draw,@Top);
+        push(@DHW_Draw,@Bottom);
+    };
     
-    return(\@DHW_Draw,$DataTstep,$shift);
+    
+    return(\@DHW_Draw,$DataTstep);
 }; # END GetDHWData
 
 # ====================================================================
