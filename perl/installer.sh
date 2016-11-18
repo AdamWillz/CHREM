@@ -83,3 +83,10 @@ perl Makefile.PL
 make
 make install
 cd ..
+
+tar -xf Math-Round-0.07.tar.gz
+cd Math-Round-0.07
+perl Makefile.PL
+make
+make install
+cd ..
