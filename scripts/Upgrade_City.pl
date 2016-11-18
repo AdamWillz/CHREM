@@ -226,27 +226,42 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
         switch ($upg) {
         
             case "AIM_2" {
-                if($Upgrades->{'AIM_2'}->{'bIsAdd'} == 0) {
+                my $ins_sys = $Upgrades->{'AIM_2'}->{'vent_sys'};
+                my $ins_key = "vent_$ins_sys";
+                if($ins_sys == 0) {
+                    next EACH_UPG;
+                } elsif(not defined($Upgrades->{'AIM_2'}->{"$ins_key"})) {
+                    print "Warning: Ceiling insulation system $ins_sys undefined, skipping\n";
                     next EACH_UPG;
                 } else {
-                    $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'},$setPath,$UPGrecords);
+                    $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'}->{"$ins_key"},$setPath,$UPGrecords);
                 };
             }
             case "CEIL_INS" {
-                if($Upgrades->{'CEIL_INS'}->{'bIsAdd'} == 0) {
+                my $ins_sys = $Upgrades->{'CEIL_INS'}->{'ins_sys'};
+                my $ins_key = "sys_$ins_sys";
+                if($ins_sys == 0) {
+                    next EACH_UPG;
+                } elsif(not defined($Upgrades->{'CEIL_INS'}->{"$ins_key"})) {
+                    print "Warning: Ceiling insulation system $ins_sys undefined, skipping\n";
                     next EACH_UPG;
                 } else {
-                    $UPGrecords->{'CEIL_INS'}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
-                    $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    $UPGrecords->{'CEIL_INS'}->{"$ins_key"}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
+                    $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'}->{"$ins_key"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
                 };
             }
             case "BASE_INS" {
-                if($Upgrades->{'BASE_INS'}->{'bIsAdd'} == 0) {
+                my $ins_sys = $Upgrades->{'BASE_INS'}->{'ins_sys'};
+                my $ins_key = "sys_$ins_sys";
+                if($ins_sys == 0) {
+                    next EACH_UPG;
+                } elsif(not defined($Upgrades->{'BASE_INS'}->{"$ins_key"})) {
+                    print "Warning: Basement insulation system $ins_sys undefined, skipping\n";
                     next EACH_UPG;
                 } else {
                     $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
                     $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
-                    $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'}->{"$ins_key"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
                 };
             }
             #case "WALL_INS" {
@@ -254,7 +269,10 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
             #}
             case "GLZ" {
                 my $GlazeSystem = $Upgrades->{'GLZ'}->{'GlzSystem'};
-                if($GlazeSystem < 1) {
+                if($GlazeSystem == 0) {
+                    next EACH_UPG;
+                } elsif(not defined($GlazeSystem)) {
+                    print "Warning: Glazing system $GlazeSystem undefined, skipping\n";
                     next EACH_UPG;
                 } else {
                     $GlazeSystem = 'GLZ_' . "$GlazeSystem";

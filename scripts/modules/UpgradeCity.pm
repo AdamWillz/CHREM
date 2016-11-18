@@ -17,6 +17,7 @@ use CSV;	# CSV-2 (for CSV split and join, this works best)
 use Cwd;
 use Data::Dumper;
 use Switch;
+use Math::Round;
 
 use lib qw(./modules);
 use PV;
@@ -1334,6 +1335,7 @@ sub setVNTfile {
     # INTERMEDIATES
     my $FileLine=0;
     my $RVData; # HASH hold the HRV or ERV data
+    my $FanPow;
 
     # Load the mvnt template file
     my $TmpFile = "../templates/template.mvnt";
@@ -1384,8 +1386,10 @@ sub setVNTfile {
         &insert (\@lines, "#HRV_DUCT", 1, 1, 0, "%s\n%s\n", "1 1 2 2 152 0.1", "1 1 2 2 152 0.1");	# use the typical duct values
     }
     elsif ($iVentTypeUPG == 3) {	# fan only ventilation
+        $fVentFlowRequired = nearest_ceil(5, $fVentFlowRequired); # Round flowrate up to nearest multiple of 5
+        my $FanPow = (0.8041*$fVentFlowRequired)-9.8323; # The fan power required. Correlation derived from HVI [W]
         &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as fan ventilation
-        &insert (\@lines, "#VENT_FLOW_RATE", 1, 1, 0, "%s\n", "$fVentFlowRequired $fVentFlowRequired 0");	# supply and exhaust flow rate (L/s) and fan power (W) NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        &insert (\@lines, "#VENT_FLOW_RATE", 1, 1, 0, "%s\n", "$fVentFlowRequired $fVentFlowRequired $FanPow");	# supply and exhaust flow rate (L/s) and fan power (W) NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
         &insert (\@lines, "#VENT_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# no temp control
     };	# no need for an else
     
@@ -1400,6 +1404,7 @@ sub setVNTfile {
     
     $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_CVS'} = $iVentTypeUPG;
     $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_Vent_Ls'} = $fVentFlowRequired;
+    if($iVentTypeUPG == 3) { $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_Vent_Power'} = $FanPow;}
 
     return $UPGrecords;
 };

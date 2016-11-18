@@ -51,6 +51,8 @@ use strict;
 use Data::Dumper;
 use Parallel::ForkManager;
 use XML::Simple;	# to parse the XML databases
+use List::MoreUtils qw( minmax );
+use Statistics::Descriptive;
 
 # CHREM modules
 use lib ('./modules');
@@ -257,7 +259,9 @@ SUBROUTINES: {
         # INTERMEDIATES
         my @Time; # Present day of the year
         my @DHW; # Community aggregated DHW demand [W]
+        my @DHWcall; # How many dwellings are calling for DHW at each timestep [-]
         my @Heat; # Community-aggregated heating demand [W]
+        my @HeatCall; # How many dwellings are calling for space heating at each timestep [-]
         my @Elec; # Community-aggregated electrical demand [W] (Negative=import, Positive=export)
         my $bStoreTime=1;
         
@@ -266,20 +270,24 @@ SUBROUTINES: {
             my $hse_name = $record;
             $hse_name =~ s{.*/}{};
             
+            if($hse_name =~ m/(BCD)/) {next;} 
+            
             my $sThisOut = $record . "/$hse_name.csv";
             
             # Open the timestep data
-            open my $fid, $sThisOut or die "setAggregateLoads: Could not open $sThisOut\n";
+            open my $fid, $sThisOut or print "setAggregateLoads: Could not open $sThisOut\n";
             my @lines = <$fid>; # Pull entire file into an array
             close $fid;
             
             # Process the header
+            my $HeaderString = shift @lines;
             my $iTime;
             my $iDHW;
             my @iHeat;
             my $iImport;
             my $iExport;
-            my @Headers = split ',', $lines[0];
+            
+            my @Headers = split ',', $HeaderString;
             for(my $i=0; $i<=$#Headers;$i++) {
                 if($Headers[$i] =~ m/(present)/) {
                     $iTime = $i;
@@ -293,26 +301,36 @@ SUBROUTINES: {
                     $iExport = $i;
                 };
             };
-            
+
             # Initialize arrays (if first pass)
-            if($bStoreTime) { 
-                if(defined $iDHW) {@DHW = (0) x $#lines;}
-                if(@iHeat) {@Heat = (0) x $#lines;}
-                if((defined $iExport) && (defined $iExport)){@Elec = (0) x $#lines;}
+            if($bStoreTime) {
+                my $iNumRows = scalar @lines;
+                if(defined $iDHW) {
+                    @DHW = (0) x $iNumRows;
+                    @DHWcall = (0) x $iNumRows;
+                };
+                if(@iHeat) {
+                    @Heat = (0) x $iNumRows;
+                    @HeatCall = (0) x $iNumRows;
+                };
+                if((defined $iExport) && (defined $iExport)){@Elec = (0) x $iNumRows;}
             };
             
             # Loop through all the data
-            for(my $i=1; $i<=$#lines;$i++) {
+            for(my $i=0; $i<=$#lines;$i++) {
                 my @LineData = split ',', $lines[$i];
                 
                 # Store the time data (if first pass)
                 if($bStoreTime) {push(@Time, $LineData[$iTime]);}
                 
                 # Update the DHW load of the community (W)
-                if(defined $iDHW) {$DHW[$i-1] += $LineData[$iDHW];}
+                if(defined $iDHW) {
+                    $DHW[$i] += $LineData[$iDHW];
+                    if($LineData[$iDHW]>0) {$DHWcall[$i]++;}
+                };
                 
                 # Update community electrical consumption (W)
-                if((defined $iExport) && (defined $iExport)){$Elec[$i-1] = $Elec[$i-1] + $LineData[$iExport] - $LineData[$iImport];}
+                if((defined $iExport) && (defined $iExport)){$Elec[$i] = $Elec[$i] + $LineData[$iExport] - $LineData[$iImport];}
                 
                 # Update community heating demand (W)
                 if(@iHeat) {
@@ -320,12 +338,16 @@ SUBROUTINES: {
                     foreach my $zone (@iHeat) {
                         $ThisHeat += $LineData[$zone];
                     };
-                    $Heat[$i-1] += $ThisHeat;
+                    $Heat[$i] += $ThisHeat;
+                    if($ThisHeat>0) {$HeatCall[$i]++;}
                 };
             };
             
             $bStoreTime = 0; # Signal that at least one pass of the loop has occurred 
         };
+        
+        #Peak and min load data
+        my @PeakMin;
         
         # Save the aggregated  electrical load
         PRINT_AGG_ELEC: if(@Elec) {
@@ -340,7 +362,7 @@ SUBROUTINES: {
             
             # Print the headers
             print $out "present day,Electric Export [W]\n";
-            for(my $i=0; $i<$#Time;$i++) {
+            for(my $i=0; $i<=$#Time;$i++) {
                 print $out "$Time[$i],$Elec[$i]\n";
             };
             close $out;
@@ -351,6 +373,24 @@ SUBROUTINES: {
             #    print $out "$Time[$i],$DHW[$i],$Heat[$i],$Elec[$i]\n";
             #};
             #close $out;
+            
+            # Determine peak and minimum aggregate load
+            my ($min, $max) = minmax @Elec;
+            my $FindBase = Statistics::Descriptive::Full->new();
+                $FindBase->add_data(\@Elec);
+                my $Baseld=$FindBase->percentile(5);
+                my $this95=$FindBase->percentile(95);
+                my $mean = $FindBase->mean();
+                my $median = $FindBase->median();
+                my $StdDev = $FindBase->standard_deviation();
+            $FindBase->clear();
+            push(@PeakMin,"Max. Electrical Demand: $max W\n");
+            push(@PeakMin,"Min. Electrical Demand: $min W\n");
+            push(@PeakMin,"Mean Electrical Demand: $mean W\n");
+            push(@PeakMin,"Median Electrical Demand: $median W\n");
+            push(@PeakMin,"Standard Deviation Electrical Demand: $StdDev W\n");
+            push(@PeakMin,"5th percentile Electrical Demand: $Baseld W\n");
+            push(@PeakMin,"95th percentile Electrical Demand: $this95 W\n\n");
         };
         
         # Save the aggregated space heating load
@@ -365,11 +405,28 @@ SUBROUTINES: {
             print $out "timestep [min],$fTStep\n";
             
             # Print the headers
-            print $out "present day,Heating Demand [W]\n";
-            for(my $i=0; $i<$#Time;$i++) {
-                print $out "$Time[$i],$Heat[$i]\n";
+            print $out "present day,Heating Demand [W],Num Call [-]\n";
+            for(my $i=0; $i<=$#Time;$i++) {
+                print $out "$Time[$i],$Heat[$i],$HeatCall[$i]\n";
             };
             close $out;
+            
+            my ($min, $max) = minmax @Heat;
+            my $FindBase = Statistics::Descriptive::Full->new();
+                $FindBase->add_data(\@Heat);
+                my $Baseld=$FindBase->percentile(5);
+                my $this95=$FindBase->percentile(95);
+                my $mean = $FindBase->mean();
+                my $median = $FindBase->median();
+                my $StdDev = $FindBase->standard_deviation();
+            $FindBase->clear();
+            push(@PeakMin,"Max. Space Heating Demand: $max W\n");
+            push(@PeakMin,"Min. Space Heating Demand: $min W\n");
+            push(@PeakMin,"Mean Space Heating Demand: $mean W\n");
+            push(@PeakMin,"Median Space Heating Demand: $median W\n");
+            push(@PeakMin,"Standard Deviation Space Heating Demand: $StdDev W\n");
+            push(@PeakMin,"5th percentile Space Heating Demand: $Baseld W\n");
+            push(@PeakMin,"95th percentile Space Heating Demand: $this95 W\n\n");
         };
         
         # Save the aggregated space heating load
@@ -384,15 +441,63 @@ SUBROUTINES: {
             print $out "timestep [min],$fTStep\n";
             
             # Print the headers
-            print $out "present day,DHW Demand [W]\n";
-            for(my $i=0; $i<$#Time;$i++) {
-                print $out "$Time[$i],$DHW[$i]\n";
+            print $out "present day,DHW Demand [W],Num Call [-]\n";
+            for(my $i=0; $i<=$#Time;$i++) {
+                print $out "$Time[$i],$DHW[$i],$DHWcall[$i]\n";
+            };
+            close $out;
+            my ($min, $max) = minmax @DHW;
+            my $FindBase = Statistics::Descriptive::Full->new();
+                $FindBase->add_data(\@DHW);
+                my $Baseld=$FindBase->percentile(5);
+                my $this95=$FindBase->percentile(95);
+                my $mean = $FindBase->mean();
+                my $median = $FindBase->median();
+                my $StdDev = $FindBase->standard_deviation();
+            $FindBase->clear();
+            push(@PeakMin,"Max. DHW Demand: $max W\n");
+            push(@PeakMin,"Min. DHW Demand: $min W\n");
+            push(@PeakMin,"Mean DHW Demand: $mean W\n");
+            push(@PeakMin,"Median DHW Demand: $median W\n");
+            push(@PeakMin,"Standard Deviation DHW Demand: $StdDev W\n");
+            push(@PeakMin,"5th percentile DHW Demand: $Baseld W\n");
+            push(@PeakMin,"95th percentile DHW Demand: $this95 W\n\n");
+            
+        };
+        
+        if(@Heat && @DHW) {
+            my @Aggregate;
+            for (my $i=0;$i<=$#Heat;$i++) {
+                push(@Aggregate,($Heat[$i]+$DHW[$i]));
+            };
+            my ($min, $max) = minmax @Aggregate;
+            my $FindBase = Statistics::Descriptive::Full->new();
+                $FindBase->add_data(\@Aggregate);
+                my $Baseld=$FindBase->percentile(5);
+                my $this95=$FindBase->percentile(95);
+                my $mean = $FindBase->mean();
+                my $median = $FindBase->median();
+                my $StdDev = $FindBase->standard_deviation();
+            $FindBase->clear();
+            push(@PeakMin,"Max. Thermal Demand: $max W\n");
+            push(@PeakMin,"Min. Thermal Demand: $min W\n");
+            push(@PeakMin,"Mean Thermal Demand: $mean W\n");
+            push(@PeakMin,"Median Thermal Demand: $median W\n");
+            push(@PeakMin,"Standard Deviation Thermal Demand: $StdDev W\n");
+            push(@PeakMin,"5th percentile Thermal Demand: $Baseld W\n");
+            push(@PeakMin,"95th percentile Thermal Demand: $this95 W\n\n");
+        }
+        
+        if(@PeakMin) {
+            my $sAggPath = "../summary_files/Aggregate_PeakBase$setName.txt";
+            unlink $sAggPath;
+            open my $out, '>', $sAggPath or die "Can't write $sAggPath: $!";
+            
+            foreach my $item (@PeakMin) {
+                print $out $item;
             };
             close $out;
         };
-        
-        
-        
     }; # END sub setAggregateLoads
 
 }; # END SUBROUTINES
