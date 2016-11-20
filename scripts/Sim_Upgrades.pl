@@ -244,7 +244,6 @@ AGGREGATE: if(($Upgrades->{'DH_SYSTEM'}->{'SysNumber'} > 0) || ($Upgrades->{'PV_
 #--------------------------------------------------------------------
 # TODO: Post-process and report performance metrics
 #--------------------------------------------------------------------
-
 #--------------------------------------------------------------------
 # SUBROUTINES
 #--------------------------------------------------------------------
@@ -498,6 +497,8 @@ SUBROUTINES: {
             };
             close $out;
         };
+        
+        return 0;
     }; # END sub setAggregateLoads
 
 }; # END SUBROUTINES
