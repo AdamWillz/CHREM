@@ -90,3 +90,17 @@ perl Makefile.PL
 make
 make install
 cd ..
+
+tar -xf Statistics-Descriptive-3.0612.tar.gz
+cd Statistics-Descriptive-3.0612
+perl Makefile.PL
+make
+make install
+cd ..
+
+tar -xf Archive-Tar-2.18.tar.gz
+cd Archive-Tar-2.18
+perl Makefile.PL
+make
+make install
+cd ..

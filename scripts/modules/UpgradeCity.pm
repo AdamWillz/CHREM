@@ -2096,7 +2096,7 @@ sub setHVACfileDH {
         $iTHisData++;
         $iSysType = $LineDat[0];
 
-        if (($iSysType == 1) || ($iSysType == 3)) { # Furnace or baseboard. Remove
+        if (($iSysType == 1) || ($iSysType == 2) || ($iSysType == 3)) { # Furnace or baseboard. Remove
             $iThisNumData = 2; # Both furnaces and baseboards have only 2 data lines
             until($iTHisData == $iThisNumData) {
                 if ($lines[$FileLine] !~ m/^(#)/) {$iTHisData++;}
