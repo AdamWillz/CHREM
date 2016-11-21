@@ -1848,6 +1848,8 @@ sub getHVACdata {
         # What type of system this is
         if($LineDat[0] == 1) {
             $sSysType = 'furnace';
+        } elsif($LineDat[0] == 2) {
+            $sSysType = 'boiler';
         } elsif($LineDat[0] == 7) {
             $sSysType = 'AC_HP';
         } elsif($LineDat[0] == 3) {
@@ -1859,7 +1861,7 @@ sub getHVACdata {
             $sSysType = 'GCEP';
              print "getHVACdata: Record $house_name, warning record has GCEP system. This type is not handled by Upgrade script\n";
         } else {
-            die "getHVACdata: Unrecognized HVAC system $LineDat[0]. Should be 1,3 or 7,8,9\n";
+            die "getHVACdata: Record $house_name, Unrecognized HVAC system $LineDat[0]. Should be 1,3 or 7,8,9\n";
         };
         #if($LineDat[1] != 1) {die "Record $house_name: HVAC has secondary system $LineDat[1]\n";}
         if($LineDat[1] == 1) {
@@ -1880,7 +1882,7 @@ sub getHVACdata {
         @LineDat = split ' ', $lines[$FileLine];
         $FileLine++;
         
-        if($sSysType =~ m/furnace/) {
+        if(($sSysType =~ m/furnace/) || ($sSysType =~ m/boiler/)) {
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'Type'} = $LineDat[0];
             $UPGrecords->{'DH_SYSTEM'}->{"$house_name"}->{"$sSysType"}->{'energy_src'} = $LineDat[1];
             my $iData = 2;
