@@ -2462,10 +2462,16 @@ sub setNewWindows {
         my @EMoutside;
         my @SLRinside;
         my @SLRoutside;
+        
+        # Gaps Data
+        my $sGapsPosition;
+        my $sGapsInfo;
 
         # Update the GAPS
         #=======================================
         NUM_GAPS: foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
+            my $bIsNoGap = 0;
+
             until ($CONlines[$FileLine] =~ m/$GlazeName/i) { # Find the aperture gaps
                 $FileLine++;
                 if ($FileLine>$#CONlines){die "setNewWindows: Could not find aperture gap data $house_name $zones\n";}
@@ -2488,51 +2494,109 @@ sub setNewWindows {
             $FileLine=0; # RWD file
         }; # END NUM_GAPS
         
+        # Find and store the constructions with gaps
+        #=======================================
+        until ($CONlines[$FileLine] =~ m/^(#LAYERS_GAPS)/i) { # Get to start of layers gaps section
+            $FileLine++;
+            if ($FileLine>$#CONlines){die "NUM_GAPS: Could not get to top of LAYERS_GAPS $house_name\n";}
+        };
+        $FileLine++;
+        
+        my $iNumGapLayers = 0;
+        GET_NUM_GAPS: until ($CONlines[$FileLine] =~ m/^(#END_LAYERS_GAPS)/i) { # determine layers with gaps
+            my $sLine = $CONlines[$FileLine];
+            $sLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            my @sLineData = split /[, ]/, $sLine;
+            if($sLineData[1]>0) {
+                $iNumGapLayers++;
+                $sGapsPosition->{"$iNumGapLayers"}=$sLineData[3];
+            };
+            $FileLine++;
+            if ($FileLine>$#CONlines){die "GET_NUM_GAPS: Ran to EOF $house_name\n";}
+        };
+        $FileLine=0; # RWD file
+        
+        # Find and store old gap data
+        #=======================================
+        $FileLine=0; # RWD file
+        until ($CONlines[$FileLine] =~ m/^(#GAP_POS_AND_RSI)/i) { # FWD to gap section
+            $FileLine++;
+            if ($FileLine>$#CONlines){die "setNewWindows: Could not find gap info data $house_name\n";}
+        };
+        $StartHere=$FileLine;
+        
+        $FileLine++;
+        until ($CONlines[$FileLine] =~ m/^(#END_GAP_POS_AND_RSI)/i) {
+            my $sLine = $CONlines[$FileLine];
+            $sLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            my @sLineData = split /#/, $sLine;
+            $sLineData[1] =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+            @sLineData = split /[, ]/, $sLineData[1];
+            $sGapsInfo->{"$sLineData[0]"} = $CONlines[$FileLine];
+            
+            $FileLine++;
+            if ($FileLine>$#CONlines){die "setNewWindows: Could not find gap info data $house_name\n";}
+        };
+
         # Update GAP info
         #=======================================
         GAP_INFO: {
-            until ($CONlines[$FileLine] =~ m/^(#GAP_POS_AND_RSI)/i) { # Find the aperture gaps
+           my @TempCONlines=@CONlines[0..$StartHere];
+           
+           for (my$k=1;$k<=$iNumGapLayers;$k++) { # For each gap
+                my $ThisSurface = $sGapsPosition->{"$k"};
+                my @ParentData = split '-', $ThisSurface;
+                my $sParent = $ParentData[0];
+                my $sChild = $ParentData[1];
+                
+                if(defined $UPGglaze->{"$house_name"}->{"$zones"}->{"$sParent-aper"}) {
+                    # Declare new string for gap data
+                    my $NewGapDataLine="";
+                    # This surface is being upgraded, determine if its the frame or aperture
+                    if($sChild =~ m/aper/) {
+                        # Update the gap data for the window
+                        for (my $i=1;$i<=$NewGlzGaps;$i++) {
+                            my $GappyPos = $UpgradesWindow->{'GAPS'}->{"gapPos_$i"};
+                            my $GappyRSI = $UpgradesWindow->{'GAPS'}->{"gapRSI_$i"};
+                            $NewGapDataLine = $NewGapDataLine . "$GappyPos $GappyRSI ";
+                        };
+                        $NewGapDataLine = "$NewGapDataLine # $ThisSurface $NewGlzDesc\n";
+                        
+                    } elsif($sChild =~ m/frame/) {
+                        for (my $i=1;$i<=$NewFrmGaps;$i++) {
+                            my $GappyPos = $UpgradesWindow->{'frame'}->{'GAPS'}->{"gapPos_$i"};
+                            my $GappyRSI = $UpgradesWindow->{'frame'}->{'GAPS'}->{"gapRSI_$i"};
+                            $NewGapDataLine = $NewGapDataLine . "$GappyPos $GappyRSI ";
+                        };
+                        $NewGapDataLine = "$NewGapDataLine # $ThisSurface $NewFrmDesc\n";
+                        
+                    } else {
+                        die "setNewWindows: Unrecognized child surface $sChild $house_name\n";
+                    };
+                    
+                    # Add the the construction file
+                    push(@TempCONlines,$NewGapDataLine);
+                    
+                } else {
+                    # Surface is not being upgraded
+                    push(@TempCONlines,$sGapsInfo->{"$ThisSurface"});
+                };
+
+           };
+           
+           # Append the rest of the construction data
+           $FileLine=0; # RWD file
+           until ($CONlines[$FileLine] =~ m/^(#END_GAP_POS_AND_RSI)/i) {
                 $FileLine++;
                 if ($FileLine>$#CONlines){die "setNewWindows: Could not find gap info data $house_name\n";}
             };
-            $FileLine++;
-            $StartHere=$FileLine;
-            
-            foreach my $GlazeName (keys (%{$UPGglaze->{"$house_name"}->{"$zones"}})) {
-                until ($CONlines[$FileLine] =~ m/$GlazeName/i) { # Find the aperture gap info
-                    $FileLine++;
-                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find aperture gap info lines $house_name $zones\n";}
-                };
-                # Update the gap data for the window
-                my $NewGapDataLine="";
-                for (my $i=1;$i<=$NewGlzGaps;$i++) {
-                    my $GappyPos = $UpgradesWindow->{'GAPS'}->{"gapPos_$i"};
-                    my $GappyRSI = $UpgradesWindow->{'GAPS'}->{"gapRSI_$i"};
-                    $NewGapDataLine = $NewGapDataLine . "$GappyPos $GappyRSI ";
-                };
-                $CONlines[$FileLine] = "$NewGapDataLine # $GlazeName $NewGlzDesc\n";
-                
-                # Enter the frame data
-                my @ParentData = split '-', $GlazeName;
-                my $FrameName = $ParentData[0];
-                $FrameName = $FrameName . "-frame"; # Set the name of the frame surface
-                
-                $FileLine=$StartHere; # RWD file to start of GAPS data
-                until ($CONlines[$FileLine] =~ m/$FrameName/i) { # Find the frame gap info
-                    $FileLine++;
-                    if ($FileLine>$#CONlines){die "setNewWindows: Could not find frame gap info lines $house_name $zones\n";}
-                };
-                # Update the gap data for the frame
-                $NewGapDataLine="";
-                for (my $i=1;$i<=$NewFrmGaps;$i++) {
-                    my $GappyPos = $UpgradesWindow->{'frame'}->{'GAPS'}->{"gapPos_$i"};
-                    my $GappyRSI = $UpgradesWindow->{'frame'}->{'GAPS'}->{"gapRSI_$i"};
-                    $NewGapDataLine = $NewGapDataLine . "$GappyPos $GappyRSI ";
-                };
-                $CONlines[$FileLine] = "$NewGapDataLine # $FrameName $NewFrmDesc\n";
-                
-                $FileLine=$StartHere; # RWD file to start of GAPS data
-            };
+           push(@TempCONlines,@CONlines[$FileLine..$#CONlines]);
+           
+           # Update the con file
+           @CONlines=@TempCONlines;
+           undef @TempCONlines;
+           
+           $FileLine=$StartHere; # RWD file to start of GAPS data
         }; # END GAP_INFO
         
         # Update the construction data
