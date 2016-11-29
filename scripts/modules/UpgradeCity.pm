@@ -28,7 +28,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ);
+our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ upgradeWallIns);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -458,7 +458,7 @@ sub upgradeGLZ {
 
     # Store the surface index for each glazing surface and associated frame surface
     SCANSURF: foreach my $zones (keys (%{$thisHouse})) {
-        if($zones =~ m/(PV)$/) {next FIND_ELIGIBLE;} # Ignore PV zones
+        if($zones =~ m/(PV)$/) {next SCANSURF;} # Ignore PV zones
         foreach my $surfs (keys (%{$thisHouse->{$zones}->{'Surfaces'}})) {
             if($surfs =~ m/aper$/) {
                 push(@ZonesWithGlz,$zones);
@@ -516,6 +516,50 @@ sub upgradeGLZ {
     };
     
     return $UPGrecords;
+};
+# ====================================================================
+# upgradeWallIns
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
+#
+# INPUT     numOcc: number of occupants in the house
+#           pdf: probability distribution function HASH (refen
+# OUTPUT    StartActive: number of active occupants 
+# ====================================================================
+sub upgradeWallIns {
+    # Inputs
+    # Name of dwelling, Wall upgrade HASH, Surface HASH ,path to the set, HASH holding upgrade data
+    my ($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords) = @_;
+    
+    # Determine the cladding for this house
+    $UPGrecords = getWallCladding($house_name,$thisHouse,$setPath,$UPGrecords);
+    my $sCladding = $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'};
+    
+    # Set the new cladding
+    $UPGrecords = setWallCladding($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords);
+
+    #switch ($sCladding) {
+    #    case "Vinyl" {
+    #        $UPGrecords = setWallCladding($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords);
+    #    }
+    #    case "Brick" "Concrete" "Stone" {
+    #    
+    #    }
+    #    case "SPF" { # Wood (lapped), assume 12 mm thick
+    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
+    #    }
+    #    else {
+    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
+    #    }
+    #}
+    
+    #print Dumper $thisHouse;
+    #print Dumper $house_name;
+    #print Dumper $setPath;
+    
+    sleep;
+    
+    
 };
 # ====================================================================
 # *********** PRIVATE METHODS ***************
@@ -2965,5 +3009,185 @@ sub setNewWindows {
     }; # END ZONAL
    return 1; 
 };
+
+# ====================================================================
+# *********** WALL SUBROUTINES ***************
+# ====================================================================
+
+# ====================================================================
+# getWallCladding
+#       This subroutine opens the dwelling HVAC file, determines the
+#       current system type, and store the data in the upgrade HASH
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub getWallCladding {
+    # INPUTS
+    my ($house_name,$thisHouse,$setPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $sMainZone = 'main_1'; # Every CHREM dwelling has a main zone
+    my $FileLine = 0;
+    my $sStringData;
+    my $fRSI;
+    my $sCladding;
+    
+    # Load the mvnt file
+    my $sPathToCon = $setPath . $house_name. "/$house_name.$sMainZone.con";
+    my $fid;
+    open $fid, $sPathToCon or die "getWallCladding: Could not open $sPathToCon\n";
+    my @CONlines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # FWD to surface properties
+    until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
+        $FileLine++;
+    };
+    
+    # Find the main wall construction
+    until ($CONlines[$FileLine] =~ m/(M_wall)/i) {
+        $FileLine++;
+    };
+    $sStringData = $CONlines[$FileLine];
+    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+
+    # Get the RSI value of the wall
+    ($fRSI) = $sStringData =~ m/U Value final (.*) \(/;
+    $fRSI=1/$fRSI; # Convert U-value to RSI (m2K/W)
+    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'} = sprintf("%.2f",$fRSI);
+    
+    # Get the cladding type
+    $FileLine++;
+    $sStringData = $CONlines[$FileLine];
+    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+    ($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
+    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'} = $sCladding;
+
+    # Set Output
+    return $UPGrecords;
+};
+# ====================================================================
+# setWallCladding
+#       This subroutine opens the dwelling HVAC file, determines the
+#       current system type, and store the data in the upgrade HASH
+#
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub setWallCladding {
+    # INPUTS
+    my ($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine = 0;
+    my @sZones;
+    my $bIsGabled=0;
+    
+    # Prepare the new layer info
+    my $sNewCladding;
+    my $sNewIns;
+    NEW_LAYERS: {
+        # Cladding
+        my $fRSI = "0.0";
+        my $fUvalue = $UpgradesWall->{'cladding'}->{'cld_k'}/$UpgradesWall->{'cladding'}->{'cld_t'};
+        $fUvalue = sprintf("%.3f",$fUvalue);
+        my $fCond = $UpgradesWall->{'cladding'}->{'cld_k'};
+        my $fRho = $UpgradesWall->{'cladding'}->{'cld_rho'};
+        my $fCp = $UpgradesWall->{'cladding'}->{'cld_Cp'};
+        my $fThick = $UpgradesWall->{'cladding'}->{'cld_t'};
+        my $sDescrip = $UpgradesWall->{'cladding'}->{'description'};
+        $sNewCladding = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fThick,$sDescrip,$fRSI,$fUvalue);
+        
+        # Insulation
+        $fRSI = $UpgradesWall->{'ins'}->{'ins_t'}/$UpgradesWall->{'ins'}->{'ins_k'};
+        $fRSI = sprintf("%.2f",$fRSI);
+        $fUvalue = $UpgradesWall->{'ins'}->{'ins_k'}/$UpgradesWall->{'ins'}->{'ins_t'};
+        $fUvalue = sprintf("%.3f",$fUvalue);
+        $fCond = $UpgradesWall->{'ins'}->{'ins_k'};
+        $fRho = $UpgradesWall->{'ins'}->{'ins_rho'};
+        $fCp = $UpgradesWall->{'ins'}->{'ins_Cp'};
+        $fThick = $UpgradesWall->{'ins'}->{'ins_t'};
+        $sDescrip = $UpgradesWall->{'ins'}->{'description'};
+        $sNewIns = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fThick,$sDescrip,$fRSI,$fUvalue);
+    };
+    
+    # Determine how many main zones there are
+    foreach my $zones (keys (%{$thisHouse})) {
+        if($zones =~ m/^(main)/i) {push(@sZones,$zones);}
+    };
+    
+    # Determine if there is a gabled roof
+    if (defined $thisHouse->{'attic'}) {
+        my $sConPath = $setPath . $house_name. "/$house_name.attic.con";
+        my $fid;
+        open $fid, $sPathToCon or die "setWallCladdingVinyl: Could not open $sPathToCon\n";
+        my @CONlines = <$fid>; # Pull entire file into an array
+        close $fid;
+        
+        # Determine if this dwelling has a hip or gabled roof
+        my $FileLine=0;
+        FIND_GABLE: while ($FileLine <= $#CONlines) {
+            if($CONlines[$FileLine] =~ m/(A_or_R_gbl)/) {
+                $bIsGabled = 1;
+                last FIND_GABLE;
+            } elsif ($CONlines[$FileLine] =~ m/^(#END_LAYERS_GAPS)/) {
+                last FIND_GABLE;
+            };
+            $FileLine++;
+        };
+    };
+    
+    # Update the construction file
+    foreach my $zones (@sZones) {
+        my $FileLine=0;
+        my $sConPath = $setPath . $house_name. "/$house_name.$zones.con";
+        my $fid;
+        open $fid, $sPathToCon or die "setWallCladdingVinyl: Could not open $sPathToCon\n";
+        my @CONlines = <$fid>; # Pull entire file into an array
+        close $fid;
+        
+        # FWD to surface properties
+        until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
+            $FileLine++;
+        };
+        
+        # Find and modify the main wall constructions
+        while ($FileLine<=$#CONlines) {
+            if($CONlines[$FileLine] =~ m/(M_wall)/i) { # This is a main wall, update it
+                # Store the top half of the construction file
+                my @Top=@CONlines[0..$FileLine];
+                
+                # External main wall upgrade is dependent on existing cladding
+                if($sCladding =~ m/(Vinyl)/) {
+                
+                } elsif($sCladding =~ m/(Brick|Concrete|Stone)/) {
+                    # Insulation and new cladding is placed on top of the existing wall
+                    push(@Top,$sNewCladding);
+                    push(@Top,$sNewIns);
+                    push(@Top,@CONlines[($FileLine+1)..$#CONlines]);
+                    @CONlines = @Top;
+                } elsif($sCladding =~ m/(SPF)/) {
+                
+                } else {
+                    print "setWallCladding: Unknown cladding type $sCladding in house $house_name\nInsulation and new cladding added on top of existing\n";
+                };
+            
+            };
+            $FileLine++;
+        };
+        
+    };
+        
+    
+    print Dumper $house_name;
+    print Dumper @sZones;
+    sleep;
+    
+    return $UPGrecords;
+};
+   
 # Final return value of one to indicate that the perl module is successful
 1;
