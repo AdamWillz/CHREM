@@ -3227,9 +3227,9 @@ MAIN: {
 
                     # Identify the measured profile with a similar consumption
                     # Loop through all available DHW profiles from smallest to largest measured consumers
-                    FIND_DHW_REC: foreach my $DHWrec (sort { $MeasuredFlow->{$a}->{'daily_consump'} <=> $MeasuredFlow->{$b}->{'daily_consump'} } keys $MeasuredFlow) {
-                        if($MeasuredFlow->{$DHWrec}->{'shift'}>2) {next FIND_DHW_REC;}
-                        my $difference = abs ($ThisDHWann - ($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365));
+                    FIND_DHW_REC: foreach my $DHWrec (sort { $MeasuredFlow->{"$a"}->{'daily_consump'} <=> $MeasuredFlow->{"$b"}->{'daily_consump'} } keys $MeasuredFlow) {
+                        if($MeasuredFlow->{"$DHWrec"}->{'shift'}>2) {next FIND_DHW_REC;}
+                        my $difference = abs ($ThisDHWann - ($MeasuredFlow->{"$DHWrec"}->{'daily_consump'} * 365));
                         if($difference < $bcd_match->{'DHW_LpY'}->{'difference'}) {
                             # update the value
                             $bcd_match->{'DHW_LpY'}->{'difference'} = $difference;
@@ -3237,13 +3237,13 @@ MAIN: {
 
                             # Update the file name
                             if($DHWrec =~ m/^(WEL)/) { # Data from Dalhousie
-                                $bcd_match->{'DHW_LpY'}->{'filename'} = "/" . $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . "_Data_sorted.txt";
+                                $bcd_match->{'DHW_LpY'}->{'filename'} = "/" . $MeasuredFlow->{"$DHWrec"}->{'source'} . "/" ."$DHWrec" . "_Data_sorted.txt";
                             } elsif($DHWrec =~ m/^(H)/) { # Data from SBES
-                                $bcd_match->{'DHW_LpY'}->{'filename'} = "/" . $MeasuredFlow->{$DHWrec}->{'source'} . "/" ."$DHWrec" . ".txt";
+                                $bcd_match->{'DHW_LpY'}->{'filename'} = "/" . $MeasuredFlow->{"$DHWrec"}->{'source'} . "/" ."$DHWrec" . ".txt";
                             } else {die "Unable to determine DHW profile for $CSDDRD->{'file_name'}. Matched to record $DHWrec\n";}
                             
                             # Determine the DHW multiplier
-                            $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'multiplier'} = $ThisDHWann/($MeasuredFlow->{$DHWrec}->{'daily_consump'} * 365);
+                            $BCD_characteristics->{$CSDDRD->{'file_name'}}->{'DHW_LpY'}->{'multiplier'} = $ThisDHWann/($MeasuredFlow->{"$DHWrec"}->{'daily_consump'} * 365);
                         
                         } elsif($difference == $bcd_match->{'DHW_LpY'}->{'difference'}) {
                             next FIND_DHW_REC;

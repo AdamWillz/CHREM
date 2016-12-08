@@ -34,6 +34,7 @@ use threads; #threads-1.71 (to multithread the program)
 use Data::Dumper; # For debugging
 use Storable  qw(dclone); # To create copies of arrays so that grep can do find/replace without affecting the original data
 use Hash::Merge qw(merge); # To merge the results data
+use POSIX qw(ceil); # Rounding up
 
 # CHREM modules
 use lib ('./modules');
@@ -141,8 +142,8 @@ foreach my $file (<../summary_files/*>) { # Loop over the files
 #--------------------------------------------------------------------
 # Determine how many houses go to each core for core usage balancing
 #--------------------------------------------------------------------
-my $interval = int(@folders/$cores->{'num'}) + 1;	#round up to the nearest integer
-
+#my $interval = int(@folders/$cores->{'num'}) + 1;	#round up to the nearest integer
+my $interval = ceil((scalar @folders)/$cores->{'num'}); #round up to the nearest integer
 
 
 #--------------------------------------------------------------------
@@ -152,7 +153,7 @@ MULTITHREAD_RESULTS: {
 
 	my $thread; # Declare threads for each core
 	
-	foreach my $core (1..$cores->{'num'}) { # Cycle over the cores
+	for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
 		if ($core >= $cores->{'low'} && $core <= $cores->{'high'}) { # Only operate if this is a desireable core
 			my $low_element = ($core - 1) * $interval; # Hse to start this particular core at
 			my $high_element = $core * $interval - 1; # Hse to end this particular core at
@@ -164,7 +165,7 @@ MULTITHREAD_RESULTS: {
 
 	my $results_all = {}; # Declare a storage variable
 	
-	foreach my $core (1..$cores->{'num'}) { # Cycle over the cores
+	for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
 		if ($core >= $cores->{'low'} && $core <= $cores->{'high'}) { # Only operate if this is a desireable core
 			$results_all = merge($results_all, $thread->{$core}->join()); # Return the threads together for info collation using the merge function
 		};
