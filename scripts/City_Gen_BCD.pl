@@ -3227,7 +3227,7 @@ MAIN: {
 
                     # Identify the measured profile with a similar consumption
                     # Loop through all available DHW profiles from smallest to largest measured consumers
-                    FIND_DHW_REC: foreach my $DHWrec (sort { $MeasuredFlow->{"$a"}->{'daily_consump'} <=> $MeasuredFlow->{"$b"}->{'daily_consump'} } keys $MeasuredFlow) {
+                    FIND_DHW_REC: foreach my $DHWrec (sort { $MeasuredFlow->{"$a"}->{'daily_consump'} <=> $MeasuredFlow->{"$b"}->{'daily_consump'} } keys %$MeasuredFlow) {
                         if($MeasuredFlow->{"$DHWrec"}->{'shift'}>2) {next FIND_DHW_REC;}
                         my $difference = abs ($ThisDHWann - ($MeasuredFlow->{"$DHWrec"}->{'daily_consump'} * 365));
                         if($difference < $bcd_match->{'DHW_LpY'}->{'difference'}) {
