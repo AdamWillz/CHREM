@@ -28,7 +28,8 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ upgradeWallIns);
+#our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ upgradeWallIns);
+our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -526,41 +527,41 @@ sub upgradeGLZ {
 #           pdf: probability distribution function HASH (refen
 # OUTPUT    StartActive: number of active occupants 
 # ====================================================================
-sub upgradeWallIns {
-    # Inputs
-    # Name of dwelling, Wall upgrade HASH, Surface HASH ,path to the set, HASH holding upgrade data
-    my ($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords) = @_;
-    
-    # Determine the cladding for this house
-    $UPGrecords = getWallCladding($house_name,$thisHouse,$setPath,$UPGrecords);
-    my $sCladding = $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'};
-    
-    # Set the new cladding
-    $UPGrecords = setWallCladding($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords);
-
-    #switch ($sCladding) {
-    #    case "Vinyl" {
-    #        $UPGrecords = setWallCladding($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords);
-    #    }
-    #    case "Brick" "Concrete" "Stone" {
-    #    
-    #    }
-    #    case "SPF" { # Wood (lapped), assume 12 mm thick
-    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
-    #    }
-    #    else {
-    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
-    #    }
-    #}
-    
-    #print Dumper $thisHouse;
-    #print Dumper $house_name;
-    #print Dumper $setPath;
-    
-    sleep;
-    
-    
-};
+#sub upgradeWallIns {
+#    # Inputs
+#    # Name of dwelling, Wall upgrade HASH, Surface HASH ,path to the set, HASH holding upgrade data
+#    my ($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords) = @_;
+#    
+#    # Determine the cladding for this house
+#    $UPGrecords = getWallCladding($house_name,$thisHouse,$setPath,$UPGrecords);
+#    my $sCladding = $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'};
+#    
+#    # Set the new cladding
+#    $UPGrecords = setWallCladding($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords);
+#
+#    #switch ($sCladding) {
+#    #    case "Vinyl" {
+#    #        $UPGrecords = setWallCladding($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords);
+#    #    }
+#    #    case "Brick" "Concrete" "Stone" {
+#    #    
+#    #    }
+#    #    case "SPF" { # Wood (lapped), assume 12 mm thick
+#    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
+#    #    }
+#    #    else {
+#    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
+#    #    }
+#    #}
+#    
+#    #print Dumper $thisHouse;
+#    #print Dumper $house_name;
+#    #print Dumper $setPath;
+#    
+#    sleep;
+#    
+#    
+#};
 # ====================================================================
 # *********** PRIVATE METHODS ***************
 # ====================================================================
@@ -3023,61 +3024,61 @@ sub setNewWindows {
 #           recPath: path to this project being upgraded
 #           UPGrecords: HASH holding all the upgrade info 
 # ====================================================================
-sub getWallCladding {
-    # INPUTS
-    my ($house_name,$thisHouse,$setPath,$UPGrecords) = @_;
-    
-    # INTERMEDIATES
-    my $sMainZone = 'main_1'; # Every CHREM dwelling has a main zone
-    my $FileLine = 0;
-    my $sStringData;
-    my $fRSI;
-    my $sCladding;
-    
-    # Load the mvnt file
-    my $sPathToCon = $setPath . $house_name. "/$house_name.$sMainZone.con";
-    my $fid;
-    open $fid, $sPathToCon or die "getWallCladding: Could not open $sPathToCon\n";
-    my @CONlines = <$fid>; # Pull entire file into an array
-    close $fid;
-    
-    # FWD to surface properties
-    until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
-        $FileLine++;
-    };
-    
-    # Find the main wall construction
-    until ($CONlines[$FileLine] =~ m/(M_wall)/i) {
-        $FileLine++;
-    };
-    $sStringData = $CONlines[$FileLine];
-    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-
-    # Get the RSI value of the wall
-    ($fRSI) = $sStringData =~ m/U Value final (.*) \(/;
-    $fRSI=1/$fRSI; # Convert U-value to RSI (m2K/W)
-    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'} = sprintf("%.2f",$fRSI);
-    
-    # Get the cladding type
-    $FileLine++;
-    $sStringData = $CONlines[$FileLine];
-    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-    ($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
-    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'} = $sCladding;
-
-    # Set Output
-    return $UPGrecords;
-};
-# ====================================================================
-# setWallCladding
-#       This subroutine opens the dwelling HVAC file, determines the
-#       current system type, and store the data in the upgrade HASH
+#sub getWallCladding {
+#    # INPUTS
+#    my ($house_name,$thisHouse,$setPath,$UPGrecords) = @_;
+#    
+#    # INTERMEDIATES
+#    my $sMainZone = 'main_1'; # Every CHREM dwelling has a main zone
+#    my $FileLine = 0;
+#    my $sStringData;
+#    my $fRSI;
+#    my $sCladding;
+#    
+#    # Load the mvnt file
+#    my $sPathToCon = $setPath . $house_name. "/$house_name.$sMainZone.con";
+#    my $fid;
+#    open $fid, $sPathToCon or die "getWallCladding: Could not open $sPathToCon\n";
+#    my @CONlines = <$fid>; # Pull entire file into an array
+#    close $fid;
+#    
+#    # FWD to surface properties
+#    until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
+#        $FileLine++;
+#    };
+#    
+#    # Find the main wall construction
+#    until ($CONlines[$FileLine] =~ m/(M_wall)/i) {
+#        $FileLine++;
+#    };
+#    $sStringData = $CONlines[$FileLine];
+#    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
 #
-# INPUT     house_name: name of the dwelling of interest
-#           recPath: path to this project being upgraded
-#           UPGrecords: HASH holding all the upgrade info 
-# ====================================================================
-sub setWallCladding {
+#    # Get the RSI value of the wall
+#    ($fRSI) = $sStringData =~ m/U Value final (.*) \(/;
+#    $fRSI=1/$fRSI; # Convert U-value to RSI (m2K/W)
+#    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'} = sprintf("%.2f",$fRSI);
+#    
+#    # Get the cladding type
+#    $FileLine++;
+#    $sStringData = $CONlines[$FileLine];
+#    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+#    ($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
+#    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'} = $sCladding;
+#
+#    # Set Output
+#    return $UPGrecords;
+#};
+## ====================================================================
+## setWallCladding
+##       This subroutine opens the dwelling HVAC file, determines the
+##       current system type, and store the data in the upgrade HASH
+##
+## INPUT     house_name: name of the dwelling of interest
+##           recPath: path to this project being upgraded
+##           UPGrecords: HASH holding all the upgrade info 
+## ====================================================================
+#sub setWallCladding {
     # INPUTS
     my ($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords) = @_;
     
@@ -3163,14 +3164,12 @@ sub setWallCladding {
                 # External main wall upgrade is dependent on existing cladding
                 if($sCladding =~ m/(Vinyl)/) {
                 
-                } elsif($sCladding =~ m/(Brick|Concrete|Stone)/) {
+                } elsif($sCladding =~ m/(Brick|Concrete|Stone|SPF)/) {
                     # Insulation and new cladding is placed on top of the existing wall
                     push(@Top,$sNewCladding);
                     push(@Top,$sNewIns);
                     push(@Top,@CONlines[($FileLine+1)..$#CONlines]);
                     @CONlines = @Top;
-                } elsif($sCladding =~ m/(SPF)/) {
-                
                 } else {
                     print "setWallCladding: Unknown cladding type $sCladding in house $house_name\nInsulation and new cladding added on top of existing\n";
                 };
