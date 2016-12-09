@@ -69,7 +69,7 @@ our $light_sim;            # HASH holding lighting sim data
 our $ColdApp;              # HASH to hold the cold appliance data
 our $App;                  # HASH holding general appliance data
 our $Activity;             # HASH holding the activity statistics
-my $iThreads = 3;          # Number of threads
+my $iThreads = 5;          # Number of threads
 
 # --------------------------------------------------------------------
 # Declare the local variables
