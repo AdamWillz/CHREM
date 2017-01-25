@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData StretchProfile FindAnnualALandDHW);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData StretchProfile FindAnnualALandDHW GetStoveAppliances);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -1390,5 +1390,21 @@ sub FindAnnualALandDHW {	# subroutine to perform a simple element replace (house
 	return($StoveE,$DryerE,$OtherE,$DhwYrL);
 };
 
+# ====================================================================
+sub GetStoveAppliances {
+
+    # Outputs
+    my @CookStock=();
+    
+    # Divide the stove into separate components
+    push(@CookStock,'Large_Element_1');
+    #push(@CookStock,'Large_Element_2');
+    push(@CookStock,'Small_Element_1');
+    #push(@CookStock,'Small_Element_2');
+    
+    return(\@CookStock);
+};
+# ====================================================================
+  
 # Final return value of one to indicate that the perl module is successful
 1;

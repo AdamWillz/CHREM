@@ -418,8 +418,8 @@ sub main {
         # --------------------------------------------------------------------
         if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0) { # COOK: There is a stove, compute the profile
             my @CookStock = ();
-            push(@CookStock,'Range');
-            push(@CookStock,'Oven');
+            my $ref_CookStock = &GetStoveAppliances;
+            my @CookStock=@$ref_CookStock;
             
             foreach my $item (@CookStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data

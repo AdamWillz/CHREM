@@ -30,6 +30,14 @@
              <!-- Let the script determine ventilation fan power-->
          </vent_2>
      </AIM_2> 
+     <!-- Wall upgrade assumes that new insulation is added to the exterior (full height)-->
+     <WALL_INS ins_sys="1">
+         <sys_1>
+            <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), ins_t: Thickness (m)-->
+            <ins ins_k="0.043" ins_rho="16.0" ins_Cp="835.0" ins_t="0.0508" description="insulation_UPG - XPS"/>
+            <cladding cld_k="0.16" cld_rho="1380" cld_Cp="1000" cld_t="0.003" description="siding_UPG - Vinyl"/>  
+         </sys_1>
+     </WALL_INS>
      <!-- Foundation upgrade assumes that new insulation is added to the interior (full height)-->
      <BASE_INS ins_sys="0">
          <sys_1>
@@ -57,7 +65,7 @@
      <!-- PV RETROFIT -->
      <PV_ROOF  bIsAdd="0"/>
      <!-- DISTRICT HEATING -->
-     <DH_SYSTEM SysNumber="1">
+     <DH_SYSTEM SysNumber="0">
          <System_1 description="CHP microturbine"/>
          <System_2 description="DH GSHP"/>
      </DH_SYSTEM>

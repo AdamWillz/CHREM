@@ -3476,9 +3476,8 @@ MAIN: {
                     # --------------------------------------------------------------------
                     my $nEStoves = 0; # Number of electric stoves
                     if($CREST->{$house_name}->{'data'}->{'Stove'} > 0){ # COOK: There is a stove, generate profile
-                        my @CookStock = ();
-                        push(@CookStock,'Range');
-                        push(@CookStock,'Oven');
+                        my $ref_CookStock = &GetStoveAppliances;
+                        my @CookStock=@$ref_CookStock;
                         $nEStoves=1;
                     
                         foreach my $item (@CookStock) { # For each appliance in the dwelling
