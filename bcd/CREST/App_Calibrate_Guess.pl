@@ -417,7 +417,6 @@ sub main {
         # Generate the profiles of the stove and dryer
         # --------------------------------------------------------------------
         if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0) { # COOK: There is a stove, compute the profile
-            my @CookStock = ();
             my $ref_CookStock = &GetStoveAppliances;
             my @CookStock=@$ref_CookStock;
             
