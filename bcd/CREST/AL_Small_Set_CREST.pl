@@ -198,6 +198,7 @@ SET_CREST: {
             #$return->{$hse_name}->{"$issue"} = "Warning: Occupants exceeded 5";
             #$hse_occ=5;
             print $LogFH "Warning: Occupants $hse_occ exceeded 5 for $hse_name\n";
+            $hse_occ=5;
         };
         
         # --------------------------------------------------------------------

@@ -156,8 +156,8 @@ SET_CREST: {
         $hse_occ = $NNdata->{'Num_of_Children'}+$NNdata->{'Num_of_Adults'};
         if ($hse_occ>5) {   # WARN THE USER THE NUMBER OF OCCUPANTS EXCEEDS MODEL LIMITS
             # Set number of occupants to 5
-            $hse_occ=5;
             print $LogFH "Warning: Occupants $hse_occ exceeded 5 for $hse_name\n";
+            $hse_occ=5;
         };
         
         # --------------------------------------------------------------------
@@ -418,8 +418,8 @@ sub main {
         # --------------------------------------------------------------------
         if($CREST->{$hse_name}->{'data'}->{'Stove'} > 0) { # COOK: There is a stove, compute the profile
             my @CookStock = ();
-            push(@CookStock,'Range');
-            push(@CookStock,'Oven');
+            my $ref_CookStock = &GetStoveAppliances;
+            my @CookStock=@$ref_CookStock;
             
             foreach my $item (@CookStock) { # For each appliance in the dwelling
                 # Load the appropriate appliance data
