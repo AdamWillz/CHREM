@@ -19,8 +19,8 @@
         <_2-DR Calibration="1.000" Baseload="100" BaseStdDev="70"/>
     </_2-QC>
     <_3-OT> 
-        <_1-SD Calibration="2.05118980357457" Baseload="250" BaseStdDev="125"/>
-        <_2-DR Calibration="0.740765546866251" Baseload="200" BaseStdDev="70"/>
+        <_1-SD Calibration="2.51988375008694" Baseload="250" BaseStdDev="125"/>
+        <_2-DR Calibration="0.998005843733297" Baseload="200" BaseStdDev="70"/>
     </_3-OT>
     <_4-PR> 
         <_1-SD Calibration="1.3421" Baseload="150" BaseStdDev="125"/>
@@ -43,9 +43,9 @@
         <Microwave      Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1000" Standby="3"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="313"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <!-- Stove Inputs-->
         <Large_Element_1          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="2300" Standby="0"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="250"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
-        <!--Large_Element_2          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="2300" Standby="0"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="574"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/-->
+        <Large_Element_2          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="2300" Standby="0"   Mean_cycle_L="8"   Restart_Delay="0"  Base_cycles="125"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Small_Element_1          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1200" Standby="0"   Mean_cycle_L="13"   Restart_Delay="0"  Base_cycles="300"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
-        <!--Small_Element_2          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1200" Standby="0"   Mean_cycle_L="16"   Restart_Delay="0"  Base_cycles="143"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/-->
+        <Small_Element_2          Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1200" Standby="0"   Mean_cycle_L="6"   Restart_Delay="0"  Base_cycles="200"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <Oven           Use_Profile="Act_Cooking"    Mean_Pow_Cyc="3200" Standby="4"   Mean_cycle_L="27"   Restart_Delay="0"  Base_cycles="75"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
         <!-- End Stove Inputs-->
         <Dishwasher     Use_Profile="Act_Cooking"    Mean_Pow_Cyc="1300" Standby="0"   Mean_cycle_L="124"  Restart_Delay="0"  Base_cycles="181"  Avg_Act_Prob="0.144258252377998"  Act_Occ_Dep="YES"/>
@@ -79,7 +79,7 @@
         <Vacuum         Use_Profile="Act_HouseClean" Mean_Pow_Cyc="800"  Standby="0"   Mean_cycle_L="20"   Restart_Delay="0"  Base_cycles="110"  Avg_Act_Prob="0.0664624026975666" Act_Occ_Dep="YES"/>
         <Printer        Use_Profile="Active_Occ"     Mean_Pow_Cyc="68"   Standby="1"   Mean_cycle_L="4"    Restart_Delay="0"  Base_cycles="655"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <TV_Reciever_box Use_Profile="Act_TV"        Mean_Pow_Cyc="30"   Standby="26"  Mean_cycle_L="122"  Restart_Delay="0"  Base_cycles="1464" Avg_Act_Prob="0.339753562107113"  Act_Occ_Dep="YES"/>
-        <Kettle         Use_Profile="Active_Occ"     Mean_Pow_Cyc="1500" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="576"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
+        <Kettle         Use_Profile="Active_Occ"     Mean_Pow_Cyc="1200" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="300"  Avg_Act_Prob="1.0"                Act_Occ_Dep="YES"/>
         <!--END: CREST Appliances-->
         <!--START: OTHER Appliances-->
         <Hair_Dryer     Use_Profile="Act_WashDress"  Mean_Pow_Cyc="1000" Standby="0"   Mean_cycle_L="5"    Restart_Delay="0"  Base_cycles="365"  Avg_Act_Prob="0.125144071129095" Act_Occ_Dep="YES"/>

@@ -1398,9 +1398,9 @@ sub GetStoveAppliances {
     
     # Divide the stove into separate components
     push(@CookStock,'Large_Element_1');
-    #push(@CookStock,'Large_Element_2');
+    push(@CookStock,'Large_Element_2');
     push(@CookStock,'Small_Element_1');
-    #push(@CookStock,'Small_Element_2');
+    push(@CookStock,'Small_Element_2');
     
     return(\@CookStock);
 };
