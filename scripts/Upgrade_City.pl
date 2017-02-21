@@ -113,6 +113,8 @@ my $UPGrecords; # HASH to hold upgrade report data
 my $isPVupgrade = 0; # Boolean indicating if PV is to be added
 my $isDHupgrade = 0; # Boolean indicating if district heating is to be added
 my $bPrintDHW = 0; # Boolean indicating if DHW loads are to be reported
+my $hDwellChar;     # Hash table holding dwelling characteristics
+my $hAirtight;      # Hash table holding air efficacy for different regions, vintages, and upgrades
 my @houses_desired = (); # declare an array to store the house names or part of to look
 # Determine possible set names by scanning the summary_files folder
 my $possible_set_names = {map {$_, 1} grep(s/.+UPG_(.+)_Surfaces.xml/$1/, <../summary_files/*>)}; # Map to hash keys so there are no repeats
@@ -153,6 +155,53 @@ COMMAND_LINE: {
 # Load the upgrade inputs. If there is no upgrades, die
 # --------------------------------------------------------------------
 $Upgrades = XMLin("../Input_upgrade/Input_All_UPG.xml", keyattr => [], forcearray => 0);
+$hAirtight = XMLin("../Input_upgrade/Input_Airtightness_Efficacy.xml", keyattr => [], forcearray => 0);
+
+# --------------------------------------------------------------------
+# Load Dwelling Characteristics
+# --------------------------------------------------------------------
+LOAD_CHARAC: {
+    print "Loading the relevant CSDDRD data\n";
+    # Open the appropriate CSDDRD file
+    my $CSDDRDfile = '../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region.'.csv';
+    my $fid;
+    open $fid, $CSDDRDfile or die "Could not open $CSDDRDfile\n";
+    my @sAllLines = <$fid>;
+    close $fid;
+    
+    # Locate and split the header
+    my $i=0;
+    until (($sAllLines[$i] =~ m/^(\*header)/) || ($i==$#sAllLines)) {$i++;}
+    if($i==$#sAllLines){die "Unable to locate CSDDRD header data\n";}
+    my @sHeaders = split /,/, $sAllLines[$i];
+    
+    # Find the vintage header
+    my $iVint;
+    for(my $j=0;$j<=$#sHeaders;$j++) {
+        if($sHeaders[$j] =~ m/(vintage)/) {
+            $iVint=$j;
+            last;
+        };
+    };
+    if(not defined $iVint){die "Unable to index vintage header in CSDDRD\n";}
+    
+    # Load vintage data for all dwellings
+    $i++;
+    while ($i<=$#sAllLines){
+        my @sLineData = split /,/, $sAllLines[$i];
+        my $sHseName = $sLineData[2];
+        $sHseName =~ s{\.[^.]+$}{}; # Remove HDF extension
+        $hDwellChar->{"$sHseName"}->{'vintage'}=$sLineData[$iVint];
+        # Determine the dwelling decade
+        my $iDecade = $sLineData[$iVint];
+        chop $iDecade;
+        $iDecade = $iDecade."0";
+        $hDwellChar->{"$sHseName"}->{'decade'}=$iDecade;
+        $i++;
+    };
+    
+    print "Done\n";
+};
 
 # --------------------------------------------------------------------
 # Copy over the base model for upgrades
@@ -219,23 +268,29 @@ LOAD_SURF: {
 # --------------------------------------------------------------------
 # Apply upgrade(s) to all eligible dwellings
 # --------------------------------------------------------------------
-# Open the appropriate CSDDRD file
-my $CSDDRDfile = '../CSDDRD/2007-10-31_EGHD-HOT2XP_dupl-chk_A-files_region_qual_pref_' . $hse_type . '_subset_' . $region.'.csv';
-EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
-    APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each record
+APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each record
+    # For this dwelling, add all upgrades
+    my $fThisDecreaseAch=0.0; # Track the increase of airtightness for this dwelling (% reduction of N50 and ELA)
+    
+    EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
         switch ($upg) {
-        
-            case "AIM_2" {
-                my $ins_sys = $Upgrades->{'AIM_2'}->{'vent_sys'};
-                my $ins_key = "vent_$ins_sys";
-                if($ins_sys == 0) {
-                    next EACH_UPG;
-                } elsif(not defined($Upgrades->{'AIM_2'}->{"$ins_key"})) {
-                    print "Warning: Ceiling insulation system $ins_sys undefined, skipping\n";
-                    next EACH_UPG;
-                } else {
-                    $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'}->{"$ins_key"},$setPath,$UPGrecords);
-                };
+            #case "AIM_2" {
+            #    my $ins_sys = $Upgrades->{'AIM_2'}->{'vent_sys'};
+            #    my $ins_key = "vent_$ins_sys";
+            #    if($ins_sys == 0) {
+            #        next EACH_UPG;
+            #    } elsif(not defined($Upgrades->{'AIM_2'}->{"$ins_key"})) {
+            #        print "Warning: Ceiling insulation system $ins_sys undefined, skipping\n";
+            #        next EACH_UPG;
+            #    } else {
+            #        $UPGrecords = &upgradeAirtight($house_name,$Upgrades->{'AIM_2'}->{"$ins_key"},$setPath,$UPGrecords);
+            #    };
+            #}
+            case "INC_AIRTIGHT" {
+                next EACH_UPG;
+            }
+            case "VNT" {
+                next EACH_UPG;
             }
             case "CEIL_INS" {
                 my $ins_sys = $Upgrades->{'CEIL_INS'}->{'ins_sys'};
@@ -248,6 +303,13 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
                 } else {
                     $UPGrecords->{'CEIL_INS'}->{"$ins_key"}->{'max_RSI'}=$Upgrades->{'CEIL_INS'}->{'max_RSI'};
                     $UPGrecords = &upgradeCeilIns($house_name,$Upgrades->{'CEIL_INS'}->{"$ins_key"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    # Add the effect on airtightness
+                    if($Upgrades->{'INC_AIRTIGHT'}) {
+                        if (not defined $hAirtight->{$upg}) {die "There is not airtightness efficacy associated with $upg\n";}
+                        my $sThisDecade = $hDwellChar->{"$house_name"}->{'decade'};
+                        $fThisDecreaseAch+=$hAirtight->{$upg}->{"_$region"}->{"_$sThisDecade"};
+                    };
+                    
                 };
             }
             case "BASE_INS" {
@@ -262,22 +324,30 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
                     $UPGrecords->{'BASE_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
                     $UPGrecords->{'BASE_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
                     $UPGrecords = &upgradeBsmtIns($house_name,$Upgrades->{'BASE_INS'}->{"$ins_key"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    # Add the effect on airtightness
+                    if($Upgrades->{'INC_AIRTIGHT'}) {
+                        if (not defined $hAirtight->{$upg}) {die "There is not airtightness efficacy associated with $upg\n";}
+                        my $sThisDecade = $hDwellChar->{"$house_name"}->{'decade'};
+                        $fThisDecreaseAch+=$hAirtight->{$upg}->{"_$region"}->{"_$sThisDecade"};
+                    };
                 };
             }
             case "WALL_INS" {
-                next EACH_UPG;
-                #my $ins_sys = $Upgrades->{'WALL_INS'}->{'ins_sys'};
-                #my $ins_key = "sys_$ins_sys";
-                #if($ins_sys == 0) {
-                #    next EACH_UPG;
-                #} elsif(not defined($Upgrades->{'WALL_INS'}->{"$ins_key"})) {
-                #    print "Warning: Wall insulation system $ins_sys undefined, skipping\n";
-                #    next EACH_UPG;
-                #} else {
-                #    #$UPGrecords->{'WALL_INS'}->{'bsmt_max_RSI'}=$Upgrades->{'BASE_INS'}->{'bsmt'}->{'max_RSI'};
-                #    #$UPGrecords->{'WALL_INS'}->{'crawl_max_RSI'}=$Upgrades->{'BASE_INS'}->{'crawl'}->{'max_RSI'};
-                #    $UPGrecords = &upgradeWallIns($house_name,$Upgrades->{'WALL_INS'}->{"$ins_key"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
-                #};
+                my $ins_sys = $Upgrades->{'WALL_INS'}->{'RSI_goal'};
+                my $ins_key = "goal_$ins_sys";
+                if($ins_sys == 0) {
+                    next EACH_UPG;
+                } elsif(not defined($Upgrades->{'WALL_INS'}->{"$ins_key"})) {
+                    print "Warning: Wall insulation system $ins_sys undefined, skipping\n";
+                    next EACH_UPG;
+                } else {
+                    $UPGrecords = &upgradeWallIns($house_name,$Upgrades->{'WALL_INS'},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    if($Upgrades->{'INC_AIRTIGHT'}) {
+                        if (not defined $hAirtight->{$upg}) {die "There is not airtightness efficacy associated with $upg\n";}
+                        my $sThisDecade = $hDwellChar->{"$house_name"}->{'decade'};
+                        $fThisDecreaseAch+=$hAirtight->{$upg}->{"_$region"}->{"_$sThisDecade"};
+                    };
+                };
             }
             case "GLZ" {
                 my $GlazeSystem = $Upgrades->{'GLZ'}->{'GlzSystem'};
@@ -289,6 +359,12 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
                 } else {
                     $GlazeSystem = 'GLZ_' . "$GlazeSystem";
                     $UPGrecords = &upgradeGLZ($house_name,$Upgrades->{'GLZ'}->{"$GlazeSystem"},$Surface->{"_$house_name"},$setPath,$UPGrecords);
+                    # Add the effect on airtightness
+                    if($Upgrades->{'INC_AIRTIGHT'}) {
+                        if (not defined $hAirtight->{$upg}) {die "There is not airtightness efficacy associated with $upg\n";}
+                        my $sThisDecade = $hDwellChar->{"$house_name"}->{'decade'};
+                        $fThisDecreaseAch+=$hAirtight->{$upg}->{"_$region"}->{"_$sThisDecade"};
+                    };
                 };
             }
             case "PV_ROOF" {
@@ -314,8 +390,64 @@ EACH_UPG: foreach my $upg (keys (%{$Upgrades})){
             else {print "$upg is not a recognized upgrade. Skipping\n";}
         
         };
-    }; # END APPL_UPG
-}; # END EACH_UPG
+    }; # END EACH_UPG
+
+    # Reduce infiltration due to upgrades
+    UPDATE_INF: {
+        my $iVentType; # The ventilation system to be upgraded to
+        my $sVentType; # The ventilation system to be upgraded to (string)
+        my $fVentFlowRequired; # Required ventilation flow rate according to ASHRAE Standard 62.2
+        my $iVentTypeORG; # The original dwelling ventilation system type
+        my $fCurrentVent; # The original dwelling ventilation flow rate [L/s]
+        
+        # Update the AIM-2 file if required
+        if($fThisDecreaseAch != 0){
+            $UPGrecords = &setNewInfil($house_name,$fThisDecreaseAch,$setPath,$UPGrecords);
+        };
+        
+        # Check the ventilation requirements [L/s]
+        $fVentFlowRequired = &getDwellingVentilationRate($house_name,"$setPath$house_name/");
+        $UPGrecords->{'VNT'}->{"$house_name"}->{'Reqd_Vent_Ls'} = $fVentFlowRequired;
+    
+        # Determine if there is an existing ventilation system
+        $iVentTypeORG = &getVentType($house_name,"$setPath$house_name/");
+        $UPGrecords->{'VNT'}->{"$house_name"}->{'orig_CVS'} = $iVentTypeORG;
+        
+        # If there is a ventilation system, retrieve the flow rate
+        if($iVentTypeORG>1) {
+            $fCurrentVent = &getVentFlowRate($house_name,"$setPath$house_name/",$iVentTypeORG);
+        } else {
+            $fCurrentVent = 0.0;
+        };
+        $UPGrecords->{'VNT'}->{"$house_name"}->{'orig_Vent_Ls'} = $fCurrentVent;
+        
+        # Add/upgrade ventilation system if required/requested
+        if($Upgrades->{'VNT'}->{'vent_sys'} >= 0) {
+
+            # Determine the user-prescribed ventilation system type to upgrade to
+            my $iUPGvent = $Upgrades->{'VNT'}->{'vent_sys'};
+            if($iUPGvent==1) { # Upgrade to HRV
+                $iVentType = 2;
+                $sVentType = 'HRV';
+            } elsif($iUPGvent==2) { # Upgrade to ERV
+                #$iVentType = 4;
+                #$sVentType = 'ERV';
+                $iVentType = 2;
+                $sVentType = 'HRV';
+                print "Warning: ERV is not a valid update type yet. Setting to HRV\n";
+            } else { # Fans with no heat recovery
+                $iVentType = 3;
+                $sVentType = 'FAN';
+            };
+
+            # Determine if an upgrade needs to occur
+            if(($fCurrentVent<$fVentFlowRequired) || ($iVentTypeORG!=$iVentType)) {
+                $UPGrecords = &setVNTfile($house_name,"$setPath$house_name/",$iVentType,$sVentType,$fVentFlowRequired,$Upgrades->{'VNT'},$UPGrecords);
+            };
+        };
+    }; # END UPDATE_INF
+    
+}; # END APPL_UPG
 
 # --------------------------------------------------------------------
 # Apply PV upgrade to all eligible dwellings (if requested)

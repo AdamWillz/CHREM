@@ -28,8 +28,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-#our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ upgradeWallIns);
-our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns upgradeAirtight upgradeDHsystem upgradeGLZ);
+our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns setVentilation upgradeDHsystem upgradeGLZ setNewInfil getDwellingVentilationRate getVentType setVNTfile upgradeWallIns);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -288,123 +287,6 @@ sub upgradeBsmtIns {
 
 }; # END upgradeCeilIns
 # ====================================================================
-# upgradeAirtight
-#       This subroutine randomly assigns an occupancy start state for the 
-#       dwelling.
-#
-# INPUT     numOcc: number of occupants in the house
-#           pdf: probability distribution function HASH (refen
-# OUTPUT    StartActive: number of active occupants 
-# ====================================================================
-sub upgradeAirtight {
-    # INPUTS
-    my ($house_name,$UpgradesAIM2,$setPath,$UPGrecords) = @_;
-    
-    # INTERMEDIATES
-    my $OldACH;
-    my $NewACH; # The new ACH to achieve at 50 delta_P
-    my $DataLines=0;
-    my $FileLine=0;
-    my $ThisLine;
-    my $recPath = $setPath . "$house_name/";
-    my $iVentType; # The ventilation system to be upgraded to
-    my $sVentType; # The ventilation system to be upgraded to (string)
-    my $iVentTypeORG; # The original dwelling ventilation system type
-    my $fCurrentVent; # The original dwelling ventilation flow rate
-    my $fVentFlowRequired; # The flow rate required based on ASHRAE Standard 62.2-2016
-    
-    # Determine the new ACH to achieve
-    if($UpgradesAIM2->{'INFIL'}->{'type'} =~ m/default/) {
-        $NewACH = getDefaultACH($UpgradesAIM2->{'INFIL'}->{'level'});
-    } elsif($UpgradesAIM2->{'INFIL'}->{'type'} =~ m/custom/) {
-        $NewACH = $UpgradesAIM2->{'INFIL'}->{'ACH_50'};
-    } else {
-        die "Invalid AIM-2 upgrade type $UpgradesAIM2->{'type'}. Options are default and custom\n";
-    };
-
-    # Load the aim2 file
-    my $AimFile = $recPath . "$house_name.aim";
-    my $fid;
-    open $fid, $AimFile or die "Could not open $AimFile\n";
-    my @lines = <$fid>; # Pull entire file into an array
-    close $fid;
-    
-    # Determine the blower door data
-    while($FileLine<=$#lines) {
-        if($lines[$FileLine] !~ m/^(#)/) {$DataLines++;}
-        if($DataLines==2) {last;}
-        $FileLine++;
-    };
-    if($FileLine>=$#lines){die "Could not load AIM-2 data\n";}
-    $ThisLine = $lines[$FileLine];
-    $ThisLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-    my @LineDat = split /[,\s]+/, $ThisLine;
-    $OldACH = $LineDat[2];
-    if((not defined($LineDat[2])) || $OldACH<=0) {die "There was an error reading the AIM-2 blower door data\n";}
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_ACH50'} = $OldACH;
-    
-    # Determine if the airtightness needs to be increased
-    if($OldACH<=$NewACH) { # Acceptable tightness level already
-        $NewACH = $OldACH;
-    } elsif($UpgradesAIM2->{'INFIL'}->{'type'} =~ m/default/) {
-        $lines[$FileLine] = "$UpgradesAIM2->{'INFIL'}->{'level'}\n";
-    } else {
-        $lines[$FileLine] = "1 3 $UpgradesAIM2->{'INFIL'}->{'ACH_50'} $UpgradesAIM2->{'INFIL'}->{'ELA_Pa'} $UpgradesAIM2->{'INFIL'}->{'ELA'} $UpgradesAIM2->{'INFIL'}->{'Cd'}\n";
-    };
-    
-    # Record the new ACH @ 50 delta_P
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_ACH50'} = $NewACH;
-    
-    # Print the updated AIM-2 file
-    if($OldACH != $NewACH) { # There have been changes to the AIM-2 file
-        open my $out, '>', $AimFile or die "Can't write $AimFile: $!";
-        foreach my $ThatData (@lines) {
-            print $out $ThatData;
-        };
-        close $out;
-    };
-    
-    #================================================================
-    # VENTILATION
-    #================================================================
-    # What is the required ventilation rate for the dwelling airtightness
-    $fVentFlowRequired = getDwellingVentilationRate($house_name,$recPath);
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'Reqd_Vent_Ls'} = $fVentFlowRequired;
-    
-    # Determine if there is an existing ventilation system
-    $iVentTypeORG = getVentType($house_name,$recPath);
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_CVS'} = $iVentTypeORG;
-
-    # If there is a ventilation system, retrieve the flow rate
-    if($iVentTypeORG>1) {
-        $fCurrentVent = getVentFlowRate($house_name,$recPath,$iVentTypeORG);
-    } else {
-        $fCurrentVent = 0.0;
-    };
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_Vent_Ls'} = $fCurrentVent;
-
-    # Determine the user-prescribed ventilation system type to upgrade to
-    if(defined($UpgradesAIM2->{'HRV'}) && defined($UpgradesAIM2->{'ERV'})) {die "Error: Both an ERV and HRV have been defined in the upgrade input file.\n";}
-    if(defined($UpgradesAIM2->{'HRV'})) {
-        $iVentType = 2;
-        $sVentType = 'HRV';
-    } elsif (defined($UpgradesAIM2->{'ERV'})) {
-        $iVentType = 4;
-        $sVentType = 'ERV';
-        die "Currently ERV upgrades are unsupported. ESP-r's moisture balance subroutines are a horrible mess\nThis tool does have the structure in place to add ERVs to the model however\n";
-    } else { # Fans with no heat recovery
-        $iVentType = 3;
-        $sVentType = 'FAN';
-    };
-
-    # Determine if an upgrade needs to occur
-    if(($fCurrentVent<$fVentFlowRequired) || ($iVentTypeORG!=$iVentType)) {
-        $UPGrecords = setVNTfile($house_name,$recPath,$iVentType,$sVentType,$fVentFlowRequired,$UpgradesAIM2,$UPGrecords);
-    };
-
-    return $UPGrecords;
-};
-# ====================================================================
 # upgradeDHsystem
 #       This subroutine randomly assigns an occupancy start state for the 
 #       dwelling.
@@ -527,41 +409,325 @@ sub upgradeGLZ {
 #           pdf: probability distribution function HASH (refen
 # OUTPUT    StartActive: number of active occupants 
 # ====================================================================
-#sub upgradeWallIns {
-#    # Inputs
-#    # Name of dwelling, Wall upgrade HASH, Surface HASH ,path to the set, HASH holding upgrade data
-#    my ($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords) = @_;
-#    
-#    # Determine the cladding for this house
-#    $UPGrecords = getWallCladding($house_name,$thisHouse,$setPath,$UPGrecords);
-#    my $sCladding = $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'};
-#    
-#    # Set the new cladding
-#    $UPGrecords = setWallCladding($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords);
+sub upgradeWallIns {
+    # Inputs
+    # Name of dwelling, Wall upgrade HASH, Surface HASH ,path to the set, HASH holding upgrade data
+    my ($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $fCurrentRSI; # Current main wall insulation RSI
+    my $sCurrentClad; # Current cladding on the main wall
+    my $iSys = $UpgradesWall->{'RSI_goal'}; # Integer indicating which RSI value to achieve in the inputs
+    my $sRSI_key = "goal_$iSys"; # Key pointing to value of RSI
+    my $fGoalRSI = $UpgradesWall->{$sRSI_key};
+    my $fIncreaseRSI;
+    my $fInsThick=0; # Total thickness of insulation added
+    
+    my $iIns = $UpgradesWall->{'ins'}; # Integer indicating which insulation to use in the inputs
+    my $sInsKey = "ins_$iIns";
+    
+    my $iClad = $UpgradesWall->{'clad'}; # Integer indicating which cladding system to use in the inputs
+    my $sCladKey = "clad_$iClad";
+    
+    # Determine the cladding and insulation RSI for this house
+    $UPGrecords = getWallCladdingIns($house_name,$setPath,$UPGrecords);
+    $fCurrentRSI = $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'};
+    $sCurrentClad = $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'};
+    
+    # Determine the increase in RSI required to meet input
+    $fIncreaseRSI = $fGoalRSI-$fCurrentRSI;
+
+    if($fIncreaseRSI>0) { # The insulation needs to be increased
+        # Get the conductivity of new insulation material
+        my $fkIns = $UpgradesWall->{$sInsKey};
+        
+        # Load the thicknesses of the material
+        my @fBoards=();
+        
+        my $iThick = $UpgradesWall->{$sInsKey}->{'n_t'};
+        for(my $i=1;$i<=$iThick;$i++) {
+            push(@fBoards,$UpgradesWall->{$sInsKey}->{"t_$i"});
+        };
+        $iThick--; # Reduce for indexing in PERL
+        
+        # Determine how many boards are required to meet the goal
+        for(my $i=$iThick;$i>=0;$i--) {
+            my $ThisRSI=$fBoards[$i]/$UpgradesWall->{$sInsKey}->{'ins_k'};
+            my $iThisBoards=0;
+            until($fIncreaseRSI<=0) {
+                $fIncreaseRSI-=$ThisRSI;
+                $iThisBoards++;
+            };
+            $fIncreaseRSI+=$ThisRSI;
+            $iThisBoards--;
+            my $j = $i+1;
+            $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'Layers'}->{"t_$j"}=$iThisBoards;
+            $fInsThick = $fInsThick+($iThisBoards*$fBoards[$i]);
+        };
+        
+        $UPGrecords = setWallCladding($house_name,$fInsThick,$UpgradesWall,$sCurrentClad,$thisHouse,$setPath,$sCladKey,$sInsKey,$UPGrecords);
+
+    };
+    
+    return $UPGrecords;
+
+};
+# ====================================================================
+# setNewInfil
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
 #
-#    #switch ($sCladding) {
-#    #    case "Vinyl" {
-#    #        $UPGrecords = setWallCladding($house_name,$UpgradesWall,$thisHouse,$setPath,$UPGrecords);
-#    #    }
-#    #    case "Brick" "Concrete" "Stone" {
-#    #    
-#    #    }
-#    #    case "SPF" { # Wood (lapped), assume 12 mm thick
-#    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
-#    #    }
-#    #    else {
-#    #        print "upgradeWallIns: $sCladding is not a supported dwelling cladding. Skipping upgrade\n";
-#    #    }
-#    #}
-#    
-#    #print Dumper $thisHouse;
-#    #print Dumper $house_name;
-#    #print Dumper $setPath;
-#    
-#    sleep;
-#    
-#    
-#};
+# INPUT     numOcc: number of occupants in the house
+#           pdf: probability distribution function HASH (refen
+# OUTPUT    StartActive: number of active occupants 
+# ====================================================================
+sub setNewInfil {
+    # INPUTS
+    # Name of dwelling, % decrease of ACH50, path to the set, HASH holding upgrade data
+    my ($house_name,$fThisDecreaseAch,$setPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $OldACH;
+    my $NewACH; # The new ACH to achieve at 50 delta_P
+    my $OldELA;
+    my $NewELA;
+    my $OldData1;
+    my $OldData2;
+    my $OldDeltaPela;
+    my $OldCd;
+    my $DataLines=0;
+    my $FileLine=0;
+    my $ThisLine;
+    my $recPath = $setPath . "$house_name/";
+    
+    # Load the aim2 file
+    my $AimFile = $recPath . "$house_name.aim";
+    my $fid;
+    open $fid, $AimFile or die "Could not open $AimFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Determine the blower door data
+    while($FileLine<=$#lines) {
+        if($lines[$FileLine] !~ m/^(#)/) {$DataLines++;}
+        if($DataLines==2) {last;}
+        $FileLine++;
+    };
+    if($FileLine>=$#lines){die "Could not load AIM-2 data\n";}
+    $ThisLine = $lines[$FileLine];
+    $ThisLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+    my @LineDat = split /[,\s]+/, $ThisLine;
+    $OldACH = $LineDat[2];
+    if((not defined($LineDat[2])) || $OldACH<=0) {die "There was an error reading the AIM-2 blower door data\n";}
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_ACH50'} = $OldACH;
+    $OldELA = $LineDat[4];
+    if((not defined($LineDat[4])) || $OldELA<=0) {die "There was an error reading the AIM-2 blower door data\n";}
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'orig_ELA'} = $OldELA;
+    
+    # Determine the new ACH50 and ELA
+    $NewACH = $OldACH*(1.0-$fThisDecreaseAch);
+    $NewELA = $OldELA*(1.0-$fThisDecreaseAch);
+    if($NewACH<0) {
+        print "setNewInfil: Warning, $house_name has new ACH50 below 0. Setting to 10% old ACH50\n";
+        $NewACH=0.1*$OldACH;
+    };
+    if($NewELA<0) {
+        print "setNewInfil: Warning, $house_name has new ELA below 0. Setting to 10% old ELA\n";
+        $NewELA=0.1*$OldELA;
+    };
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_ACH50'} = $NewACH;
+    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_ELA'} = $NewELA;
+    
+    # Get the DeltaPela and Cd
+    $OldData1 = $LineDat[0];
+    $OldData2 = $LineDat[1];
+    $OldDeltaPela = $LineDat[3];
+    $OldCd = $LineDat[5];
+    
+    # Define the line of new data
+    my $sNewData = sprintf("%d %d %.2f %d %.2f %.3f\n", $OldData1,$OldData2,$NewACH,$OldDeltaPela,$NewELA,$OldCd);
+    $lines[$FileLine] = $sNewData;
+    
+    # Print the updated AIM-2 file
+    open my $out, '>', $AimFile or die "Can't write $AimFile: $!";
+    foreach my $ThatData (@lines) {
+        print $out $ThatData;
+    };
+    close $out;
+
+    return $UPGrecords;
+};
+# ====================================================================
+# getDwellingVentilationRate
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
+#
+# INPUT     house_name: Dwelling record code
+#           recPath: path to the record folder
+# OUTPUT    iVentType: CVS_SYSTEM: Central Ventilation System (CVS) type (1=None, 2=HRV, 3=Fans with no heat recovery, 4=ERV)
+# ====================================================================
+sub getDwellingVentilationRate {
+    # INPUT
+    my ($house_name,$recPath) = @_;
+    
+    # OUTPUT
+    my $fVentFlow;
+    
+    # INTERMEDIATES
+    my $climate;
+    my $swf;
+    my $iAdults;
+    my $iKids;
+    my $fFloor;
+    my $ELA;
+    my $Height;
+    my $fAnnInfil;
+    my $fNominalVent;
+    
+    # Determine the weather and shielding factor
+    $climate = getDwellingClimate($house_name,$recPath);
+    $swf = getWeatherShieldingFactor($climate);
+    
+    # Determine the conditioned floor area and occupancy
+    ($iAdults,$iKids,$fFloor) = getOccupantsFloorArea($house_name);
+    
+    # Determine the height and ELA of the dwelling
+    ($Height,$ELA) = getDwellingHeightELA($house_name,$recPath);
+    
+    # Estimate the nominal ventilation rate required
+    $fNominalVent = getNominalVentilation($iAdults,$iKids,$fFloor);
+    
+    # Determine the annual average infiltration
+    $fAnnInfil = getAnnualAverageInfil($Height,$ELA,$swf,$fFloor);
+    if($fAnnInfil>(($fNominalVent*2.0)/3.0)){$fAnnInfil=(($fNominalVent*2.0)/3.0);} # According to the standard
+    
+    # The total mechanical ventilation required
+    $fVentFlow = $fNominalVent - $fAnnInfil; # Assume Aext = 1 (single-family detached home)
+    $fVentFlow = sprintf("%.2f",$fVentFlow);
+    
+    return $fVentFlow;
+};
+# ====================================================================
+# getVentType
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
+#
+# INPUT     house_name: Dwelling record code
+#           recPath: path to the record folder
+# OUTPUT    iVentType: CVS_SYSTEM: Central Ventilation System (CVS) type (1=None, 2=HRV, 3=Fans with no heat recovery, 4=ERV)
+# ====================================================================
+sub getVentType {
+    # INPUTS
+    my ($house_name,$recPath) = @_;
+    
+    # OUTPUT
+    my $iVentType;
+    
+    # INTERMEDIATES
+    my $FileLine=0; # Index the file line
+    
+    # Load the mvnt file
+    my $MvntFile = $recPath . "$house_name.mvnt";
+    my $fid;
+    open $fid, $MvntFile or die "Could not open $MvntFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # Load the ventilation data from the file (first item)
+    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
+    $iVentType = $lines[$FileLine];
+    $iVentType =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+
+    return $iVentType;
+};
+# ====================================================================
+# setVNTfile
+#       This subroutine randomly assigns an occupancy start state for the 
+#       dwelling.
+#
+# INPUT     numOcc: number of occupants in the house
+# OUTPUT    StartActive: number of active occupants 
+# ====================================================================
+sub setVNTfile {
+    # INPUTS
+    my ($house_name,$recPath,$iVentTypeUPG,$sVentType,$fVentFlowRequired,$UpgradesAIM2,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine=0;
+    my $RVData; # HASH hold the HRV or ERV data
+    my $FanPow;
+
+    # Load the mvnt template file
+    my $TmpFile = "../templates/template.mvnt";
+    my $fid;
+    open $fid, $TmpFile or die "Could not open $TmpFile\n";
+    my @lines = <$fid>; # Pull entire file into an array
+    close $fid;
+
+    if ($iVentTypeUPG == 2 || $iVentTypeUPG == 4) {	# Upgrade to HRV or ERV
+        # Determine which device to use for this house
+        my $sDeviceIndex;
+        # Load the device data
+        $RVData = $UpgradesAIM2->{"$sVentType"};
+        # Load the available supply flow rates
+        my @FlowRates = @{$RVData->{'flowrate'}};
+        @FlowRates = sort { $a <=> $b } @FlowRates; # Sort the flowrates from high to low
+        # Find a device that meets the ventilation requirements
+        my $i=0;
+        until(($FlowRates[$i]>=$fVentFlowRequired) || ($i==$#FlowRates)){$i++;}
+        $sDeviceIndex = 'Supply_' . "$FlowRates[$i]";
+        $fVentFlowRequired = $FlowRates[$i];
+
+        # Set the CVS system type 
+        &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as HRV
+        
+        # Load the device data
+        my $hsp_T = $RVData->{"$sDeviceIndex"}->{'hsp_T'};
+        my $hsp_SRE = $RVData->{"$sDeviceIndex"}->{'hsp_SRE'};
+        my $hsp_P = $RVData->{"$sDeviceIndex"}->{'hsp_P'};
+        my $vltt_T = $RVData->{"$sDeviceIndex"}->{'vltt_T'};
+        my $vltt_SRE = $RVData->{"$sDeviceIndex"}->{'vltt_SRE'};
+        my $vltt_P = $RVData->{"$sDeviceIndex"}->{'vltt_P'};
+        my $tre = $RVData->{"$sDeviceIndex"}->{'tre'};
+        my $Preheat_P = $RVData->{"$sDeviceIndex"}->{'Preheat_P'};
+        my $hsp_LRMT;
+        my $vltt_LRMT;
+        if($iVentTypeUPG == 4){ # additional ERV data
+            $hsp_LRMT = $RVData->{"$sDeviceIndex"}->{'hsp_LRMT'};
+            $vltt_LRMT = $RVData->{"$sDeviceIndex"}->{'vltt_LRMT'};
+            &insert (\@lines, "#HRV_DATA", 1, 1, 0, "%s\n%s\n", "$hsp_T $hsp_SRE $hsp_LRMT $hsp_P", "$vltt_T $vltt_SRE $vltt_LRMT $vltt_P");	# list efficiency and fan power (W) at cool (0C) and cold (-25C) temperatures. NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        } else {
+            &insert (\@lines, "#HRV_DATA", 1, 1, 0, "%s\n%s\n", "$hsp_T $hsp_SRE $hsp_P", "$vltt_T $vltt_SRE $vltt_P");	# list efficiency and fan power (W) at cool (0C) and cold (-25C) temperatures. NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        };
+        &insert (\@lines, "#HRV_FLOW_RATE", 1, 1, 0, "%s\n", $fVentFlowRequired);	# supply flow rate
+        &insert (\@lines, "#HRV_COOL_DATA", 1, 1, 0, "%s\n", "$tre");	# cool efficiency
+        &insert (\@lines, "#HRV_PRE_HEAT", 1, 1, 0, "%s\n", "$Preheat_P");	# preheat watts
+        &insert (\@lines, "#HRV_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# this is presently not used (7) but can make for controlled HRV by temp
+        &insert (\@lines, "#HRV_DUCT", 1, 1, 0, "%s\n%s\n", "1 1 2 2 152 0.1", "1 1 2 2 152 0.1");	# use the typical duct values
+    }
+    elsif ($iVentTypeUPG == 3) {	# fan only ventilation
+        $fVentFlowRequired = nearest_ceil(5, $fVentFlowRequired); # Round flowrate up to nearest multiple of 5
+        my $FanPow = (0.8041*$fVentFlowRequired)-9.8323; # The fan power required. Correlation derived from HVI [W]
+        &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as fan ventilation
+        &insert (\@lines, "#VENT_FLOW_RATE", 1, 1, 0, "%s\n", "$fVentFlowRequired $fVentFlowRequired $FanPow");	# supply and exhaust flow rate (L/s) and fan power (W) NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
+        &insert (\@lines, "#VENT_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# no temp control
+    };	# no need for an else
+    
+    # Print the new mvnt file
+    my $MvntFile = $recPath . "$house_name.mvnt";
+    unlink $MvntFile; # Clear the old file
+    open my $out, '>', $MvntFile or die "Can't write $MvntFile: $!";
+    foreach my $ThatData (@lines) {
+        print $out $ThatData;
+    };
+    close $out;
+    
+    $UPGrecords->{'VNT'}->{"$house_name"}->{'new_CVS'} = $iVentTypeUPG;
+    $UPGrecords->{'VNT'}->{"$house_name"}->{'new_Vent_Ls'} = $fVentFlowRequired;
+    if($iVentTypeUPG == 3) { $UPGrecords->{'VNT'}->{"$house_name"}->{'new_Vent_Power'} = $FanPow;}
+
+    return $UPGrecords;
+};
 
 # ====================================================================
 # *********** PRIVATE METHODS ***************
@@ -593,7 +759,7 @@ sub UpdateCONdataCEILING{
     my @LayerThick;
     my @NewCons;
     my $conPath = $recPath . "$house_name" . ".$zone" . ".con";
-    my $strNewLayer; # String to hold the new layer data
+    my @strNewLayer=(); # String to hold the new layer data
     
     # Outputs
     my $OrigRSI=0;
@@ -665,18 +831,36 @@ sub UpdateCONdataCEILING{
         # Determine the amount of insulation to add
         my $AddedRSI = $UpgradesSurf->{'max_RSI'} - $OrigRSI;
         my $Thickness = $UpgradesSurf->{'ins_k'}*$AddedRSI; # Thickness of insulation needed [m]
-        $strNewLayer = sprintf("%.3f %.1f %.1f %.3f 0 0 0 0 # Added blown in insulation (UPGRADE to RSI %.1f)\n",$UpgradesSurf->{'ins_k'},$UpgradesSurf->{'ins_rho'},$UpgradesSurf->{'ins_Cp'},$Thickness,$UpgradesSurf->{'max_RSI'} );
+        if($Thickness<0.2) {
+            my $sStringData = sprintf("%.3f %.1f %.1f %.3f 0 0 0 0 # Added blown in insulation (UPGRADE to RSI %.1f)\n",$UpgradesSurf->{'ins_k'},$UpgradesSurf->{'ins_rho'},$UpgradesSurf->{'ins_Cp'},$Thickness,$UpgradesSurf->{'max_RSI'} );
+            push(@strNewLayer,$sStringData);
+        } else {
+            until($Thickness<=0.2) {
+                my $sStringData = sprintf("%.3f %.1f %.1f 0.200 0 0 0 0 # Added blown in insulation (UPGRADE to RSI %.1f)\n",$UpgradesSurf->{'ins_k'},$UpgradesSurf->{'ins_rho'},$UpgradesSurf->{'ins_Cp'},$UpgradesSurf->{'max_RSI'} );
+                push(@strNewLayer,$sStringData);
+                $Thickness-=0.2;
+            };
+            if($Thickness>0){
+                $Thickness=sprintf("%.4f",$Thickness);
+                my $sStringData = sprintf("%.3f %.1f %.1f %.3f 0 0 0 0 # Added blown in insulation (UPGRADE to RSI %.1f)\n",$UpgradesSurf->{'ins_k'},$UpgradesSurf->{'ins_rho'},$UpgradesSurf->{'ins_Cp'},$Thickness,$UpgradesSurf->{'max_RSI'} );
+                push(@strNewLayer,$sStringData);
+            };
+        };
 
         # Add the new layer to the construction (inside face)
         @NewCons = @lines[0..($FileLine-1)];
-        push(@NewCons,$strNewLayer);
+        my $iMoreLayers=0;
+        foreach my $sThisStringData (@strNewLayer) {
+            push(@NewCons,$sThisStringData);
+            $iMoreLayers++;
+        };
         push(@NewCons,@lines[$FileLine..$#lines]);
         
         # Update number of layers
         $ThisLine=$lines[$IndexLayerGaps];
         $ThisLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
         @LineDat = split /[,\s]+/, $ThisLine;
-        $LineDat[0]++;
+        $LineDat[0]+=$iMoreLayers;
         my $NewLayers="";
         foreach my $ThatData (@LineDat) {
             $NewLayers = $NewLayers . "$ThatData ";
@@ -730,14 +914,16 @@ sub UpdateCONdataCEILING{
             
             # Reset the NewCon array
             @NewCons=@lines[0..($FileLine-1)];
-            push(@NewCons,$strNewLayer);
+            foreach my $sThisStringData (@strNewLayer) {
+                push(@NewCons,$sThisStringData);
+            };
             push(@NewCons,@lines[$FileLine..$#lines]);
             
             # Update the layer info
             $ThisLine=$lines[$IndexLayerGaps];
             $ThisLine =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
             @LineDat = split /[,\s]+/, $ThisLine;
-            $LineDat[0]++;
+            $LineDat[0]+=$iMoreLayers;
             $NewLayers="";
             foreach my $ThatData (@LineDat) {
                 $NewLayers = $NewLayers . "$ThatData ";
@@ -1367,177 +1553,6 @@ sub getDefaultACH {
     return $DefaultACH;
 };
 # ====================================================================
-# setVNTfile
-#       This subroutine randomly assigns an occupancy start state for the 
-#       dwelling.
-#
-# INPUT     numOcc: number of occupants in the house
-# OUTPUT    StartActive: number of active occupants 
-# ====================================================================
-sub setVNTfile {
-    # INPUTS
-    my ($house_name,$recPath,$iVentTypeUPG,$sVentType,$fVentFlowRequired,$UpgradesAIM2,$UPGrecords) = @_;
-    
-    # INTERMEDIATES
-    my $FileLine=0;
-    my $RVData; # HASH hold the HRV or ERV data
-    my $FanPow;
-
-    # Load the mvnt template file
-    my $TmpFile = "../templates/template.mvnt";
-    my $fid;
-    open $fid, $TmpFile or die "Could not open $TmpFile\n";
-    my @lines = <$fid>; # Pull entire file into an array
-    close $fid;
-
-    if ($iVentTypeUPG == 2 || $iVentTypeUPG == 4) {	# Upgrade to HRV or ERV
-        # Determine which device to use for this house
-        my $sDeviceIndex;
-        # Load the device data
-        $RVData = $UpgradesAIM2->{"$sVentType"};
-        # Load the available supply flow rates
-        my @FlowRates = @{$UpgradesAIM2->{"$sVentType"}->{'flowrate'}};
-        @FlowRates = sort { $a <=> $b } @FlowRates; # Sort the flowrates from high to low
-        # Find a device that meets the ventilation requirements
-        my $i=0;
-        until(($FlowRates[$i]>=$fVentFlowRequired) || ($i==$#FlowRates)){$i++;}
-        $sDeviceIndex = 'Supply_' . "$FlowRates[$i]";
-        $fVentFlowRequired = $FlowRates[$i];
-
-        # Set the CVS system type 
-        &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as HRV
-        
-        # Load the device data
-        my $hsp_T = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_T'};
-        my $hsp_SRE = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_SRE'};
-        my $hsp_P = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_P'};
-        my $vltt_T = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_T'};
-        my $vltt_SRE = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_SRE'};
-        my $vltt_P = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_P'};
-        my $tre = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'tre'};
-        my $Preheat_P = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'Preheat_P'};
-        my $hsp_LRMT;
-        my $vltt_LRMT;
-        if($iVentTypeUPG == 4){ # additional ERV data
-            $hsp_LRMT = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'hsp_LRMT'};
-            $vltt_LRMT = $UpgradesAIM2->{"$sVentType"}->{"$sDeviceIndex"}->{'vltt_LRMT'};
-            &insert (\@lines, "#HRV_DATA", 1, 1, 0, "%s\n%s\n", "$hsp_T $hsp_SRE $hsp_LRMT $hsp_P", "$vltt_T $vltt_SRE $vltt_LRMT $vltt_P");	# list efficiency and fan power (W) at cool (0C) and cold (-25C) temperatures. NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
-        } else {
-            &insert (\@lines, "#HRV_DATA", 1, 1, 0, "%s\n%s\n", "$hsp_T $hsp_SRE $hsp_P", "$vltt_T $vltt_SRE $vltt_P");	# list efficiency and fan power (W) at cool (0C) and cold (-25C) temperatures. NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
-        };
-        &insert (\@lines, "#HRV_FLOW_RATE", 1, 1, 0, "%s\n", $fVentFlowRequired);	# supply flow rate
-        &insert (\@lines, "#HRV_COOL_DATA", 1, 1, 0, "%s\n", "$tre");	# cool efficiency
-        &insert (\@lines, "#HRV_PRE_HEAT", 1, 1, 0, "%s\n", "$Preheat_P");	# preheat watts
-        &insert (\@lines, "#HRV_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# this is presently not used (7) but can make for controlled HRV by temp
-        &insert (\@lines, "#HRV_DUCT", 1, 1, 0, "%s\n%s\n", "1 1 2 2 152 0.1", "1 1 2 2 152 0.1");	# use the typical duct values
-    }
-    elsif ($iVentTypeUPG == 3) {	# fan only ventilation
-        $fVentFlowRequired = nearest_ceil(5, $fVentFlowRequired); # Round flowrate up to nearest multiple of 5
-        my $FanPow = (0.8041*$fVentFlowRequired)-9.8323; # The fan power required. Correlation derived from HVI [W]
-        &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as fan ventilation
-        &insert (\@lines, "#VENT_FLOW_RATE", 1, 1, 0, "%s\n", "$fVentFlowRequired $fVentFlowRequired $FanPow");	# supply and exhaust flow rate (L/s) and fan power (W) NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
-        &insert (\@lines, "#VENT_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# no temp control
-    };	# no need for an else
-    
-    # Print the new mvnt file
-    my $MvntFile = $recPath . "$house_name.mvnt";
-    unlink $MvntFile; # Clear the old file
-    open my $out, '>', $MvntFile or die "Can't write $MvntFile: $!";
-    foreach my $ThatData (@lines) {
-        print $out $ThatData;
-    };
-    close $out;
-    
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_CVS'} = $iVentTypeUPG;
-    $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_Vent_Ls'} = $fVentFlowRequired;
-    if($iVentTypeUPG == 3) { $UPGrecords->{'AIM_2'}->{"$house_name"}->{'new_Vent_Power'} = $FanPow;}
-
-    return $UPGrecords;
-};
-# ====================================================================
-# getVentType
-#       This subroutine randomly assigns an occupancy start state for the 
-#       dwelling.
-#
-# INPUT     house_name: Dwelling record code
-#           recPath: path to the record folder
-# OUTPUT    iVentType: CVS_SYSTEM: Central Ventilation System (CVS) type (1=None, 2=HRV, 3=Fans with no heat recovery, 4=ERV)
-# ====================================================================
-sub getVentType {
-    # INPUTS
-    my ($house_name,$recPath) = @_;
-    
-    # OUTPUT
-    my $iVentType;
-    
-    # INTERMEDIATES
-    my $FileLine=0; # Index the file line
-    
-    # Load the mvnt file
-    my $MvntFile = $recPath . "$house_name.mvnt";
-    my $fid;
-    open $fid, $MvntFile or die "Could not open $MvntFile\n";
-    my @lines = <$fid>; # Pull entire file into an array
-    close $fid;
-    
-    # Load the ventilation data from the file (first item)
-    until($lines[$FileLine] !~ m/^(#)/) {$FileLine++;}
-    $iVentType = $lines[$FileLine];
-    $iVentType =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-
-    return $iVentType;
-};
-# ====================================================================
-# getDwellingVentilationRate
-#       This subroutine randomly assigns an occupancy start state for the 
-#       dwelling.
-#
-# INPUT     house_name: Dwelling record code
-#           recPath: path to the record folder
-# OUTPUT    iVentType: CVS_SYSTEM: Central Ventilation System (CVS) type (1=None, 2=HRV, 3=Fans with no heat recovery, 4=ERV)
-# ====================================================================
-sub getDwellingVentilationRate {
-    # INPUT
-    my ($house_name,$recPath) = @_;
-    
-    # OUTPUT
-    my $fVentFlow;
-    
-    # INTERMEDIATES
-    my $climate;
-    my $swf;
-    my $iAdults;
-    my $iKids;
-    my $fFloor;
-    my $ELA;
-    my $Height;
-    my $fAnnInfil;
-    my $fNominalVent;
-    
-    # Determine the weather and shielding factor
-    $climate = getDwellingClimate($house_name,$recPath);
-    $swf = getWeatherShieldingFactor($climate);
-    
-    # Determine the conditioned floor area and occupancy
-    ($iAdults,$iKids,$fFloor) = getOccupantsFloorArea($house_name);
-    
-    # Determine the height and ELA of the dwelling
-    ($Height,$ELA) = getDwellingHeightELA($house_name,$recPath);
-    
-    # Estimate the nominal ventilation rate required
-    $fNominalVent = getNominalVentilation($iAdults,$iKids,$fFloor);
-    
-    # Determine the annual average infiltration
-    $fAnnInfil = getAnnualAverageInfil($Height,$ELA,$swf,$fFloor);
-    if($fAnnInfil>(($fNominalVent*2.0)/3.0)){$fAnnInfil=(($fNominalVent*2.0)/3.0);} # According to the standard
-    
-    # The total mechanical ventilation required
-    $fVentFlow = $fNominalVent - $fAnnInfil; # Assume Aext = 1 (single-family detached home)
-    $fVentFlow = sprintf("%.2f",$fVentFlow);
-    
-    return $fVentFlow;
-};
-# ====================================================================
 # getDwellingClimate
 #       This subroutine randomly assigns an occupancy start state for the 
 #       dwelling.
@@ -1621,6 +1636,10 @@ sub getOccupantsFloorArea {
     
     # INTERMEDIATES
     my $FileLine=0;
+    my $sHeader;
+    my $iIndAdult;
+    my $iIndKids;
+    my $iIndArea;
     
     # Load in CHREM NN data
     my $NNinPath = '../NN/NN_model/ALC-Inputs-V2.csv';
@@ -1628,6 +1647,24 @@ sub getOccupantsFloorArea {
     open $fid, $NNinPath or die "Could not open $NNinPath\n";
     my @lines = <$fid>; # Pull entire file into an array
     close $fid;
+    
+    # Process the header
+    $sHeader = $lines[0];
+    my @sHead = split /[,]+/, $sHeader;
+    for(my $i=0;$i<=$#sHead;$i++) {
+        if($sHead[$i] =~ m/(Num_of_Adults)/) {
+            $iIndAdult=$i;
+        } elsif($sHead[$i] =~ m/(Num_of_Children)/) {
+            $iIndKids=$i;
+        } elsif($sHead[$i] =~ m/^(Area)/) {
+            $iIndArea=$i;
+        };
+        if((defined $iIndAdult) && (defined $iIndKids) && (defined $iIndArea)) {last;}
+    };
+    if((not defined $iIndAdult) || (not defined $iIndKids) || (not defined $iIndArea)) {
+        die "getOccupantsFloorArea: Could not index headers for $house_name\n";
+    };
+    
     
     until($lines[$FileLine] =~ m/($house_name)/) {
         $FileLine++;
@@ -1639,9 +1676,9 @@ sub getOccupantsFloorArea {
     my @Parsed = split /[,]+/, $lines[$FileLine];
     
     # Get the data of interest
-    $iAdults = $Parsed[55];
-    $iKids   = $Parsed[54];
-    $fFloor  = $Parsed[49];
+    $iAdults = $Parsed[$iIndAdult];
+    $iKids   = $Parsed[$iIndKids];
+    $fFloor  = $Parsed[$iIndArea];
 
     return($iAdults,$iKids,$fFloor);
 };
@@ -1666,6 +1703,7 @@ sub getDwellingHeightELA {
     my $DataLine=0;
     my $FileLine=0;
     my $iAirType;
+    my $sAirType;
     
     # Load the AIM-2 file
     my $Aim2File = $recPath . "$house_name.aim";
@@ -1680,15 +1718,17 @@ sub getDwellingHeightELA {
         $FileLine++;
     }
     $FileLine--;
-    $iAirType = $lines[$FileLine];
+    $sAirType = $lines[$FileLine];
     $FileLine++;
-    $iAirType =~ s/^\s+|\s+$//g;
+    $sAirType =~ s/^\s+|\s+$//g;
+    ($iAirType) = split(/\s+/, $sAirType); 
+    
     
     # Determine the ELA
     if($iAirType>2){ # Default leakage. Get the default ELA
         $ELA = getDefaultELA($iAirType);
     } else { # Read the ELA from the input file
-        my @LineDat = split /[,\s]+/, $iAirType;
+        my @LineDat = split /[,\s]+/, $sAirType;
         $ELA = $LineDat[4]/1000.0;
     };
     
@@ -3017,7 +3057,7 @@ sub setNewWindows {
 # ====================================================================
 
 # ====================================================================
-# getWallCladding
+# getWallCladdingIns
 #       This subroutine opens the dwelling HVAC file, determines the
 #       current system type, and store the data in the upgrade HASH
 #
@@ -3025,169 +3065,247 @@ sub setNewWindows {
 #           recPath: path to this project being upgraded
 #           UPGrecords: HASH holding all the upgrade info 
 # ====================================================================
-#sub getWallCladding {
-#    # INPUTS
-#    my ($house_name,$thisHouse,$setPath,$UPGrecords) = @_;
-#    
-#    # INTERMEDIATES
-#    my $sMainZone = 'main_1'; # Every CHREM dwelling has a main zone
-#    my $FileLine = 0;
-#    my $sStringData;
-#    my $fRSI;
-#    my $sCladding;
-#    
-#    # Load the mvnt file
-#    my $sPathToCon = $setPath . $house_name. "/$house_name.$sMainZone.con";
-#    my $fid;
-#    open $fid, $sPathToCon or die "getWallCladding: Could not open $sPathToCon\n";
-#    my @CONlines = <$fid>; # Pull entire file into an array
-#    close $fid;
-#    
-#    # FWD to surface properties
-#    until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
-#        $FileLine++;
-#    };
-#    
-#    # Find the main wall construction
-#    until ($CONlines[$FileLine] =~ m/(M_wall)/i) {
-#        $FileLine++;
-#    };
-#    $sStringData = $CONlines[$FileLine];
-#    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+sub getWallCladdingIns {
+    # INPUTS
+    my ($house_name,$setPath,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $sMainZone = 'main_1'; # Every CHREM dwelling has a main zone
+    my $FileLine = 0;
+    my $sStringData;
+    my $fRSI;
+    my $sCladding;
+    
+    # Load the mvnt file
+    my $sPathToCon = $setPath . $house_name. "/$house_name.$sMainZone.con";
+    my $fid;
+    open $fid, $sPathToCon or die "getWallCladdingIns: Could not open $sPathToCon\n";
+    my @CONlines = <$fid>; # Pull entire file into an array
+    close $fid;
+    
+    # FWD to surface properties
+    until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
+        $FileLine++;
+    };
+    
+    # Find the main wall construction
+    until ($CONlines[$FileLine] =~ m/(M_wall)/i) {
+        $FileLine++;
+    };
+    $sStringData = $CONlines[$FileLine];
+    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+
+    # Get the RSI value of the wall assembly
+    ($fRSI) = $sStringData =~ m/U Value final (.*) \(/;
+    $fRSI=1/$fRSI; # Convert U-value to RSI (m2K/W)
+    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Asmbly_RSI'} = sprintf("%.2f",$fRSI);
+    
+    # Get the cladding type
+    $FileLine++;
+    $sStringData = $CONlines[$FileLine];
+    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
+    ($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
+    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'} = $sCladding;
+    
+    # Get the RSI value of the wall insulation
+    $FileLine++;
+    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'} = 0.0;
+    until (($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) || ($CONlines[$FileLine] =~ m/^(#END_PROPERTIES)/i)) {
+        if($CONlines[$FileLine] =~ m/(insulation)/) {
+            # Insulation layer, determine the RSI
+            my @sData = split /[,\s]+/, $CONlines[$FileLine];
+            my $fThisRSI = $sData[3]/$sData[0]; # RSI [m2K/W]
+            $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'} += $fThisRSI;
+        };
+        $FileLine++;
+    };
+
+    # Set Output
+    return $UPGrecords;
+};
+# ====================================================================
+# setWallCladding
+#       This subroutine opens the dwelling HVAC file, determines the
+#       current system type, and store the data in the upgrade HASH
 #
-#    # Get the RSI value of the wall
-#    ($fRSI) = $sStringData =~ m/U Value final (.*) \(/;
-#    $fRSI=1/$fRSI; # Convert U-value to RSI (m2K/W)
-#    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'} = sprintf("%.2f",$fRSI);
-#    
-#    # Get the cladding type
-#    $FileLine++;
-#    $sStringData = $CONlines[$FileLine];
-#    $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-#    ($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
-#    $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'} = $sCladding;
-#
-#    # Set Output
-#    return $UPGrecords;
-#};
-## ====================================================================
-## setWallCladding
-##       This subroutine opens the dwelling HVAC file, determines the
-##       current system type, and store the data in the upgrade HASH
-##
-## INPUT     house_name: name of the dwelling of interest
-##           recPath: path to this project being upgraded
-##           UPGrecords: HASH holding all the upgrade info 
-## ====================================================================
-#sub setWallCladding {
-#    # INPUTS
-#    my ($house_name,$UpgradesWall,$sCladding,$thisHouse,$setPath,$UPGrecords) = @_;
-#    
-#    # INTERMEDIATES
-#    my $FileLine = 0;
-#    my @sZones;
-#    my $bIsGabled=0;
-#    
-#    # Prepare the new layer info
-#    my $sNewCladding;
-#    my $sNewIns;
-#    NEW_LAYERS: {
-#        # Cladding
-#        my $fRSI = "0.0";
-#        my $fUvalue = $UpgradesWall->{'cladding'}->{'cld_k'}/$UpgradesWall->{'cladding'}->{'cld_t'};
-#        $fUvalue = sprintf("%.3f",$fUvalue);
-#        my $fCond = $UpgradesWall->{'cladding'}->{'cld_k'};
-#        my $fRho = $UpgradesWall->{'cladding'}->{'cld_rho'};
-#        my $fCp = $UpgradesWall->{'cladding'}->{'cld_Cp'};
-#        my $fThick = $UpgradesWall->{'cladding'}->{'cld_t'};
-#        my $sDescrip = $UpgradesWall->{'cladding'}->{'description'};
-#        $sNewCladding = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fThick,$sDescrip,$fRSI,$fUvalue);
-#        
-#        # Insulation
-#        $fRSI = $UpgradesWall->{'ins'}->{'ins_t'}/$UpgradesWall->{'ins'}->{'ins_k'};
-#        $fRSI = sprintf("%.2f",$fRSI);
-#        $fUvalue = $UpgradesWall->{'ins'}->{'ins_k'}/$UpgradesWall->{'ins'}->{'ins_t'};
-#        $fUvalue = sprintf("%.3f",$fUvalue);
-#        $fCond = $UpgradesWall->{'ins'}->{'ins_k'};
-#        $fRho = $UpgradesWall->{'ins'}->{'ins_rho'};
-#        $fCp = $UpgradesWall->{'ins'}->{'ins_Cp'};
-#        $fThick = $UpgradesWall->{'ins'}->{'ins_t'};
-#        $sDescrip = $UpgradesWall->{'ins'}->{'description'};
-#        $sNewIns = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fThick,$sDescrip,$fRSI,$fUvalue);
-#    };
-#    
-#    # Determine how many main zones there are
-#    foreach my $zones (keys (%{$thisHouse})) {
-#        if($zones =~ m/^(main)/i) {push(@sZones,$zones);}
-#    };
-#    
-#    # Determine if there is a gabled roof
-#    if (defined $thisHouse->{'attic'}) {
-#        my $sConPath = $setPath . $house_name. "/$house_name.attic.con";
-#        my $fid;
-#        open $fid, $sPathToCon or die "setWallCladdingVinyl: Could not open $sPathToCon\n";
-#        my @CONlines = <$fid>; # Pull entire file into an array
-#        close $fid;
-#        
-#        # Determine if this dwelling has a hip or gabled roof
-#        my $FileLine=0;
-#        FIND_GABLE: while ($FileLine <= $#CONlines) {
-#            if($CONlines[$FileLine] =~ m/(A_or_R_gbl)/) {
-#                $bIsGabled = 1;
-#                last FIND_GABLE;
-#            } elsif ($CONlines[$FileLine] =~ m/^(#END_LAYERS_GAPS)/) {
-#                last FIND_GABLE;
-#            };
-#            $FileLine++;
-#        };
-#    };
-#    
-#    # Update the construction file
-#    foreach my $zones (@sZones) {
-#        my $FileLine=0;
-#        my $sConPath = $setPath . $house_name. "/$house_name.$zones.con";
-#        my $fid;
-#        open $fid, $sPathToCon or die "setWallCladdingVinyl: Could not open $sPathToCon\n";
-#        my @CONlines = <$fid>; # Pull entire file into an array
-#        close $fid;
-#        
-#        # FWD to surface properties
-#        until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
-#            $FileLine++;
-#        };
-#        
-#        # Find and modify the main wall constructions
-#        while ($FileLine<=$#CONlines) {
-#            if($CONlines[$FileLine] =~ m/(M_wall)/i) { # This is a main wall, update it
-#                # Store the top half of the construction file
-#                my @Top=@CONlines[0..$FileLine];
-#                
-#                # External main wall upgrade is dependent on existing cladding
-#                if($sCladding =~ m/(Vinyl)/) {
-#                
-#                } elsif($sCladding =~ m/(Brick|Concrete|Stone|SPF)/) {
-#                    # Insulation and new cladding is placed on top of the existing wall
-#                    push(@Top,$sNewCladding);
-#                    push(@Top,$sNewIns);
-#                    push(@Top,@CONlines[($FileLine+1)..$#CONlines]);
-#                    @CONlines = @Top;
-#                } else {
-#                    print "setWallCladding: Unknown cladding type $sCladding in house $house_name\nInsulation and new cladding added on top of existing\n";
-#                };
-#            
-#            };
-#            $FileLine++;
-#        };
-#        
-#    };
-#        
-#    
-#    print Dumper $house_name;
-#    print Dumper @sZones;
-#    sleep;
-#    
-#    return $UPGrecords;
-#};
+# INPUT     house_name: name of the dwelling of interest
+#           recPath: path to this project being upgraded
+#           UPGrecords: HASH holding all the upgrade info 
+# ====================================================================
+sub setWallCladding {
+    # INPUTS
+    my ($house_name,$fInsThick,$UpgradesWall,$sCurrentClad,$thisHouse,$setPath,$sCladKey,$sInsKey,$UPGrecords) = @_;
+    
+    # INTERMEDIATES
+    my $FileLine = 0;
+    my @sZones; # Array of strings holding names of main zones
+    #my $bIsGabled=0; # Boolean indicating if the roof is gabled or not
+    my $sNewCladding; # String holding construction layer info for cladding
+    my @sNewIns=(); # Array of string holding construction layer info for insulation
+    my $iNewLayers=0; # Number of new layers added (minimum is 2)
+    
+    # Prepare the new layer info
+    NEW_CLAD: { # Cladding
+        $iNewLayers++;
+        my $fCladRSI = "0.0";
+        my $fCladUvalue = $UpgradesWall->{$sCladKey}->{'cld_k'}/$UpgradesWall->{$sCladKey}->{'cld_t'};
+        $fCladUvalue = sprintf("%.3f",$fCladUvalue);
+        my $fCladCond = $UpgradesWall->{$sCladKey}->{'cld_k'};
+        my $fCladRho = $UpgradesWall->{$sCladKey}->{'cld_rho'};
+        my $fCladCp = $UpgradesWall->{$sCladKey}->{'cld_Cp'};
+        my $fCladThick = $UpgradesWall->{$sCladKey}->{'cld_t'};
+        my $sCladDescrip = $UpgradesWall->{$sCladKey}->{'description'};
+        $sNewCladding = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCladCond,$fCladRho,$fCladCp,$fCladThick,$sCladDescrip,$fCladRSI,$fCladUvalue);
+    };
+
+    NEW_INS: {# Insulation
+        my $fCond = $UpgradesWall->{$sInsKey}->{'ins_k'};
+        my $fRho = $UpgradesWall->{$sInsKey}->{'ins_rho'};
+        my $fCp = $UpgradesWall->{$sInsKey}->{'ins_Cp'};
+        my $sDescrip = $UpgradesWall->{$sInsKey}->{'description'};
+        if($fInsThick>0.2) { # Need to discretize insulation layer more
+            until($fInsThick<0.2) {
+                my $fThisThick = 0.200;
+                my $fRSI = $fThisThick/$UpgradesWall->{$sInsKey}->{'ins_k'};
+                $fRSI = sprintf("%.2f",$fRSI);
+                my $fUvalue = 1/$fRSI;
+                $fUvalue = sprintf("%.3f",$fUvalue);
+                my $sInfo = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fThisThick,$sDescrip,$fRSI,$fUvalue);
+                push(@sNewIns,$sInfo);
+                $iNewLayers++;
+                $fInsThick-=0.2;
+            };
+            if($fInsThick>0) {
+                my $fRSI = $fInsThick/$UpgradesWall->{$sInsKey}->{'ins_k'};
+                $fRSI = sprintf("%.2f",$fRSI);
+                my $fUvalue = 1/$fRSI;
+                $fUvalue = sprintf("%.3f",$fUvalue);
+                $fInsThick=sprintf("%.5f",$fInsThick);
+                my $sInfo = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fInsThick,$sDescrip,$fRSI,$fUvalue);
+                push(@sNewIns,$sInfo);
+                $iNewLayers++;
+            };
+
+        } else { # Only need only layer for insulation
+            my $fRSI = $fInsThick/$UpgradesWall->{$sInsKey}->{'ins_k'};
+            $fRSI = sprintf("%.2f",$fRSI);
+            my $fUvalue = 1/$fRSI;
+            $fUvalue = sprintf("%.3f",$fUvalue);
+            $fInsThick=sprintf("%.5f",$fInsThick);
+            my $sInfo = sprintf("%s %s %s %s 0 0 0 0 # %s; RSI = %s; U value = %s (W/m^2K)\n",$fCond,$fRho,$fCp,$fInsThick,$sDescrip,$fRSI,$fUvalue);
+            push(@sNewIns,$sInfo);
+            $iNewLayers++;
+        };
+    };
+    
+    # Determine how many main zones there are
+    foreach my $zones (keys (%{$thisHouse})) {
+        if($zones =~ m/^(main)/i) {push(@sZones,$zones);}
+    };
+
+    # Update the construction file
+    foreach my $zones (@sZones) {
+        my $FileLine=0;
+        my $sConPath = $setPath . $house_name. "/$house_name.$zones.con";
+        my $fid;
+        open $fid, $sConPath or die "setWallCladdingVinyl: Could not open $sConPath\n";
+        my @CONlines = <$fid>; # Pull entire file into an array
+        close $fid;
+        
+        # FWD to LAYERS_GAPS
+        until ($CONlines[$FileLine] =~ m/^(#LAYERS_GAPS)/i) {
+            $FileLine++;
+            if($FileLine>$#CONlines) {die "setWallCladding: $house_name unable to locate LAYERS_GAPS\n";}
+        };
+        
+        # Update the main wall number of layers
+        if($sCurrentClad =~ m/(Vinyl)/) {
+            # Old cladding is removed, insulation is installed, then new cladding
+            $iNewLayers--;
+        };
+        until ($CONlines[$FileLine] =~ m/^(#END_LAYERS_GAPS)/i) {
+            if($CONlines[$FileLine] =~ m/(M_wall)/i) { # This is a main wall, update it
+                my @sData = split /[,\s]+/, $CONlines[$FileLine];
+                my $iNew = $sData[0]+$iNewLayers;
+                $iNew="$iNew";
+                my $sGapData = sprintf("%s %s %s %s %s\n",$iNew,$sData[1],$sData[2],$sData[3],$sData[4]);
+                $CONlines[$FileLine]=$sGapData;
+            };
+            $FileLine++;
+            if($FileLine>$#CONlines) {die "setWallCladding: $house_name unable to locate end of LAYERS_GAPS\n";}
+        };
+        
+        # FWD to GAPS_POS_AND_RSI
+        until ($CONlines[$FileLine] =~ m/^(#GAP_POS_AND_RSI)/i) {
+            $FileLine++;
+            if($FileLine>$#CONlines) {die "setWallCladding: $house_name unable to locate GAP_POS_AND_RSI\n";}
+        };
+        # Update gap positions
+        until ($CONlines[$FileLine] =~ m/^(#END_GAP_POS_AND_RSI)/i) {
+            if($CONlines[$FileLine] =~ m/(M_wall)/i) { # This is a main wall, update it
+                (my $sOnlyData = $CONlines[$FileLine]) =~ s/\s#[^.]+$//;
+                my @sData = split /[,\s]+/, $sOnlyData;
+                for (my $i=0;$i<$#sData;$i=$i+2) {
+                    $sData[$i]+=$iNewLayers;
+                };
+                (my $sComment = $CONlines[$FileLine]) =~ s/^.+#\s//;
+                my $NewString="";
+                for(my $i=0;$i<=$#sData;$i++) {
+                    $NewString=$NewString . "$sData[$i] ";
+                };
+                $NewString=$NewString . "# $sComment";
+                $CONlines[$FileLine]=$NewString;
+            };
+            $FileLine++;
+            if($FileLine>$#CONlines) {die "setWallCladding: $house_name unable to locate END_GAP_POS_AND_RSI\n";}
+        };
+        
+        # FWD to surface properties
+        until ($CONlines[$FileLine] =~ m/^(# CONSTRUCTION)/i) {
+            $FileLine++;
+            if($FileLine>$#CONlines) {die "setWallCladding: $house_name unable to locate CONSTRUCTIONS\n";}
+        };
+        
+        # Find and modify the main wall constructions
+        while ($FileLine<=$#CONlines) {
+            if($CONlines[$FileLine] =~ m/(M_wall)/i) { # This is a main wall, update it
+                # Store the top half of the construction file
+                my @Top=@CONlines[0..$FileLine];
+                # Add the new cladding and external insulation
+                push(@Top,$sNewCladding); # Cladding data
+                foreach my $sNewInsData (@sNewIns) { # All the insulation layers
+                    push(@Top,$sNewInsData);
+                };
+                
+                # External main wall upgrade is dependent on existing cladding
+                if($sCurrentClad =~ m/(Vinyl)/) {
+                    # Old cladding is removed, insulation is installed, then new cladding
+                    push(@Top,@CONlines[($FileLine+2)..$#CONlines]);
+                } elsif($sCurrentClad =~ m/(Brick|Concrete|Stone|SPF)/) {
+                    # Insulation and new cladding is placed on top of the existing wall
+                    push(@Top,@CONlines[($FileLine+1)..$#CONlines]);
+                } else {
+                    print "setWallCladding: Unknown cladding type $sCurrentClad in house $house_name\nInsulation and new cladding added on top of existing\n";
+                    push(@Top,@CONlines[($FileLine+1)..$#CONlines]);
+                };
+                @CONlines = @Top;
+            
+            };
+            $FileLine++;
+        };
+        
+        # Print out new construction file
+        unlink $sConPath; # Clear the old file
+        open my $out, '>', $sConPath or die "Can't write $sConPath: $!";
+        foreach my $ThatData (@CONlines) {
+            print $out $ThatData;
+        };
+        close $out;
+            
+    }; # END ZONE LOOP
+
+    return $UPGrecords;
+};
    
 # Final return value of one to indicate that the perl module is successful
 1;

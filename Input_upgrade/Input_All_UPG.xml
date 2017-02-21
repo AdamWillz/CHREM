@@ -1,42 +1,43 @@
 <opt>
+     <!-- Include airtightness (1) or not (0)-->
+     <INC_AIRTIGHT>1</INC_AIRTIGHT>
      <!-- Ceiling upgrade assume that blown in insulation is just placed on top of existing insulation-->
      <CEIL_INS ins_sys="0">
          <sys_1 max_RSI="7.04" ins_k="0.043" ins_rho="16.0" ins_Cp="835.0"/>
          <sys_2 max_RSI="10.57" ins_k="0.043" ins_rho="16.0" ins_Cp="835.0"/>
          <sys_3 max_RSI="14.09" ins_k="0.043" ins_rho="16.0" ins_Cp="835.0"/>
-     </CEIL_INS>    
-     <!-- AIM-2 upgrade parameters-->
-     <AIM_2 vent_sys="0">
-         <vent_1>
-             <INFIL type="default" level="6"/>
-             <!--INFIL type="custom" ACH_50="1.5" ELA_Pa="10"  ELA="342.3" Cd="0.611"/-->
-             <HRV>
-                 <flowrate>22</flowrate>
-                 <flowrate>51</flowrate>
-                 <flowrate>39</flowrate>
-                 <flowrate>31</flowrate>
-                 <Supply_22 detail="Venmar 50H"    hsp_T="0.00" hsp_SRE="66.0" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="48.00"  tre="40.0" Preheat_P="0"/>
-                 <Supply_31 detail="Venmar 90HV+"  hsp_T="0.00" hsp_SRE="75.0" hsp_P="54.00" vltt_T="-25.00" vltt_SRE="70.0" vltt_P="72.00"  tre="40.0" Preheat_P="0"/>
-                 <Supply_39 detail="vanEE 200H"    hsp_T="0.00" hsp_SRE="65.0" hsp_P="71.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="114.00" tre="40.0" Preheat_P="0"/>
-                 <Supply_51 detail="vanEE 2001HRV" hsp_T="0.00" hsp_SRE="70.0" hsp_P="92.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="104.00" tre="40.0" Preheat_P="0"/>
-             </HRV>
-             <!--ERV>
-                 <flowrate>22</flowrate>
-                 <Supply_22 detail="Venmar 50H"    hsp_T="0.00" hsp_SRE="66.0" hsp_LRMT="0.45" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" hsp_LRMT="0.45" vltt_LRMT="0.26" vltt_P="48.00"  tre="40.0" Preheat_P="0"/>
-             </ERV-->
-         </vent_1>
-         <vent_2>
-             <INFIL type="default" level="6"/>
-             <!-- Let the script determine ventilation fan power-->
-         </vent_2>
-     </AIM_2> 
+     </CEIL_INS>
+     <!-- Ventilation system type. vent_sys=0 will yield just a fan, 1 is HRV, 2 is ERV-->
+     <VNT vent_sys="1">
+         <HRV>
+             <flowrate>22</flowrate>
+             <flowrate>51</flowrate>
+             <flowrate>39</flowrate>
+             <flowrate>31</flowrate>
+             <Supply_22 detail="Venmar 50H"    hsp_T="0.00" hsp_SRE="66.0" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="48.00"  tre="40.0" Preheat_P="0"/>
+             <Supply_31 detail="Venmar 90HV+"  hsp_T="0.00" hsp_SRE="75.0" hsp_P="54.00" vltt_T="-25.00" vltt_SRE="70.0" vltt_P="72.00"  tre="40.0" Preheat_P="0"/>
+             <Supply_39 detail="vanEE 200H"    hsp_T="0.00" hsp_SRE="65.0" hsp_P="71.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="114.00" tre="40.0" Preheat_P="0"/>
+             <Supply_51 detail="vanEE 2001HRV" hsp_T="0.00" hsp_SRE="70.0" hsp_P="92.00" vltt_T="-25.00" vltt_SRE="60.0" vltt_P="104.00" tre="40.0" Preheat_P="0"/>
+         </HRV>
+         <!--ERV>
+             <flowrate>22</flowrate>
+             <Supply_22 detail="Venmar 50H"    hsp_T="0.00" hsp_SRE="66.0" hsp_LRMT="0.45" hsp_P="39.00" vltt_T="-25.00" vltt_SRE="60.0" hsp_LRMT="0.45" vltt_LRMT="0.26" vltt_P="48.00"  tre="40.0" Preheat_P="0"/>
+         </ERV-->
+     </VNT>
      <!-- Wall upgrade assumes that new insulation is added to the exterior (full height)-->
-     <WALL_INS ins_sys="1">
-         <sys_1>
-            <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), ins_t: Thickness (m)-->
-            <ins ins_k="0.043" ins_rho="16.0" ins_Cp="835.0" ins_t="0.0508" description="insulation_UPG - XPS"/>
-            <cladding cld_k="0.16" cld_rho="1380" cld_Cp="1000" cld_t="0.003" description="siding_UPG - Vinyl"/>  
-         </sys_1>
+     <WALL_INS RSI_goal="3" clad="1" ins="1">
+         <goal_1>4.23</goal_1>
+         <goal_2>4.75</goal_2>
+         <goal_3>5.46</goal_3>
+         <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), ins_t: Thickness (m)-->
+         <clad_1 cld_k="0.16" cld_rho="1380" cld_Cp="1000" cld_t="0.003" description="siding_UPG - Vinyl"/>
+         <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), n_t: number of different board thicknesses-->
+         <ins_1 ins_k="0.043" ins_rho="16.0" ins_Cp="835.0" description="insulation_UPG - XPS" n_t="3">
+            <!--Thicknesses (m), low to high -->
+            <t_1>0.0254</t_1>
+            <t_2>0.0381</t_2>
+            <t_3>0.0508</t_3>
+         </ins_1>
      </WALL_INS>
      <!-- Foundation upgrade assumes that new insulation is added to the interior (full height)-->
      <BASE_INS ins_sys="0">
