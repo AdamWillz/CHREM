@@ -914,6 +914,7 @@ sub UpdateCONdataCEILING{
             
             # Reset the NewCon array
             @NewCons=@lines[0..($FileLine-1)];
+            @strNewLayer = reverse @strNewLayer;
             foreach my $sThisStringData (@strNewLayer) {
                 push(@NewCons,$sThisStringData);
             };
