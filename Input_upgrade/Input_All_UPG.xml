@@ -26,9 +26,9 @@
      </VNT>
      <!-- Wall upgrade assumes that new insulation is added to the exterior (full height)-->
      <WALL_INS RSI_goal="3" clad="1" ins="1">
-         <goal_1>4.23</goal_1>
-         <goal_2>4.75</goal_2>
-         <goal_3>5.46</goal_3>
+         <goal_1>4.23</goal_1> <!-- R24 -->
+         <goal_2>4.75</goal_2> <!-- R27 -->
+         <goal_3>5.46</goal_3> <!-- R31 -->
          <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), ins_t: Thickness (m)-->
          <clad_1 cld_k="0.16" cld_rho="1380" cld_Cp="1000" cld_t="0.003" description="siding_UPG - Vinyl"/>
          <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), n_t: number of different board thicknesses-->
