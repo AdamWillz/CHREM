@@ -28,7 +28,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns setVentilation upgradeDHsystem upgradeGLZ setNewInfil getDwellingVentilationRate getVentType setVNTfile upgradeWallIns);
+our @EXPORT = qw(getGEOdata upgradeCeilIns setBCDpath upgradeBsmtIns setVentilation upgradeDHsystem upgradeGLZ setNewInfil getDwellingVentilationRate getVentType setVNTfile upgradeWallIns getVentFlowRate);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
