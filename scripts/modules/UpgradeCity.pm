@@ -943,7 +943,7 @@ sub UpdateCONdataCEILING{
             close $out;
         };
     } else { # Insulation is sufficient already
-        $UPGrecords->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'}=$OrigRSI;
+        $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'}=$OrigRSI;
     };
     
     return $UPGrecords;
