@@ -831,6 +831,9 @@ sub UpdateCONdataCEILING{
         # Determine the amount of insulation to add
         my $AddedRSI = $UpgradesSurf->{'max_RSI'} - $OrigRSI;
         my $Thickness = $UpgradesSurf->{'ins_k'}*$AddedRSI; # Thickness of insulation needed [m]
+        # Store the upgrade data for post-processing and record keeping
+        $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'} = $UpgradesSurf->{'max_RSI'};
+        $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'ins_thickness'} = $Thickness; # Thickness of insulation added [m]
         if($Thickness<0.2) {
             my $sStringData = sprintf("%.3f %.1f %.1f %.3f 0 0 0 0 # Added blown in insulation (UPGRADE to RSI %.1f)\n",$UpgradesSurf->{'ins_k'},$UpgradesSurf->{'ins_rho'},$UpgradesSurf->{'ins_Cp'},$Thickness,$UpgradesSurf->{'max_RSI'} );
             push(@strNewLayer,$sStringData);
@@ -939,11 +942,6 @@ sub UpdateCONdataCEILING{
             };
             close $out;
         };
-        
-        # Store the upgrade data for post-processing and record keeping
-        $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'} = $UpgradesSurf->{'max_RSI'};
-        $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'ins_thickness'} = $Thickness; # Thickness of insulation added
-        
     } else { # Insulation is sufficient already
         $UPGrecords->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'}=$OrigRSI;
     };
