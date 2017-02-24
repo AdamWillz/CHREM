@@ -17,7 +17,7 @@ my @Ceiling = (0,1,2,3);
 my @Basement = (0,1,2,3);
 my @Windows = (0,1,2,3);
 my @Walls = (0,1,2,3);
-my @VNT = (0,1);
+my @VNT = (1,2);
 
 my $hse_type_num;
 my $region_num;
