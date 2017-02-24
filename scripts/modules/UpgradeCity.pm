@@ -3204,6 +3204,7 @@ sub setWallCladding {
 
     # Update the construction file
     foreach my $zones (@sZones) {
+        my $iThisLayers = $iNewLayers;
         my $FileLine=0;
         my $sConPath = $setPath . $house_name. "/$house_name.$zones.con";
         my $fid;
@@ -3220,12 +3221,12 @@ sub setWallCladding {
         # Update the main wall number of layers
         if($sCurrentClad =~ m/(Vinyl)/) {
             # Old cladding is removed, insulation is installed, then new cladding
-            $iNewLayers--;
+            $iThisLayers--;
         };
         until ($CONlines[$FileLine] =~ m/^(#END_LAYERS_GAPS)/i) {
             if($CONlines[$FileLine] =~ m/(M_wall)/i) { # This is a main wall, update it
                 my @sData = split /[,\s]+/, $CONlines[$FileLine];
-                my $iNew = $sData[0]+$iNewLayers;
+                my $iNew = $sData[0]+$iThisLayers;
                 $iNew="$iNew";
                 my $sGapData = sprintf("%s %s %s %s %s\n",$iNew,$sData[1],$sData[2],$sData[3],$sData[4]);
                 $CONlines[$FileLine]=$sGapData;
@@ -3245,7 +3246,7 @@ sub setWallCladding {
                 (my $sOnlyData = $CONlines[$FileLine]) =~ s/\s#[^.]+$//;
                 my @sData = split /[,\s]+/, $sOnlyData;
                 for (my $i=0;$i<$#sData;$i=$i+2) {
-                    $sData[$i]+=$iNewLayers;
+                    $sData[$i]+=$iThisLayers;
                 };
                 (my $sComment = $CONlines[$FileLine]) =~ s/^.+#\s//;
                 my $NewString="";

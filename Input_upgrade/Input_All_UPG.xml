@@ -25,7 +25,7 @@
          </ERV-->
      </VNT>
      <!-- Wall upgrade assumes that new insulation is added to the exterior (full height)-->
-     <WALL_INS RSI_goal="3" clad="1" ins="1">
+     <WALL_INS RSI_goal="2" clad="1" ins="1">
          <goal_1>4.23</goal_1> <!-- R24 -->
          <goal_2>4.75</goal_2> <!-- R27 -->
          <goal_3>5.46</goal_3> <!-- R31 -->
@@ -40,7 +40,7 @@
          </ins_1>
      </WALL_INS>
      <!-- Foundation upgrade assumes that new insulation is added to the interior (full height)-->
-     <BASE_INS ins_sys="0">
+     <BASE_INS ins_sys="2">
          <sys_1>
              <bsmt max_RSI="1.76"/>
              <!-- EPS: (ASHRAE Fundamentals 2009)-->
@@ -66,12 +66,12 @@
      <!-- PV RETROFIT -->
      <PV_ROOF  bIsAdd="0"/>
      <!-- DISTRICT HEATING -->
-     <DH_SYSTEM SysNumber="0">
+     <DH_SYSTEM SysNumber="1">
          <System_1 description="CHP microturbine"/>
          <System_2 description="DH GSHP"/>
      </DH_SYSTEM>
      <!-- Glazing type to upgrade to. See Sara Nikoofard's thesis for details-->
-     <GLZ GlzSystem="0">
+     <GLZ GlzSystem="3">
          <!-- Glazing System 1-->
          <GLZ_1 glaze_type="2" coating="3" fill_gas="1" gap_width="0" numLayers="3" numGaps="1" description="Pilk energiKare">
              <GAPS gapPos_1="2" gapRSI_1="0.405"/>
