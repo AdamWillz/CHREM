@@ -422,22 +422,24 @@ APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each rec
         $UPGrecords->{'VNT'}->{"$house_name"}->{'orig_Vent_Ls'} = $fCurrentVent;
         
         # Add/upgrade ventilation system if required/requested
-        if($Upgrades->{'VNT'}->{'vent_sys'} >= 0) {
+        if($Upgrades->{'VNT'}->{'vent_sys'} > 0) {
 
             # Determine the user-prescribed ventilation system type to upgrade to
             my $iUPGvent = $Upgrades->{'VNT'}->{'vent_sys'};
-            if($iUPGvent==1) { # Upgrade to HRV
+            if($iUPGvent==2) { # Upgrade to HRV
                 $iVentType = 2;
                 $sVentType = 'HRV';
-            } elsif($iUPGvent==2) { # Upgrade to ERV
+            } elsif($iUPGvent==3) { # Upgrade to ERV (NOT IMPLEMENTED)
                 #$iVentType = 4;
                 #$sVentType = 'ERV';
                 $iVentType = 2;
                 $sVentType = 'HRV';
                 print "Warning: ERV is not a valid update type yet. Setting to HRV\n";
-            } else { # Fans with no heat recovery
+            } elsif($iUPGvent==1) { # Fans with no heat recovery
                 $iVentType = 3;
                 $sVentType = 'FAN';
+            } else {
+                die "VNT: vent_sys type $iUPGvent not supported.\n";
             };
 
             # Determine if an upgrade needs to occur
