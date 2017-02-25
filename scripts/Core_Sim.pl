@@ -233,9 +233,9 @@ SIMULATION: {
 		print $FILE time . "\n";
 
 		# Cycle over results files and unlink them
-# 		foreach my $ext (qw(mfr elr res)) {
-# 			unlink "./$house_name.$ext";
-# 		};
+ 		foreach my $ext (qw(elr res)) {
+ 			unlink "./$house_name.$ext";
+ 		};
 
 		chdir ("../../../scripts"); # Return to the original working directory
 		$simulations++;			#increment the simulations counter
