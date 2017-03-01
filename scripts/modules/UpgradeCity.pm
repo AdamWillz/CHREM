@@ -3107,7 +3107,8 @@ sub getWallCladdingIns {
     $FileLine++;
     $sStringData = $CONlines[$FileLine];
     $sStringData =~ s/^\s+|\s+$//g; # Remove leading and trailing whitespace
-    ($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
+    #($sCladding) = $sStringData =~ m/# siding - (.*); RSI/;
+    ($sCladding) = $sStringData =~ m/- (.*); RSI/;
     $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_Cladding'} = $sCladding;
     
     # Get the RSI value of the wall insulation
@@ -3285,7 +3286,7 @@ sub setWallCladding {
                 if($sCurrentClad =~ m/(Vinyl)/) {
                     # Old cladding is removed, insulation is installed, then new cladding
                     push(@Top,@CONlines[($FileLine+2)..$#CONlines]);
-                } elsif($sCurrentClad =~ m/(Brick|Concrete|Stone|SPF)/) {
+                } elsif($sCurrentClad =~ m/(Brick|Concrete|Stone|SPF|Plywood)/) {
                     # Insulation and new cladding is placed on top of the existing wall
                     push(@Top,@CONlines[($FileLine+1)..$#CONlines]);
                 } else {
