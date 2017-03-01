@@ -443,7 +443,7 @@ APPL_UPG: foreach my $house_name (@houses_desired) { # Loop through for each rec
             };
 
             # Determine if an upgrade needs to occur
-            if(($fCurrentVent<$fVentFlowRequired) || ($iVentTypeORG!=$iVentType)) {
+            if(($fCurrentVent<$fVentFlowRequired) || ($iVentTypeORG!=2)) {
                 $UPGrecords = &setVNTfile($house_name,"$setPath$house_name/",$iVentType,$sVentType,$fVentFlowRequired,$Upgrades->{'VNT'},$UPGrecords);
             };
         };
