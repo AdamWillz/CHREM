@@ -714,6 +714,7 @@ sub setVNTfile {
         &replace (\@lines, "#CVS_SYSTEM", 1, 1, "%s\n", "$iVentTypeUPG");	# list CSV as fan ventilation
         &insert (\@lines, "#VENT_FLOW_RATE", 1, 1, 0, "%s\n", "$iIncreasingFloe $iIncreasingFloe $FanPow");	# supply and exhaust flow rate (L/s) and fan power (W) NOTE: Fan power is set to zero as electrical casual gains are accounted for in the elec and opr files. If this was set to a value then it would add it to the incoming air stream and report it to SiteUtilities
         &insert (\@lines, "#VENT_TEMP_CTL", 1, 1, 0, "%s\n", "7 0 0");	# no temp control
+        $fVentFlowRequired = $iIncreasingFloe;
     };	# no need for an else
     
     # Print the new mvnt file
@@ -726,7 +727,7 @@ sub setVNTfile {
     close $out;
     
     $UPGrecords->{'VNT'}->{"$house_name"}->{'new_CVS'} = $iVentTypeUPG;
-    $UPGrecords->{'VNT'}->{"$house_name"}->{'new_Vent_Ls'} = $iIncreasingFloe;
+    $UPGrecords->{'VNT'}->{"$house_name"}->{'new_Vent_Ls'} = $fVentFlowRequired;
     if($iVentTypeUPG == 3) { $UPGrecords->{'VNT'}->{"$house_name"}->{'new_Vent_Power'} = $FanPow;}
 
     return $UPGrecords;
