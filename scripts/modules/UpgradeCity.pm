@@ -420,7 +420,7 @@ sub upgradeWallIns {
     my $sRSI_key = "goal_$iSys"; # Key pointing to value of RSI
     my $fGoalRSI = $UpgradesWall->{$sRSI_key};
     my $fIncreaseRSI;
-    my $fInsThick=0; # Total thickness of insulation added
+    my $fInsThick=0; # Total thickness of insulation added [m]
     
     my $iIns = $UpgradesWall->{'ins'}; # Integer indicating which insulation to use in the inputs
     my $sInsKey = "ins_$iIns";
@@ -435,10 +435,18 @@ sub upgradeWallIns {
     
     # Determine the increase in RSI required to meet input
     $fIncreaseRSI = $fGoalRSI-$fCurrentRSI;
-
+    
+    # Add general upgrade data if required
+    if(not defined $UPGrecords->{'WALL_INS'}->{'Info'}) {
+        $UPGrecords->{'WALL_INS'}->{'Info'}->{'ins_k'}->{'value'}=$UpgradesWall->{$sInsKey}->{'ins_k'};
+        $UPGrecords->{'WALL_INS'}->{'Info'}->{'ins_k'}->{'units'}="W/mK";
+        $UPGrecords->{'WALL_INS'}->{'Info'}->{'thick'}->{'n_t'} = $UpgradesWall->{$sInsKey}->{'n_t'};
+        for(my $i=1;$i<=$UpgradesWall->{$sInsKey}->{'n_t'};$i++) {
+            $UPGrecords->{'WALL_INS'}->{'Info'}->{'thick'}->{"t_$i"}=$UpgradesWall->{$sInsKey}->{"t_$i"};
+        };
+    };
+    
     if($fIncreaseRSI>0) { # The insulation needs to be increased
-        # Get the conductivity of new insulation material
-        my $fkIns = $UpgradesWall->{$sInsKey};
         
         # Load the thicknesses of the material
         my @fBoards=();
@@ -463,6 +471,9 @@ sub upgradeWallIns {
             $UPGrecords->{'WALL_INS'}->{"$house_name"}->{'Layers'}->{"t_$j"}=$iThisBoards;
             $fInsThick = $fInsThick+($iThisBoards*$fBoards[$i]);
         };
+        
+        # Record the new wall RSI
+        #$UPGrecords->{'WALL_INS'}->{"$house_name"}->{'new_Wall_RSI'}=($fInsThick/$UpgradesWall->{$sInsKey}->{'ins_k'})+$UPGrecords->{'WALL_INS'}->{"$house_name"}->{'orig_Wall_RSI'};
         
         $UPGrecords = setWallCladding($house_name,$fInsThick,$UpgradesWall,$sCurrentClad,$thisHouse,$setPath,$sCladKey,$sInsKey,$UPGrecords);
 
