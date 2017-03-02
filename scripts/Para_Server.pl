@@ -8,6 +8,7 @@ use Cwd;
 use Archive::Tar;
 use File::Find;
 use File::Copy;
+use Data::Dumper; # For debugging
 
 use lib qw(./modules);
 use General;
@@ -19,6 +20,8 @@ my @Windows = (0,1,2,3);
 my @Walls = (0,1,2,3);
 my @VNT = (1,2);
 
+my @sSkipList; # Array of strings holding sets to be skipped
+
 my $hse_type_num;
 my $region_num;
 my $set_name;
@@ -28,6 +31,7 @@ my $BaseSet;
 my $InternalSet;
 my $cores;
 my $sSignal = "../../Deposit/Signal.txt";
+my $sSkipFile = "ToSkip.txt";
 
 # Each houses extensions
 my @sResExtensions;
@@ -75,6 +79,16 @@ my $Upgrades = XMLin("../Input_upgrade/Input_All_UPG.xml", keyattr => [], forcea
 rename "../Input_upgrade/Input_All_UPG.xml", "../Input_upgrade/Input_All_UPG.xml.orig";
 unlink "../Input_upgrade/Input_All_UPG.xml";
 
+# Load the skip list
+if (-e $sSkipFile) {
+    open (my $fh, '<', $sSkipFile) or die ("Can't open datafile: $sSkipFile");	# open readable file
+    @sSkipList=<$fh>;
+    close $fh;
+    for(my $i=0;$i<=$#sSkipList;$i++){
+        $sSkipList[$i]=~ s/^\s+|\s+$//g;
+    };
+};
+
 foreach my $ceil (@Ceiling) {
     foreach my $base (@Basement) {
        foreach my $wind (@Windows) {
@@ -88,6 +102,13 @@ foreach my $ceil (@Ceiling) {
                     # Set name for this batch of sims
                     #=======================================================
                     my $sBatch = "$ceil" . "_$aim" . "_$base" . "_$wind" . "_$wall";
+                    
+                    # Check to see if this set needs to be simulated
+                    #=======================================================
+                    if (-e $sSkipFile) {
+                        my @sMatches = grep(/^($sBatch)$/,@sSkipList);
+                        if (@sMatches) {next INNER;}
+                    };
                     
                     # Update the inputs
                     #=======================================================
