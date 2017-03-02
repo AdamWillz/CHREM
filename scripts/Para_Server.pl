@@ -135,7 +135,7 @@ foreach my $ceil (@Ceiling) {
                     #=======================================================
                     my $sResSetName = "UPG_$set_name";
                     #@PVargs = ("Results.pl", "$hse_type_num", "$region_num","$sResSetName","$sCoreArg");
-                    @PVargs = ("Results.pl", "$hse_type_num", "$region_num","$sResSetName","1/1/1");
+                    @PVargs = ("Results.pl", "$hse_type_num", "$region_num","$sResSetName","$sCoreArg");
                     system($^X, @PVargs);
                     
                     # Collect and archive data

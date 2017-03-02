@@ -28,7 +28,8 @@ use CSV; #CSV-2 (for CSV split and join, this works best)
 #use Switch;
 use XML::Simple; # to parse the XML results files
 use XML::Dumper;
-use threads; #threads-1.71 (to multithread the program)
+use Parallel::ForkManager;
+#use threads; #threads-1.71 (to multithread the program)
 #use File::Path; #File-Path-2.04 (to create directory trees)
 #use File::Copy; #(to copy files)
 use Data::Dumper; # For debugging
@@ -152,24 +153,55 @@ my $interval = ceil((scalar @folders)/$cores->{'num'}); #round up to the nearest
 MULTITHREAD_RESULTS: {
 
 	my $thread; # Declare threads for each core
-	
-	for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
-		if ($core >= $cores->{'low'} && $core <= $cores->{'high'}) { # Only operate if this is a desireable core
-			my $low_element = ($core - 1) * $interval; # Hse to start this particular core at
-			my $high_element = $core * $interval - 1; # Hse to end this particular core at
-			if ($core == $cores->{'num'}) { $high_element = $#folders}; # If the final core then adjust to end of array to account for rounding process
+    my $results_all = {}; # Declare a storage variable for all results
+    
+	my $n_processes = $cores->{'num'};
+    my $pm = Parallel::ForkManager->new( $n_processes );
+    # data structure retrieval and handling
+    $pm -> run_on_finish ( # called BEFORE the first call to start()
+        sub {
+        my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
+        
+        my $core = $exit_code;
 
-			$thread->{$core} = threads->new(\&collect_results_data, @folders[$low_element..$high_element]); # Spawn the threads and send to subroutine, supply the folders
-		};
-	};
+        # retrieve data structure from child
+        if (defined($data_structure_reference)) {  # children are not forced to send anything
+            $thread->{"$core"} = ${$data_structure_reference};  # child passed a string reference
+            $results_all = merge($results_all, $thread->{$core}); # Return the threads together for info collation using the merge function
+        }
+        else {  # problems occurring during storage or retrieval will throw a warning
+            print "No message received from child process $pid!\n";
+        }
+        }
+    );
+    
+    # run the parallel processes
+    SIM_CORES: for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
+        $pm->start() and next SIM_CORES;
+        my $low_element = ($core - 1) * $interval; # Hse to start this particular core at
+        my $high_element = $core * $interval - 1; # Hse to end this particular core at
+        my $hCoreHash = &collect_results_data(@folders[$low_element..$high_element]);
+        $pm->finish($core, \$hCoreHash);  # note that it's a scalar REFERENCE, not the scalar itself
+    };
+    $pm->wait_all_children;
+    
+	#for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
+	#	#if ($core >= $cores->{'low'} && $core <= $cores->{'high'}) { # Only operate if this is a desireable core
+	#		my $low_element = ($core - 1) * $interval; # Hse to start this particular core at
+	#		my $high_element = $core * $interval - 1; # Hse to end this particular core at
+	#		if ($core == $cores->{'num'}) { $high_element = $#folders}; # If the final core then adjust to end of array to account for rounding process
+    #        $pm->run_on_finish(\&collect_results_data, @folders[$low_element..$high_element]); # Spawn the threads and send to subroutine, supply the folders
+	#		#$thread->{$core} = threads->create(\&collect_results_data, @folders[$low_element..$high_element]); # Spawn the threads and send to subroutine, supply the folders
+	#	#};
+	#};
 
-	my $results_all = {}; # Declare a storage variable
 	
-	for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
-		if ($core >= $cores->{'low'} && $core <= $cores->{'high'}) { # Only operate if this is a desireable core
-			$results_all = merge($results_all, $thread->{$core}->join()); # Return the threads together for info collation using the merge function
-		};
-	};
+	
+	#for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
+	#	if ($core >= $cores->{'low'} && $core <= $cores->{'high'}) { # Only operate if this is a desireable core
+	#		$results_all = merge($results_all, $thread->{$core}->join()); # Return the threads together for info collation using the merge function
+	#	};
+	#};
 	
 	# Create a file to print out the xml results
 	my $xml_dump = new XML::Dumper;
