@@ -179,7 +179,14 @@ MULTITHREAD_RESULTS: {
     SIM_CORES: for(my $core=1;$core<=$cores->{'num'};$core++) { # Cycle over the cores
         $pm->start() and next SIM_CORES;
         my $low_element = ($core - 1) * $interval; # Hse to start this particular core at
-        my $high_element = $core * $interval - 1; # Hse to end this particular core at
+        my $high_element;
+        if($core<$cores->{'num'}){
+            $high_element = $core * $interval - 1; # Hse to end this particular core at
+        } elsif ($core==$cores->{'num'}) {
+            $high_element = $#folders;
+        } else {
+            die "SIM_CORES: $core outside scope\n";
+        };
         my $hCoreHash = &collect_results_data(@folders[$low_element..$high_element]);
         $pm->finish($core, \$hCoreHash);  # note that it's a scalar REFERENCE, not the scalar itself
     };
