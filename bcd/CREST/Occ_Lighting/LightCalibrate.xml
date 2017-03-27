@@ -15,8 +15,8 @@
         <DR Initial_Guess="0.0152" Target="1329.6"/>
     </QC> 
     <OT>  
-        <SD Initial_Guess="0.0127" Target="1109.9"/>
-        <DR Initial_Guess="0.008" Target="766.5"/>
+        <SD Initial_Guess="0.0127" Target="1064.26"/>
+        <DR Initial_Guess="0.008" Target="718.97"/>
     </OT> 
     <PR>  
         <SD Initial_Guess="0.0204" Target="1848.4"/>
