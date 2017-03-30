@@ -392,7 +392,7 @@ sub main {
         @AppStock=@$AppStock_ref;
         
         foreach my $item (@AppStock) { # For each appliance in the dwelling
-            my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
+            my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$fCalibrationScalar,$DayWeekStart);
             my @ThisApp = @$ThisApp_ref;
 
             # Update the TotalOther array [W]
@@ -412,7 +412,7 @@ sub main {
             foreach my $item (@CookStock) { # For each appliance in the dwelling
                 my @ThisCook;
                 if ($CREST->{$hse_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
-                    my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
+                    my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$fCalibrationScalar,$DayWeekStart);
                     @ThisCook = @$ThisApp_ref; # [W]
                 } else { # Stove is natural gas. Only consider standby power
                     my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
@@ -429,7 +429,7 @@ sub main {
             my $item = 'Clothes_Dryer_CREST';
             # Call the appliance simulation
             if ($CREST->{$hse_name}->{'dryer_fuel'} != 1) { # Dryer is not natural gas/propane
-                my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
+                my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$fCalibrationScalar,$DayWeekStart);
                 @TotalDry = @$ThisApp_ref; # [W]
             } else { # Dryer is natural gas/propane. Only consider the standby power
                 my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
