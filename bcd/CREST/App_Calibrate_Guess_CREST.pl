@@ -392,25 +392,13 @@ sub main {
         @AppStock=@$AppStock_ref;
         
         foreach my $item (@AppStock) { # For each appliance in the dwelling
-            # Load the appropriate appliance data
-            my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
-            my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
-            my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
-            my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
-            my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
-            my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
-            my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
-            my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
-
-            # Call the appliance simulation
-            my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+            my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
             my @ThisApp = @$ThisApp_ref;
 
             # Update the TotalOther array [W]
             for(my $k=0;$k<=$#TotalOther;$k++) {
                 $TotalOther[$k]=$TotalOther[$k]+$ThisApp[$k];
             };
-        
         };
 
         # --------------------------------------------------------------------
@@ -422,54 +410,31 @@ sub main {
             my @CookStock=@$ref_CookStock;
             
             foreach my $item (@CookStock) { # For each appliance in the dwelling
-                # Load the appropriate appliance data
-                my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
-                my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
-                my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
-                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W] (reduce the standby, will be scaled up later)
-                my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
-                my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
-                my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
-                my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
-    
-                # Call the appliance simulation
                 my @ThisCook;
                 if ($CREST->{$hse_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
-                    my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                    my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
                     @ThisCook = @$ThisApp_ref; # [W]
                 } else { # Stove is natural gas. Only consider standby power
+                    my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
                     @ThisCook = ($iStandbyPower) x 525600;
                 };
+
                 # Update the TotalCook array [W]
                 for(my $k=0;$k<=$#TotalCook;$k++) {
                     $TotalCook[$k]=$TotalCook[$k]+$ThisCook[$k];
                 };
-
             };
         }; # END COOK
         if($CREST->{$hse_name}->{'data'}->{'Clothes_Dryer'} > 0) { # DRY: If there is a dryer, generate the profile
-            my $item = 'Clothes_Dryer';
-            # Load the appropriate appliance data
-            my $sUseProfile=$App->{'Types_Other'}->{$item}->{'Use_Profile'}; # Type of usage profile
-            my $iMeanCycleLength=$App->{'Types_Other'}->{$item}->{'Mean_cycle_L'}; # Mean length of cycle [min]
-            my $iCyclesPerYear=$App->{'Types_Other'}->{$item}->{'Base_cycles'}*$fCalibrationScalar; # Calibrated number of cycles per year
-            my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
-            my $iRatedPower=$App->{'Types_Other'}->{$item}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
-            my $iRestartDelay=$App->{'Types_Other'}->{$item}->{'Restart_Delay'}; # Delay restart after cycle [min]
-            my $fAvgActProb=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Average activity probability [-]
-            my $sOccDepend=$App->{'Types_Other'}->{$item}->{'Avg_Act_Prob'}; # Active occupant dependent
-            
-            # Since we are in CREST mode, there is no seasonal variation. Re-name $item to bypass seasonal variation
-            $item = 'Clothes_Dryer_CREST';
-    
+            my $item = 'Clothes_Dryer_CREST';
             # Call the appliance simulation
             if ($CREST->{$hse_name}->{'dryer_fuel'} != 1) { # Dryer is not natural gas/propane
-                my $ThisApp_ref = &GetApplianceProfile(\@Occ,$item,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+                my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
                 @TotalDry = @$ThisApp_ref; # [W]
             } else { # Dryer is natural gas/propane. Only consider the standby power
-                @TotalDry = ($iStandbyPower) x 525600;
+                my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
+                @TotalDry=($iStandbyPower) x 525600;
             };
-
         }; # END DRY
 
         # --------------------------------------------------------------------

@@ -25,7 +25,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 # Place the routines that are to be automatically exported here
-our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData StretchProfile FindAnnualALandDHW GetStoveAppliances);
+our @EXPORT = qw(setStartState OccupancySimulation LightingSimulation GetIrradiance GetUEC setColdProfile ActiveStatParser GetApplianceStock GetApplianceProfile IncreaseTimestepPower rand_range GetMonteCarloNormalDistGuess UpdateBCD GetDHWData StretchProfile FindAnnualALandDHW GetStoveAppliances SetApplianceProfile);
 # Place the routines that must be requested as a list following use in the calling script
 our @EXPORT_OK = ();
 
@@ -1388,6 +1388,40 @@ sub FindAnnualALandDHW {	# subroutine to perform a simple element replace (house
     
 
 	return($StoveE,$DryerE,$OtherE,$DhwYrL);
+};
+# ====================================================================
+# SetApplianceProfile
+#   Load in the appliance inputs for sItem, and generate annual profile
+# ====================================================================
+sub SetApplianceProfile { 
+    # INPUTS
+    my $ref_Occ = shift @_; 
+    my @Occ = @$ref_Occ; # Occupancy profile
+    my $MeanActOcc = shift @_; # Mean active occupancy
+    my $sItem = shift @_; # Appliance name
+    my $hApp = shift @_; # Appliance input hash
+    my $Activity = shift @_;
+    my $AppCalib = shift @_; # Calibration scalar for appliances
+    my $DayWeekStart = shift @_; # Day of the 
+    
+    # OUTPUTS
+    my @ThisApp;
+    
+    # INTERMEDIATES
+    my $sUseProfile=$hApp->{'Types_Other'}->{$sItem}->{'Use_Profile'}; # Type of usage profile
+    my $iMeanCycleLength=$hApp->{'Types_Other'}->{$sItem}->{'Mean_cycle_L'}; # Mean length of cycle [min]
+    my $iCyclesPerYear=$hApp->{'Types_Other'}->{$sItem}->{'Base_cycles'}*$AppCalib; # Calibrated number of cycles per year
+    my $iStandbyPower=$hApp->{'Types_Other'}->{$sItem}->{'Standby'}; # Standby power [W]
+    my $iRatedPower=$hApp->{'Types_Other'}->{$sItem}->{'Mean_Pow_Cyc'}; # Mean power per cycle [W]
+    my $iRestartDelay=$hApp->{'Types_Other'}->{$sItem}->{'Restart_Delay'}; # Delay restart after cycle [min]
+    my $fAvgActProb=$hApp->{'Types_Other'}->{$sItem}->{'Avg_Act_Prob'}; # Average activity probability [-]
+    my $sOccDepend=$hApp->{'Types_Other'}->{$sItem}->{'Act_Occ_Dep'}; # Active occupant dependent
+    
+    # Call the appliance simulation
+    my $ThisApp_ref = &GetApplianceProfile(\@Occ,$sItem,$sUseProfile,$iMeanCycleLength,$iCyclesPerYear,$iStandbyPower,$iRatedPower,$iRestartDelay,$fAvgActProb,$Activity,$MeanActOcc,$sOccDepend,$DayWeekStart);
+    @ThisApp = @$ThisApp_ref;
+
+	return(\@ThisApp);
 };
 
 # ====================================================================
