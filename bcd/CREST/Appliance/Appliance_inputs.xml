@@ -52,7 +52,13 @@
         <Clothes_Dryer  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="5000" Standby="1"   Mean_cycle_L="75"   Restart_Delay="0"  Base_cycles="177"  Avg_Act_Prob="0.05025061" Act_Occ_Dep="YES"/>
         <Clothes_Dryer_CREST  Use_Profile="Act_Laundry"    Mean_Pow_Cyc="5000" Standby="1"   Mean_cycle_L="75"   Restart_Delay="0"  Base_cycles="177"  Avg_Act_Prob="0.05025061" Act_Occ_Dep="YES"/>
         <Clothes_Washer Use_Profile="Act_Laundry"    Mean_Pow_Cyc="500"  Standby="1"   Mean_cycle_L="40"   Restart_Delay="0"  Base_cycles="211"  Avg_Act_Prob="0.05025061" Act_Occ_Dep="YES"/>
-        <TV             Use_Profile="Act_TV"         Mean_Pow_Cyc="192"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
+        <!--TV             Use_Profile="Act_TV"         Mean_Pow_Cyc="192"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/-->
+        <Regular_TV     Use_Profile="Act_TV"         Mean_Pow_Cyc="80"   Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
+        <Plasma_TV      Use_Profile="Act_TV"         Mean_Pow_Cyc="219"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
+        <LED_TV         Use_Profile="Act_TV"         Mean_Pow_Cyc="119"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
+        <LCD_TV         Use_Profile="Act_TV"         Mean_Pow_Cyc="150"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
+        <DLP_TV         Use_Profile="Act_TV"         Mean_Pow_Cyc="175"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
+        <Proj_TV        Use_Profile="Act_TV"         Mean_Pow_Cyc="225"  Standby="4"   Mean_cycle_L="168"  Restart_Delay="0"  Base_cycles="401"  Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
         <VCR            Use_Profile="Act_TV"         Mean_Pow_Cyc="14"   Standby="5"   Mean_cycle_L="131"  Restart_Delay="0"  Base_cycles="24"   Avg_Act_Prob="0.42512011"  Act_Occ_Dep="YES"/>
         <Central_Vacuum Use_Profile="Act_HouseClean" Mean_Pow_Cyc="1600" Standby="0"   Mean_cycle_L="130"  Restart_Delay="0"  Base_cycles="97"  Avg_Act_Prob="0.250987032" Act_Occ_Dep="YES"/>
         <Jacuzzi        Use_Profile="Act_WashDress"  Mean_Pow_Cyc="3040" Standby="0"   Mean_cycle_L="45"   Restart_Delay="0"  Base_cycles="52"   Avg_Act_Prob="0.164447086"  Act_Occ_Dep="YES"/>
@@ -95,6 +101,14 @@
             <Iron Portion="0.900"/>
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.803"/>
+            <TV>
+                <Regular_TV Portion="0.379"/>
+                <Plasma_TV Portion="0.167"/>
+                <LED_TV Portion="0.092"/>
+                <LCD_TV Portion="0.317"/>
+                <DLP_TV Portion="0.017"/>
+                <Proj_TV Portion="0.028"/>
+            </TV>
             <TV_Reciever_box Portion="0.649" Only_One="0.577"/>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
@@ -114,6 +128,14 @@
             <Vacuum Portion="0.937"/>
             <Printer Portion="0.763"/>
             <TV_Reciever_box Portion="0.676" Only_One="0.544"/>
+            <TV>
+                <Regular_TV Portion="0.377"/>
+                <Plasma_TV Portion="0.168"/>
+                <LED_TV Portion="0.100"/>
+                <LCD_TV Portion="0.297"/>
+                <DLP_TV Portion="0.023"/>
+                <Proj_TV Portion="0.035"/>
+            </TV>
             <Kettle Portion="0.975"/>
             <Hair_Dryer Portion="0.9"/>
             <Game_Console Portion="0.462" Only_One="0.680"/>
@@ -138,4 +160,7 @@
         </_5-BC>
     </Ownership>
     
+    <Televisions_Types>
+        
+    </Televisions_Types>
 </Appliance>

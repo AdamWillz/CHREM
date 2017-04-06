@@ -505,7 +505,7 @@ sub GetApplianceStock {
     my $AppRegion = shift;
     
     # Local variables
-    my $bHasTV = 0;     # Boolean variable to indicate presence of TV
+    my $iTVs = 0;     # Number of TVs in dwelling
 
     # Declare outputs
     my @stock=();
@@ -531,13 +531,25 @@ sub GetApplianceStock {
         push(@stock,'Vacuum');
     };
     
-    # Counts
+    # Determine TV stock
+    #==============================================
     if($NN->{'Color_TV'} > 0) {
         for(my $i=1; $i<=$NN->{'Color_TV'};$i++) {
-            push(@stock,'TV');
-            $bHasTV=$bHasTV+1;
+            #push(@stock,'TV');
+            $iTVs++;
         };
     };
+    if($NN->{'BW_TV'} > 0) {
+        for(my $i=1; $i<=$NN->{'BW_TV'};$i++) {
+            #push(@stock,'TV');
+            $iTVs++;
+        };
+    };
+    my $ref_TV = getTVstock($iTVs,$AppRegion);
+    my @sTVStock = @$ref_TV;
+    push(@stock,@sTVStock);
+    
+    
     if($NN->{'Computer'} > 0) {
         for(my $i=1; $i<=$NN->{'Computer'};$i++) {
             push(@stock,'Computer_desk');
@@ -551,12 +563,7 @@ sub GetApplianceStock {
             push(@stock,'VCR');
         };
     };
-    if($NN->{'BW_TV'} > 0) {
-        for(my $i=1; $i<=$NN->{'BW_TV'};$i++) {
-            push(@stock,'TV');
-            $bHasTV=$bHasTV+1;
-        };
-    };
+    
     if($NN->{'CD_Player'} > 0) {
         for(my $i=1; $i<=$NN->{'CD_Player'};$i++) {
             push(@stock,'CD_Player');
@@ -580,18 +587,18 @@ sub GetApplianceStock {
     };
     
     # Determine TV accessory stock
-    if ($bHasTV>0) {
+    if ($iTVs>0) {
         if (rand() < $AppRegion->{'TV_Reciever_box'}->{'Portion'}) { # Is there an associated receiver box?
             # How many?
             push(@stock,'TV_Reciever_box');
-            if ($bHasTV>1) { # More than one TV
+            if ($iTVs>1) { # More than one TV
                 if (rand() > $AppRegion->{'TV_Reciever_box'}->{'Only_One'}) {push(@stock,'TV_Reciever_box')}; # Add another console
             };
         };
         if (rand() < $AppRegion->{'Game_Console'}->{'Portion'}) {
             # How many?
             push(@stock,'Game_Console');
-            if ($bHasTV>1) { # More than one TV
+            if ($iTVs>1) { # More than one TV
                 if (rand() > $AppRegion->{'Game_Console'}->{'Only_One'}) {push(@stock,'Game_Console')}; # Add another console
             };
         };
@@ -1437,6 +1444,41 @@ sub GetStoveAppliances {
     push(@CookStock,'Small_Element_2');
     
     return(\@CookStock);
+};
+# ====================================================================
+# getTVstock
+#       Determines the different types of TVs in the dwellings
+#
+# INPUT     iTVs: Integer number of TVs
+#           AppRegion: Has holding distribution of TVs
+# OUTPUT    sTVStock: Array of strings containing all the TV types
+# ====================================================================
+sub getTVstock {
+    # INPUTS
+    my $iTVs = shift @_;
+    my $AppRegion = shift @_;
+    
+    # OUTPUTS
+    my @sTVStock=();
+    
+    # INTERMEDIATES
+    my @sNames=();
+    my $U = rand();
+    my $j=0;
+
+    # Loop through each TV
+    for my $i (1..$iTVs) {
+        TUBE: foreach my $sType (keys (%{$AppRegion->{'TV'}})) {
+            $j+=$AppRegion->{'TV'}->{"$sType"}->{'Portion'};
+            if ($j > $U) {
+                push(@sNames,$sType);
+                $j=0;
+                last TUBE;
+            };
+        };
+    };
+    
+    return(\@sTVStock);
 };
 # ====================================================================
   
