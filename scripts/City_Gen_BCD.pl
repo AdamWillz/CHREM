@@ -3470,7 +3470,7 @@ MAIN: {
                     
                         foreach my $item (@CookStock) { # For each appliance in the dwelling
                             my @ThisCook;
-                            if ($CREST->{$hse_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
+                            if ($CREST->{$house_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
                                 my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
                                 @ThisCook = @$ThisApp_ref; # [W]
                             } else { # Stove is natural gas. Only consider standby power
@@ -3492,7 +3492,7 @@ MAIN: {
                         $nEDry = 1;
                         
                         # Call the appliance simulation
-                        if ($CREST->{$hse_name}->{'dryer_fuel'} != 1) { # Dryer is not natural gas/propane
+                        if ($CREST->{$house_name}->{'dryer_fuel'} != 1) { # Dryer is not natural gas/propane
                             my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
                             @TotalDry = @$ThisApp_ref; # [W]
                         } else { # Natural gas dryer. Pass standby power to the total other electric load
