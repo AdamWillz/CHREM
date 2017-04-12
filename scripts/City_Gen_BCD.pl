@@ -3473,11 +3473,16 @@ MAIN: {
                             if ($CREST->{$house_name}->{'stove_fuel'} != 1) { # Stove is not natural gas/propane
                                 my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
                                 @ThisCook = @$ThisApp_ref; # [W]
-                            } else { # Stove is natural gas. Only consider standby power
+                            } else { # Stove is natural gas. Standby power to other demands, then estimate NG use
                                 my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
                                 for(my $k=0;$k<=$#TotalOther;$k++) {
                                     $TotalOther[$k]+=$iStandbyPower;
                                 };
+                                my $hNewApp = dclone $App; # Clone the appliance input
+                                $hNewApp->{'Types_Other'}->{$item}->{'Standby'}=0; # Set standby to zero
+                                my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$hNewApp,$Activity,$AppCalib,$DayWeekStart);
+                                @ThisCook = @$ThisApp_ref; # [W]
+                                undef $hNewApp;
                             };
             
                             # Update the TotalCook array [W]
@@ -3496,11 +3501,16 @@ MAIN: {
                             my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$App,$Activity,$AppCalib,$DayWeekStart);
                             @TotalDry = @$ThisApp_ref; # [W]
                         } else { # Natural gas dryer. Pass standby power to the total other electric load
-                            # Update the total electric with dryer electric standby power
+                            # Determine power when ON and store to Total Dry
                             my $iStandbyPower=$App->{'Types_Other'}->{$item}->{'Standby'}; # Standby power [W]
                             for(my $k=0;$k<=$#TotalOther;$k++) {
                                 $TotalOther[$k]+=$iStandbyPower;
                             };
+                            my $hNewApp = dclone $App; # Clone the appliance input
+                            $hNewApp->{'Types_Other'}->{$item}->{'Standby'}=0; # Set standby to zero
+                            my $ThisApp_ref = &SetApplianceProfile(\@Occ,$MeanActOcc,$item,$hNewApp,$Activity,$AppCalib,$DayWeekStart);
+                            @TotalDry = @$ThisApp_ref; # [W]
+                            undef $hNewApp;
                         };
                     }; # END DRY
                 
