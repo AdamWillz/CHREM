@@ -713,7 +713,7 @@ sub GetApplianceProfile {
                             };
                             
                             # If there is seasonal variation, adjust the calibration scalar
-                            if ($item =~ m/Clothes_Dryer/) { # Dryer usage varies seasonally
+                            if ($item =~ m/^Clothes_Dryer$/) { # Dryer usage varies seasonally
                                 my $fAmp =  20.5; # based on difference in average loads/week winter/summer (SHEU 2011);
                                 my $fModCyc = ($fAmp*sin(((2*3.14159265*$iDay)/365)-((1241*3.14159265)/730)))+$iCyclesPerYear;
                                 $fAppCalib = ApplianceCalibrationScalar($fModCyc,$iMeanCycleLength,$MeanActOcc,$iRestartDelay,$sOccDepend,$fAvgActProb); #Adjust the calibration
