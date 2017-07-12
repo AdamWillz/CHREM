@@ -291,8 +291,8 @@ MAIN: {
         # Begin processing each house model
         # --------------------------------------------------------------------
         
-        foreach my $dir (@dirs) {
-        EACHHSE: {
+        EACHHSE: foreach my $dir (@dirs) {
+         
             my $hse_name = $dir;
             my $Roof_type;
             my $hse_file;	# new hash reference to the ESP-r files for this record
@@ -305,6 +305,7 @@ MAIN: {
             $hse_name =~ s/_[0-9]+//; 	 # Clean up house name if duplicate	
             $coordinates = {'hse_type' => $hse_type, 'region' => $region, 'file_name' => $hse_name};
             # TODO: If a .spm file exists, die
+            if($hse_name =~ m/^(BCD)/) {next EACHHSE};
             
             # Find all the geometry files for the model
             my @files = glob "$dir/*.geo";
@@ -1076,11 +1077,10 @@ MAIN: {
                 my $ThisXMLPath = "$dir" . "/input.xml";
                 rename $ThisXMLPath, "$ThisXMLPath.orig";
                 unlink $ThisXMLPath;
-                copy("../Input_upgrade/h3k_PV.xml",$ThisXMLPath) or die "Copy of $ThisXMLPath failed: $!";
+                copy("../Input_upgrade/h3k_DH_PV.xml",$ThisXMLPath) or die "Copy of $ThisXMLPath failed: $!";
                 
 			};
         };
-        };  # end of EACHHSE
         
     print "Thread for PV Upgrade of $hse_type $region - Complete\n";
     
@@ -1088,7 +1088,7 @@ MAIN: {
     
     return ($return);
     
-    };  # END sub main
+    };  # END EACHHSE
 };	# END MAIN
 
 # -----------------------------------------------

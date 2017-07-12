@@ -34,9 +34,9 @@
          <!-- ins_k: Conductivity (W/mK), ins_rho: Density (kg/m3), ins_Cp: Specific Heat (J/kgK), n_t: number of different board thicknesses-->
          <ins_1 ins_k="0.043" ins_rho="16.0" ins_Cp="835.0" description="insulation_UPG - XPS" n_t="3">
             <!--Thicknesses (m), low to high -->
-            <t_1>0.0254</t_1>
-            <t_2>0.0381</t_2>
-            <t_3>0.0508</t_3>
+            <t_1>0.0254</t_1> <!--One inch -->
+            <t_2>0.0381</t_2> <!--One and half inch -->
+            <t_3>0.0508</t_3> <!--Two inch -->
          </ins_1>
      </WALL_INS>
      <!-- Foundation upgrade assumes that new insulation is added to the interior (full height)-->
