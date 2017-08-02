@@ -3201,7 +3201,7 @@ sub setWallCladding {
                 $iNewLayers++;
             };
 
-        } else { # Only need only layer for insulation
+        } elsif($fInsThick>0.0) { # Only need only layer for insulation
             my $fRSI = $fInsThick/$UpgradesWall->{$sInsKey}->{'ins_k'};
             $fRSI = sprintf("%.2f",$fRSI);
             my $fUvalue = 1/$fRSI;
