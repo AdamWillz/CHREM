@@ -846,6 +846,13 @@ sub UpdateCONdataCEILING{
         # Determine the amount of insulation to add
         my $AddedRSI = $UpgradesSurf->{'max_RSI'} - $OrigRSI;
         my $Thickness = $UpgradesSurf->{'ins_k'}*$AddedRSI; # Thickness of insulation needed [m]
+        
+        # Check to see that the thickness is within numerical bounds
+        if($Thickness<=0.005) { # TODO: Refine lower bound
+            # Required thickness is insignificantly small, skip
+            $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'}=$OrigRSI;
+            return $UPGrecords;
+        };
         # Store the upgrade data for post-processing and record keeping
         $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'new_RSI'} = $UpgradesSurf->{'max_RSI'};
         $UPGrecords->{'CEIL_INS'}->{"$house_name"}->{"$zone"}->{"$surfname"}->{'ins_thickness'} = $Thickness; # Thickness of insulation added [m]
