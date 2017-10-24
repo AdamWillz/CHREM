@@ -1750,7 +1750,7 @@ sub getDwellingHeightELA {
         $ELA = getDefaultELA($iAirType);
     } else { # Read the ELA from the input file
         my @LineDat = split /[,\s]+/, $sAirType;
-        $ELA = $LineDat[4]/1000.0;
+        $ELA = $LineDat[4]/10000.0;
     };
     
     # Get the height of the eaves
