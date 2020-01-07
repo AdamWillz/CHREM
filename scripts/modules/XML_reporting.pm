@@ -147,8 +147,8 @@ sub organize_xml_log {
 
 #
 		# The above has been replaced with this call to do the GHG Conversion. It will save time and is required because we regenerate the new XML file every time we run Results.pl
-		&GHG_conversion($house_name, $coordinates, $XML);
-
+		my $iErr = &GHG_conversion($house_name, $coordinates, $XML);
+        if($iErr == 0) {return(0);}
 		
 		return(1);
 	}
@@ -590,6 +590,10 @@ sub GHG_conversion {
         
         # Organize the HASH
         $XML = organize_xml_log_tree ($XML);
+        if($XML == 0) {
+            # Subroutine organize_xml_log_tree encountered an error (NaN in output)
+            return(0);
+        };
 
         # print the new XML file
         open (my $XML_file, '>', $file) or die ("\n\nERROR: can't open $file to rewrite xml log in sorted form\n"); # Open a writeout file

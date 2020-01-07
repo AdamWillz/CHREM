@@ -292,7 +292,13 @@ sub collect_results_data {
 		# Run the organize subroutine to regenerate the XML file output from the original version
 		# Note that logic to verify the original xml file occurs here
 		# If this fails it will not create a file.xml and the subsequent UNLESS code will happen
-		&organize_xml_log($folder . "/$hse_name", $sim_period, $zone_name_num, $province[0], $coordinates);
+		my $iReturned = &organize_xml_log($folder . "/$hse_name", $sim_period, $zone_name_num, $province[0], $coordinates);
+        if($iReturned == 0) { # Something went wrong when re-organizing the XML (likely simulation output an NaN)
+            # Store the house name so we no it is bad - with a note
+			$results_all->{'bad_houses'}->{$region}->{$province[0]}->{$hse_type}->{$hse_name} = "Bad XML output";
+			# Delete this house so it does not affect the multiplier
+			next FOLDER;  # Jump to the next house if it does not return a true.
+        }
 
 		# Examine the directory and see if a results file (house_name.xml) exists. If it does than we had a successful simulation. If it does not, go on to the next house.
 		unless (grep(/$hse_name.xml$/, <$folder/*>)) {
