@@ -4409,7 +4409,7 @@ MAIN: {
 												elsif ($surf_num == 2 ) {
 													unless (my $matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-1}})){
 														
-														if (!defined (@{$cfc_type->{$zone}->{$surf_num}}))  {
+														if (!(@{$cfc_type->{$zone}->{$surf_num}}))  {
 															
 															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
 														}
@@ -4431,7 +4431,7 @@ MAIN: {
 												elsif ($surf_num == 3 ) {
 													my $matched;
 													unless (($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-1}})) || ($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-2}}))) {
-														if (!defined (@{$cfc_type->{$zone}->{$surf_num}}))  {
+														if (!(@{$cfc_type->{$zone}->{$surf_num}}))  {
 															
 															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
 														}
@@ -4453,7 +4453,7 @@ MAIN: {
 												elsif ($surf_num == 4 ) {
 													my $matched;
 													unless (($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-1}})) || ($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-2}})) || ($matched = grep ($_ eq $surface_2, @{$cfc_type->{$zone}->{$surf_num-3}}))) {
-														if (!defined (@{$cfc_type->{$zone}->{$surf_num}}))  {
+														if (!(@{$cfc_type->{$zone}->{$surf_num}}))  {
 															
 															 push (@{$cfc_type->{$zone}->{$surf_num}}, $surface_2);
 														}
@@ -4473,7 +4473,7 @@ MAIN: {
 													}
 												}
 											}
-											if (defined (@{$cfc_type->{$zone}->{$surf_num}})) {
+											if ((@{$cfc_type->{$zone}->{$surf_num}})) {
 												$side_num = $side_num + $cfc_type->{$zone}->{$surf_num};
 												if ($side_num == 4) {
 													last SIDE1_LOOP;
@@ -4491,7 +4491,7 @@ MAIN: {
 										}
 # 										print Dumper $cfc_name_side->{$zone}->{$n};
 # 										print Dumper $cfc_type->{$zone}->{$n};
-										if (defined @{$cfc_type->{$zone}->{$n}}) {# total number of function in building (each zone can have up to 4 functions and each building up to 5 zones so teh function will be between 0 and 20)
+										if (@{$cfc_type->{$zone}->{$n}}) {# total number of function in building (each zone can have up to 4 functions and each building up to 5 zones so teh function will be between 0 and 20)
 											$function->{$zone}++;
 											$function->{'total'}++;
 										}
