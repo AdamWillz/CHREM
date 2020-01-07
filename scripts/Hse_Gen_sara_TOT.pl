@@ -920,6 +920,10 @@ MAIN: {
 				foreach my $file (qw(aim ctl mvnt dhw hvac cnn)) {
 					&replace ($hse_file->{'cfg'}, '#' . uc($file), 1, 1, "%s\n", "*$file ./$CSDDRD->{'file_name'}.$file");	# file path at the tagged location
 				};
+                # If there is no fans, delete MVNT from cfg
+                if($CSDDRD->{'vent_exhaust_flowrate'} == 0 && $CSDDRD->{'vent_supply_flowrate'} == 0) {
+                    &replace ($hse_file->{'cfg'}, '#MVNT', 1, 1, "%s\n", "#");	# Comment out of cfg
+                };
 				
 				# If a gshp template exists, then we have already verified we need it. Place the tag a line below the *hvac tag b/c they are connected
 				if ($hse_file->{'gshp'}) {
