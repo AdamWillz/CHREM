@@ -252,6 +252,18 @@ sub collect_results_data {
 
 		# Open and store the BPS file (used for simulation period)
 		my $filename = $folder . "/$hse_name.bps";
+        unless (-e $filename) {
+            # Never made it to the simulation. Mark as bad
+            # Open and store the CFG file (used for province and zone names)
+		    $filename = $folder . "/$hse_name.cfg";
+		    open (my $FILE, '<', $filename) or die ("\n\nERROR: can't open $filename\n");
+		    my @cfg = &rm_EOL_and_trim(<$FILE>); # Clean it up
+		    close $FILE;
+            my @province = grep(s/^#PROVINCE (.+)$/$1/, @cfg); # Stores the province name at element 0
+            
+            $results_all->{'bad_houses'}->{$region}->{$province[0]}->{$hse_type}->{$hse_name} = "Bad: Simulation did not run";
+            next FOLDER;  # Jump to the next house if it does not return a true.
+        };
 		open (my $FILE, '<', $filename) or die ("\n\nERROR: can't open $filename\n");
 		my @bps = &rm_EOL_and_trim(<$FILE>); # Clean it up
 		close $FILE;
